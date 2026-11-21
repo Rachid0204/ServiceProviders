@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   computeAdminAnalytics,
+  escapeCsvCell,
   flattenProviderReviews,
   generateBookingsCsv,
+  recalculateRatingAfterReviewRemoval,
 } from './adminMetrics';
 import { VETTED_PROVIDERS } from '../data/providers';
 import type { BookingRecord, UserProfileRecord } from './marketplace';
@@ -203,3 +205,29 @@ test('generateBookingsCsv produces valid RFC-4180 CSV with quoted commas and dou
   assert.ok(lines[2].includes('"Salma, ""VIP"" Client"'));
   assert.ok(lines[2].includes(',260,cmi_escrow,escrow_held,completed'));
 });
+
+test('escapeCsvCell neutralizes spreadsheet formula injection prefixes (=, +, -, @, tab, CR)', () => {
+  assert.equal(escapeCsvCell('=HYPERLINK("http://evil.example","click")'), '"\'=HYPERLINK(""http://evil.example"",""click"")"');
+  assert.equal(escapeCsvCell('+212661234567'), "'+212661234567");
+  assert.equal(escapeCsvCell('-1+1'), "'-1+1");
+  assert.equal(escapeCsvCell('@SUM(A1:A2)'), "'@SUM(A1:A2)");
+  assert.equal(escapeCsvCell('Normal Client'), 'Normal Client');
+});
+
+test('recalculateRatingAfterReviewRemoval accurately recalculates average and handles final review deletion', () => {
+  // Removing a 1-star review from (4.0 avg over 4 reviews = 16 total) -> 15 / 3 = 5.0
+  const res1 = recalculateRatingAfterReviewRemoval(4.0, 4, 1);
+  assert.equal(res1.reviewCount, 3);
+  assert.equal(res1.ratingAvg, 5.0);
+
+  // Removing a 5-star review from (4.5 avg over 2 reviews = 9 total) -> 4 / 1 = 4.0
+  const res2 = recalculateRatingAfterReviewRemoval(4.5, 2, 5);
+  assert.equal(res2.reviewCount, 1);
+  assert.equal(res2.ratingAvg, 4.0);
+
+  // Removing the last review resets cleanly to 0 count and 5.0 default
+  const resLast = recalculateRatingAfterReviewRemoval(3.0, 1, 3);
+  assert.equal(resLast.reviewCount, 0);
+  assert.equal(resLast.ratingAvg, 5.0);
+});
+

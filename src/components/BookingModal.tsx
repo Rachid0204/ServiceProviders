@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
   ShieldCheck,
@@ -19,6 +19,8 @@ import {
   formatMadCurrency,
   validateServiceRequestInput,
   buildWhatsAppUrl,
+  generateBookingIds,
+  getTodayIsoDate,
   type LanguageCode,
   type UserProfileRecord,
   type VettedProvider,
@@ -27,7 +29,7 @@ import {
 } from '../utils/marketplace';
 import type { User } from 'firebase/auth';
 import type { Translations } from '../i18n/translations';
-import { uploadMarketplacePhoto } from '../utils/storageUpload';
+import { uploadMarketplacePhoto, revokePreviewObjectUrl } from '../utils/storageUpload';
 
 interface BookingModalProps {
   provider: VettedProvider;
@@ -37,6 +39,8 @@ interface BookingModalProps {
   currentProfile: UserProfileRecord | null;
   onClose: () => void;
   onSubmitBooking: (payload: {
+    bookingId?: string;
+    bookingRef?: string;
     provider: VettedProvider;
     clientName: string;
     clientPhone: string;
@@ -63,6 +67,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 }) => {
   const availableServices =
     lang === 'ar' && provider.skillsAr.length > 0 ? provider.skillsAr : provider.skills;
+  const todayIso = useMemo(() => getTodayIsoDate(), []);
+  const preGeneratedIds = useMemo(() => generateBookingIds(), [provider.id]);
 
   const [clientName, setClientName] = useState(currentProfile?.fullName ?? '');
   const [clientPhone, setClientPhone] = useState(currentProfile?.phone ?? '+2126');
@@ -73,19 +79,27 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     currentProfile?.neighborhood ?? provider.location.quartier
   );
   const [addressPin, setAddressPin] = useState(
-    `${provider.location.quartier}, ${provider.location.city} (${provider.location.lat.toFixed(4)}, ${provider.location.lng.toFixed(4)})`
+    `${currentProfile?.neighborhood || provider.location.quartier}, ${provider.location.city}`
   );
   const [description, setDescription] = useState('');
   const [problemPhotoUrl, setProblemPhotoUrl] = useState<string>('');
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
-  const [preferredDate, setPreferredDate] = useState('2026-11-20');
+  const [preferredDate, setPreferredDate] = useState(todayIso);
   const [preferredTimeSlot, setPreferredTimeSlot] = useState<TimeSlot>('09:00 - 12:00');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash_on_completion');
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isLocatingPin, setIsLocatingPin] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedRef, setSubmittedRef] = useState<string | null>(null);
   const submittingLockRef = React.useRef(false);
+
+  useEffect(() => {
+    return () => {
+      revokePreviewObjectUrl(problemPhotoUrl);
+    };
+  }, [problemPhotoUrl]);
 
   const estimatedMad = provider.fixedVisitFeeMAD + provider.hourlyRateMAD;
   const providerDisplayName = lang === 'ar' ? provider.fullNameAr : provider.fullNameFr;
@@ -99,11 +113,14 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       const result = await uploadMarketplacePhoto({
         file,
         scope: 'bookings',
-        entityId: `draft-${provider.id}`,
+        entityId: preGeneratedIds.bookingId,
         userId: firebaseUser?.uid ?? null,
         lang,
       });
-      setProblemPhotoUrl(result.url);
+      setProblemPhotoUrl((prev) => {
+        revokePreviewObjectUrl(prev);
+        return result.url;
+      });
     } catch (err) {
       setPhotoError(
         err instanceof Error
@@ -119,9 +136,32 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   };
 
   const handleInsertGpsPin = () => {
-    setAddressPin(
-      `${neighborhood || provider.location.quartier}, ${provider.location.city} — Pin GPS: ${provider.location.lat.toFixed(4)}, ${provider.location.lng.toFixed(4)}`
-    );
+    const fallbackPin = () => {
+      setAddressPin(
+        `${neighborhood || provider.location.quartier}, ${provider.location.city} — ${
+          lang === 'ar' ? 'العنوان بالتقريب' : 'Repère quartier'
+        }`
+      );
+    };
+
+    if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
+      setIsLocatingPin(true);
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setIsLocatingPin(false);
+          setAddressPin(
+            `${neighborhood || provider.location.quartier}, ${provider.location.city} — GPS: ${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)}`
+          );
+        },
+        () => {
+          setIsLocatingPin(false);
+          fallbackPin();
+        },
+        { timeout: 4000 }
+      );
+    } else {
+      fallbackPin();
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -129,6 +169,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     if (submittingLockRef.current || isSubmitting || submittedRef) {
       return;
     }
+    setSubmitError(null);
     const validation = validateServiceRequestInput(
       {
         clientName,
@@ -149,11 +190,23 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       return;
     }
 
+    if (preferredDate < todayIso) {
+      setErrors({
+        preferredDate:
+          lang === 'ar'
+            ? 'يرجى اختيار تاريخ اليوم أو تاريخ مستقبلي.'
+            : 'Veuillez choisir une date égale ou postérieure à aujourd’hui.',
+      });
+      return;
+    }
+
     submittingLockRef.current = true;
     setErrors({});
     setIsSubmitting(true);
     try {
       const bookingRef = await onSubmitBooking({
+        bookingId: preGeneratedIds.bookingId,
+        bookingRef: preGeneratedIds.bookingRef,
         provider,
         clientName: clientName.trim(),
         clientPhone: validation.normalizedPhone,
@@ -168,6 +221,14 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         estimatedMad,
       });
       setSubmittedRef(bookingRef);
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error
+          ? err.message
+          : lang === 'ar'
+          ? 'تعذر إرسال طلب الحجز. يرجى التأكد من تسجيل الدخول وحفظ ملفك الشخصي.'
+          : 'Impossible d’enregistrer la réservation. Vérifiez votre connexion et votre profil.'
+      );
     } finally {
       setIsSubmitting(false);
       submittingLockRef.current = false;
@@ -338,9 +399,11 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                       {skill}
                     </option>
                   ))}
-                  <option value={t.categories[provider.category]}>
-                    {t.categories[provider.category]} — Diagnostic général
-                  </option>
+                  {!availableServices.includes(t.categories[provider.category]) && (
+                    <option value={t.categories[provider.category]}>
+                      {t.categories[provider.category]} — Diagnostic général
+                    </option>
+                  )}
                 </select>
               </div>
 
@@ -386,6 +449,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   <input
                     id="booking-date"
                     type="date"
+                    min={todayIso}
                     value={preferredDate}
                     onChange={(e) => setPreferredDate(e.target.value)}
                     className="w-full ps-9 pe-3.5 py-2 text-sm font-mono-tabular bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
@@ -431,11 +495,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 </label>
                 <button
                   type="button"
+                  disabled={isLocatingPin}
                   onClick={handleInsertGpsPin}
-                  className="inline-flex items-center gap-1 text-xs text-emerald-700 font-semibold hover:underline cursor-pointer"
+                  className="inline-flex items-center gap-1 text-xs text-emerald-700 font-semibold hover:underline cursor-pointer disabled:opacity-60"
                 >
                   <Navigation className="w-3 h-3" />
-                  <span>{t.useGpsPinBtn}</span>
+                  <span>{isLocatingPin ? t.nearMeLocating : t.useGpsPinBtn}</span>
                 </button>
               </div>
               <input
@@ -465,6 +530,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               <textarea
                 id="booking-description"
                 rows={3}
+                maxLength={600}
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={t.requestDescriptionPlaceholder}
@@ -517,6 +583,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                     <button
                       type="button"
                       onClick={() => {
+                        revokePreviewObjectUrl(problemPhotoUrl);
                         setProblemPhotoUrl('');
                         setPhotoError(null);
                       }}
@@ -601,6 +668,16 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 {formatMadCurrency(estimatedMad, lang)}
               </div>
             </div>
+
+            {submitError && (
+              <div
+                role="alert"
+                className="p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2 text-xs text-rose-800"
+              >
+                <AlertCircle className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
+                <span>{submitError}</span>
+              </div>
+            )}
 
             <div className="flex items-center justify-end gap-3 pt-2">
               <button

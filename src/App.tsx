@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, lazy, Suspense } from 'react';
 import {
   ShieldCheck,
   Search,
@@ -33,24 +33,53 @@ import {
   type BookingRecord,
 } from './utils/marketplace';
 import { useMarketplaceAuth } from './hooks/useMarketplaceAuth';
+import { useSystemSettings } from './hooks/useSystemSettings';
 import { useProviders } from './hooks/useProviders';
 import { useBookings } from './hooks/useBookings';
 import { useAdminData } from './hooks/useAdminData';
 import { OnboardingForm } from './components/OnboardingModal';
 import { BookingModal } from './components/BookingModal';
 import { ProviderDetailModal } from './components/ProviderDetailModal';
-import { ProviderMap } from './components/ProviderMap';
 import { ProviderCard } from './components/ProviderCard';
 import { BookingsDashboard } from './components/BookingsDashboard';
-import { ChatDrawerModal } from './components/ChatDrawerModal';
-import { ReviewModal } from './components/ReviewModal';
-import {
-  BookingDetailModal,
-  CancellationModal,
-  RescheduleModal,
-} from './components/BookingLifecycleModals';
-import { AdminDashboard } from './components/admin/AdminDashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
+
+// Lazy-loaded chunks matching vite.config.ts manualChunks
+const ProviderMap = lazy(() =>
+  import('./components/ProviderMap').then((m) => ({ default: m.ProviderMap }))
+);
+const AdminDashboard = lazy(() =>
+  import('./components/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
+);
+const ChatDrawerModal = lazy(() =>
+  import('./components/ChatDrawerModal').then((m) => ({ default: m.ChatDrawerModal }))
+);
+const ReviewModal = lazy(() =>
+  import('./components/ReviewModal').then((m) => ({ default: m.ReviewModal }))
+);
+const BookingDetailModal = lazy(() =>
+  import('./components/BookingLifecycleModals').then((m) => ({ default: m.BookingDetailModal }))
+);
+const CancellationModal = lazy(() =>
+  import('./components/BookingLifecycleModals').then((m) => ({ default: m.CancellationModal }))
+);
+const RescheduleModal = lazy(() =>
+  import('./components/BookingLifecycleModals').then((m) => ({ default: m.RescheduleModal }))
+);
+
+function detectInitialView(): 'marketplace' | 'admin' {
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    if (
+      params.get('view') === 'admin' ||
+      window.location.pathname === '/admin' ||
+      window.location.pathname.startsWith('/admin/')
+    ) {
+      return 'admin';
+    }
+  }
+  return 'marketplace';
+}
 
 export function MarketplaceApp() {
   const [lang, setLang] = useState<LanguageCode>('fr');
@@ -67,7 +96,7 @@ export function MarketplaceApp() {
     setLang(nextLang);
   }, []);
 
-  // Modular Firebase Auth, Providers, and Dual-Role Bookings Hooks
+  // Modular Firebase Auth, System Settings, Providers, and Dual-Role Bookings Hooks
   const {
     firebaseUser,
     authReady,
@@ -77,22 +106,29 @@ export function MarketplaceApp() {
     handleSaveProfile,
   } = useMarketplaceAuth(handleLanguageSync);
 
-  const [appView, setAppView] = useState<'marketplace' | 'admin'>(() => {
+  const { systemSettings, updateLocalSettings } = useSystemSettings(firebaseUser, authReady);
+
+  const [appView, setAppView] = useState<'marketplace' | 'admin'>(detectInitialView);
+
+  const navigateView = useCallback((nextView: 'marketplace' | 'admin') => {
+    setAppView(nextView);
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      if (
-        params.get('view') === 'admin' ||
-        window.location.pathname === '/admin' ||
-        window.location.pathname.startsWith('/admin/')
-      ) {
-        return 'admin';
+      const targetUrl = nextView === 'admin' ? '/admin' : '/';
+      if (window.location.pathname !== targetUrl) {
+        window.history.pushState({ view: nextView }, '', targetUrl);
       }
     }
-    return 'marketplace';
-  });
+  }, []);
+
+  useEffect(() => {
+    const onPopState = () => setAppView(detectInitialView());
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
 
   const {
     allProviders,
+    firestoreProviders,
     toggleProviderAvailability,
     applyLocalReviewOverride,
     applyAdminProviderOverride,
@@ -102,6 +138,8 @@ export function MarketplaceApp() {
   const {
     bookings,
     chatThreads,
+    bookingActionError,
+    clearBookingActionError,
     submitBooking,
     updateBookingStatus,
     clientConfirmAndReleaseEscrow,
@@ -115,6 +153,8 @@ export function MarketplaceApp() {
     authReady,
     lang,
     allProviders,
+    platformFeePct: systemSettings.platformFeePct,
+    autoRefundOnProviderCancel: systemSettings.autoRefundOnProviderCancel,
     onApplyReviewOverride: applyLocalReviewOverride,
   });
 
@@ -128,7 +168,6 @@ export function MarketplaceApp() {
     adminReviews,
     auditLogs,
     withdrawals,
-    systemSettings,
     analytics,
     toggleProviderCinVerification,
     adminToggleProviderAvailability,
@@ -141,23 +180,38 @@ export function MarketplaceApp() {
     updateWithdrawalStatus,
     saveSystemSettings,
   } = useAdminData({
+    enabled: appView === 'admin',
     firebaseUser,
     authReady,
     allProviders,
+    firestoreProviders,
     bookings,
+    systemSettings,
+    onUpdateLocalSettings: updateLocalSettings,
     onApplyProviderOverride: applyAdminProviderOverride,
     onRemoveProviderReview: removeProviderReview,
     onApplyBookingPatch: applyAdminBookingPatch,
   });
 
+  // Dynamic price slider ceiling so higher-priced Firestore providers are never hidden
+  const sliderMaxHourlyRate = useMemo(() => {
+    const highest = allProviders.reduce((max, p) => Math.max(max, p.hourlyRateMAD), 300);
+    return Math.max(300, Math.ceil(highest / 50) * 50);
+  }, [allProviders]);
+
   // Marketplace Filters & Geolocation Discovery
   const [selectedCity, setSelectedCity] = useState<MoroccanCity | 'ALL'>('ALL');
   const [selectedCategory, setSelectedCategory] = useState<ServiceCategory | 'ALL'>('ALL');
   const [quartierQuery, setQuartierQuery] = useState<string>('');
-  const [maxHourlyRateMAD, setMaxHourlyRateMAD] = useState<number>(300);
+  const [maxHourlyRateMAD, setMaxHourlyRateMAD] = useState<number>(sliderMaxHourlyRate);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [verifiedOnly, setVerifiedOnly] = useState<boolean>(false);
   const [availableNowOnly, setAvailableNowOnly] = useState<boolean>(false);
+
+  // Expand default ceiling automatically when new providers load with higher rates
+  useEffect(() => {
+    setMaxHourlyRateMAD((prev) => (prev < sliderMaxHourlyRate && prev === 300 ? sliderMaxHourlyRate : prev));
+  }, [sliderMaxHourlyRate]);
 
   // Geolocation ("Near Me / قريب مني") & Map/List View Mode
   const [nearMeActive, setNearMeActive] = useState<boolean>(false);
@@ -189,7 +243,7 @@ export function MarketplaceApp() {
         city: selectedCity,
         category: selectedCategory,
         quartier: quartierQuery,
-        maxHourlyRateMAD,
+        maxHourlyRateMAD: maxHourlyRateMAD >= sliderMaxHourlyRate ? undefined : maxHourlyRateMAD,
         searchQuery,
         verifiedOnly,
         availableNowOnly,
@@ -202,6 +256,7 @@ export function MarketplaceApp() {
       selectedCategory,
       quartierQuery,
       maxHourlyRateMAD,
+      sliderMaxHourlyRate,
       searchQuery,
       verifiedOnly,
       availableNowOnly,
@@ -225,10 +280,15 @@ export function MarketplaceApp() {
     }
   }, [userProfile, allProviders]);
 
-  // Keep detailBooking synced if its underlying status/escrow changes
+  // Keep open detail modals synced with live Firestore updates
   const syncedDetailBooking = useMemo(
     () => (detailBooking ? bookings.find((b) => b.id === detailBooking.id) || detailBooking : null),
     [bookings, detailBooking]
+  );
+  const syncedDetailProvider = useMemo(
+    () =>
+      detailProvider ? allProviders.find((p) => p.id === detailProvider.id) || detailProvider : null,
+    [allProviders, detailProvider]
   );
 
   // Handle "Near Me / قريب مني" toggle using navigator.geolocation with Moroccan city fallback
@@ -286,7 +346,7 @@ export function MarketplaceApp() {
     setSelectedCity('ALL');
     setSelectedCategory('ALL');
     setQuartierQuery('');
-    setMaxHourlyRateMAD(300);
+    setMaxHourlyRateMAD(sliderMaxHourlyRate);
     setSearchQuery('');
     setVerifiedOnly(false);
     setAvailableNowOnly(false);
@@ -298,17 +358,18 @@ export function MarketplaceApp() {
 
   if (appView === 'admin') {
     return (
-      <>
+      <Suspense
+        fallback={
+          <div className="min-h-screen bg-slate-50 flex items-center justify-center text-xs text-slate-600">
+            {lang === 'ar' ? 'جاري تحميل لوحة الإدارة...' : 'Chargement de l’administration...'}
+          </div>
+        }
+      >
         <AdminDashboard
           lang={lang}
           t={t}
           onToggleLanguage={toggleLanguage}
-          onExitAdmin={() => {
-            if (typeof window !== 'undefined' && window.location.pathname.startsWith('/admin')) {
-              window.history.pushState({}, '', '/');
-            }
-            setAppView('marketplace');
-          }}
+          onExitAdmin={() => navigateView('marketplace')}
           firebaseUser={firebaseUser}
           isLiveAdmin={isLiveAdmin}
           isLoadingAdmin={isLoadingAdmin}
@@ -341,15 +402,15 @@ export function MarketplaceApp() {
           onSaveSystemSettings={saveSystemSettings}
         />
 
-        {detailProvider && (
+        {syncedDetailProvider && (
           <ProviderDetailModal
-            provider={detailProvider}
+            provider={syncedDetailProvider}
             lang={lang}
             t={t}
             onClose={() => setDetailProvider(null)}
             onBookProvider={(p) => {
               setDetailProvider(null);
-              setAppView('marketplace');
+              navigateView('marketplace');
               setBookingProvider(p);
             }}
           />
@@ -365,12 +426,13 @@ export function MarketplaceApp() {
             firebaseUser={firebaseUser}
             activeRole="provider"
             activeUserName={firebaseUser?.displayName || 'Admin Moul L’Khedma'}
+            readOnly={true}
             localMessages={chatThreads[activeChatBooking.id] || []}
             onSendLocalMessage={sendLocalChatMessage}
             onClose={() => setActiveChatBooking(null)}
           />
         )}
-      </>
+      </Suspense>
     );
   }
 
@@ -410,13 +472,15 @@ export function MarketplaceApp() {
             >
               {t.navMyRequests} ({bookings.length})
             </a>
-            <button
-              type="button"
-              onClick={() => setAppView('admin')}
-              className="hover:text-emerald-700 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-            >
-              {t.navAdmin}
-            </button>
+            {isLiveAdmin && (
+              <button
+                type="button"
+                onClick={() => navigateView('admin')}
+                className="hover:text-emerald-700 hover:underline underline-offset-4 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                {t.navAdmin}
+              </button>
+            )}
             <button
               type="button"
               onClick={toggleLanguage}
@@ -566,7 +630,7 @@ export function MarketplaceApp() {
               </div>
               <div>
                 <div className="text-xl font-bold tabular-nums text-slate-900">
-                  {t.trustMetric2Value}
+                  {allProviders.length} {lang === 'ar' ? 'معلم' : 'Maâlems'}
                 </div>
                 <div className="text-xs text-slate-600 mt-1">{t.trustMetric2Label}</div>
               </div>
@@ -654,7 +718,7 @@ export function MarketplaceApp() {
                     type="range"
                     aria-label={t.maxPriceLabel}
                     min={100}
-                    max={300}
+                    max={sliderMaxHourlyRate}
                     step={10}
                     value={maxHourlyRateMAD}
                     onChange={(e) => setMaxHourlyRateMAD(Number(e.target.value))}
@@ -796,7 +860,7 @@ export function MarketplaceApp() {
               {(selectedCity !== 'ALL' ||
                 selectedCategory !== 'ALL' ||
                 quartierQuery.trim() !== '' ||
-                maxHourlyRateMAD < 300 ||
+                maxHourlyRateMAD < sliderMaxHourlyRate ||
                 searchQuery.trim() !== '' ||
                 verifiedOnly ||
                 availableNowOnly ||
@@ -862,15 +926,23 @@ export function MarketplaceApp() {
                         : 'w-full h-[580px]'
                     }
                   >
-                    <ProviderMap
-                      providers={filteredProviders}
-                      lang={lang}
-                      t={t}
-                      userCoords={userCoords}
-                      selectedProviderId={detailProvider?.id}
-                      onSelectProvider={setDetailProvider}
-                      onBookProvider={setBookingProvider}
-                    />
+                    <Suspense
+                      fallback={
+                        <div className="w-full h-full rounded-xl border border-slate-200 bg-slate-100 animate-pulse flex items-center justify-center text-xs text-slate-500">
+                          {lang === 'ar' ? 'جاري تحميل الخريطة...' : 'Chargement de la carte...'}
+                        </div>
+                      }
+                    >
+                      <ProviderMap
+                        providers={filteredProviders}
+                        lang={lang}
+                        t={t}
+                        userCoords={userCoords}
+                        selectedProviderId={syncedDetailProvider?.id}
+                        onSelectProvider={setDetailProvider}
+                        onBookProvider={setBookingProvider}
+                      />
+                    </Suspense>
                   </div>
                 )}
               </div>
@@ -903,6 +975,10 @@ export function MarketplaceApp() {
             <BookingsDashboard
               lang={lang}
               t={t}
+              firebaseUser={firebaseUser}
+              platformFeePct={systemSettings.platformFeePct}
+              bookingActionError={bookingActionError}
+              onDismissError={clearBookingActionError}
               dashboardTab={dashboardTab}
               onChangeDashboardTab={setDashboardTab}
               allProviders={allProviders}
@@ -956,7 +1032,7 @@ export function MarketplaceApp() {
           <div className="flex items-center gap-4">
             <button
               type="button"
-              onClick={() => setAppView('admin')}
+              onClick={() => navigateView('admin')}
               className="text-emerald-700 font-semibold hover:underline cursor-pointer whitespace-nowrap"
             >
               {t.navAdmin}
@@ -997,9 +1073,9 @@ export function MarketplaceApp() {
       )}
 
       {/* Provider Detail Modal */}
-      {detailProvider && (
+      {syncedDetailProvider && (
         <ProviderDetailModal
-          provider={detailProvider}
+          provider={syncedDetailProvider}
           lang={lang}
           t={t}
           onClose={() => setDetailProvider(null)}
@@ -1020,77 +1096,81 @@ export function MarketplaceApp() {
         />
       )}
 
-      {/* Booking Detail Modal (`BookingDetailPage`) */}
-      {syncedDetailBooking && (
-        <BookingDetailModal
-          booking={syncedDetailBooking}
-          lang={lang}
-          t={t}
-          activeRole={dashboardTab}
-          onClose={() => setDetailBooking(null)}
-          onOpenChat={setActiveChatBooking}
-          onOpenReschedule={setReschedulingBooking}
-          onOpenCancel={setCancellingBooking}
-          onOpenReview={setReviewingBooking}
-          onConfirmAndReleaseEscrow={clientConfirmAndReleaseEscrow}
-        />
-      )}
+      {/* Lazy-Loaded Booking Lifecycle, Chat & Review Modals */}
+      <Suspense fallback={null}>
+        {/* Booking Detail Modal (`BookingDetailPage`) */}
+        {syncedDetailBooking && (
+          <BookingDetailModal
+            booking={syncedDetailBooking}
+            lang={lang}
+            t={t}
+            activeRole={dashboardTab}
+            platformFeePct={systemSettings.platformFeePct}
+            onClose={() => setDetailBooking(null)}
+            onOpenChat={setActiveChatBooking}
+            onOpenReschedule={setReschedulingBooking}
+            onOpenCancel={setCancellingBooking}
+            onOpenReview={setReviewingBooking}
+            onConfirmAndReleaseEscrow={clientConfirmAndReleaseEscrow}
+          />
+        )}
 
-      {/* Cancellation Modal (`CancellationModal`) */}
-      {cancellingBooking && (
-        <CancellationModal
-          booking={cancellingBooking}
-          lang={lang}
-          t={t}
-          actorRole={dashboardTab}
-          onClose={() => setCancellingBooking(null)}
-          onConfirmCancel={cancelBookingWithReason}
-        />
-      )}
+        {/* Cancellation Modal (`CancellationModal`) */}
+        {cancellingBooking && (
+          <CancellationModal
+            booking={cancellingBooking}
+            lang={lang}
+            t={t}
+            actorRole={dashboardTab}
+            onClose={() => setCancellingBooking(null)}
+            onConfirmCancel={cancelBookingWithReason}
+          />
+        )}
 
-      {/* Reschedule Modal (`RescheduleModal`) */}
-      {reschedulingBooking && (
-        <RescheduleModal
-          booking={reschedulingBooking}
-          lang={lang}
-          t={t}
-          onClose={() => setReschedulingBooking(null)}
-          onConfirmReschedule={rescheduleBooking}
-        />
-      )}
+        {/* Reschedule Modal (`RescheduleModal`) */}
+        {reschedulingBooking && (
+          <RescheduleModal
+            booking={reschedulingBooking}
+            lang={lang}
+            t={t}
+            onClose={() => setReschedulingBooking(null)}
+            onConfirmReschedule={rescheduleBooking}
+          />
+        )}
 
-      {/* Real-Time In-App Chat Drawer (`chats/{bookingId}/messages` / `MessagesPage`) */}
-      {activeChatBooking && (
-        <ChatDrawerModal
-          booking={activeChatBooking}
-          relatedBookings={bookings}
-          onSwitchBooking={setActiveChatBooking}
-          lang={lang}
-          t={t}
-          firebaseUser={firebaseUser}
-          activeRole={dashboardTab}
-          activeUserName={
-            userProfile?.fullName ||
-            (dashboardTab === 'provider'
-              ? activeChatBooking.providerName
-              : activeChatBooking.clientName)
-          }
-          localMessages={chatThreads[activeChatBooking.id] || []}
-          onSendLocalMessage={sendLocalChatMessage}
-          onClose={() => setActiveChatBooking(null)}
-        />
-      )}
+        {/* Real-Time In-App Chat Drawer (`chats/{bookingId}/messages` / `MessagesPage`) */}
+        {activeChatBooking && (
+          <ChatDrawerModal
+            booking={activeChatBooking}
+            relatedBookings={bookings}
+            onSwitchBooking={setActiveChatBooking}
+            lang={lang}
+            t={t}
+            firebaseUser={firebaseUser}
+            activeRole={dashboardTab}
+            activeUserName={
+              userProfile?.fullName ||
+              (dashboardTab === 'provider'
+                ? activeChatBooking.providerName
+                : activeChatBooking.clientName)
+            }
+            localMessages={chatThreads[activeChatBooking.id] || []}
+            onSendLocalMessage={sendLocalChatMessage}
+            onClose={() => setActiveChatBooking(null)}
+          />
+        )}
 
-      {/* Client 1–5 Star Review Modal (`ReviewSubmissionPage`) */}
-      {reviewingBooking && (
-        <ReviewModal
-          booking={reviewingBooking}
-          lang={lang}
-          t={t}
-          onClose={() => setReviewingBooking(null)}
-          onSubmitReview={submitClientReview}
-        />
-      )}
+        {/* Client 1–5 Star Review Modal (`ReviewSubmissionPage`) */}
+        {reviewingBooking && (
+          <ReviewModal
+            booking={reviewingBooking}
+            lang={lang}
+            t={t}
+            onClose={() => setReviewingBooking(null)}
+            onSubmitReview={submitClientReview}
+          />
+        )}
+      </Suspense>
     </div>
   );
 }

@@ -230,7 +230,7 @@ export const AdminBookingsSection: React.FC<AdminBookingsSectionProps> = ({
                         <div className="text-[11px] text-slate-500">
                           {b.paymentStatus === 'refunded'
                             ? `${isAr ? 'مسترجع:' : 'Remboursé:'} ${refundMad || b.estimatedMad} DH`
-                            : `${payoutMad} DH (90%) / ${feeMad} DH (10%)`}
+                            : `${payoutMad} DH (${Math.max(0, 100 - platformFeePct)}%) / ${feeMad} DH (${platformFeePct}%)`}
                         </div>
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
@@ -280,7 +280,11 @@ export const AdminBookingsSection: React.FC<AdminBookingsSectionProps> = ({
                                   className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-900 bg-amber-400 hover:bg-amber-500 rounded-lg transition-colors cursor-pointer"
                                 >
                                   <CreditCard className="w-3.5 h-3.5" />
-                                  <span>{isAr ? 'صرف (90/10)' : 'Libérer (90/10)'}</span>
+                                  <span>
+                                    {isAr
+                                      ? `صرف (${Math.max(0, 100 - platformFeePct)}/${platformFeePct})`
+                                      : `Libérer (${Math.max(0, 100 - platformFeePct)}/${platformFeePct})`}
+                                  </span>
                                 </button>
                                 <button
                                   type="button"

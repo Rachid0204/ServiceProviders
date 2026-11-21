@@ -269,14 +269,52 @@ export function calculateEscrowSplit(
 }
 
 /**
- * Computes the automatic refund patch when a provider cancels a booking:
- * - If `cmi_escrow` and `escrow_held`, automatically refunds 100% of `estimatedMad` (`paymentStatus: 'refunded'`).
+ * Generates collision-free Firestore booking document ID and human-readable MK- reference.
+ */
+export function generateBookingIds(): { bookingId: string; bookingRef: string } {
+  const randomHex =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().replace(/-/g, '')
+      : `${Date.now().toString(16)}${Math.random().toString(16).slice(2, 14)}`;
+  return {
+    bookingId: `booking-${randomHex.slice(0, 16)}`,
+    bookingRef: `MK-${randomHex.slice(0, 6).toUpperCase()}`,
+  };
+}
+
+/**
+ * Returns today's local date in YYYY-MM-DD format for date inputs.
+ */
+export function getTodayIsoDate(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Validates that an image URL uses a safe scheme (HTTPS, local bundled asset, or ephemeral preview blob).
+ */
+export function isSafeImageUrl(url: string | undefined, allowBlob = false): boolean {
+  if (!url || url.length > 2048) return false;
+  if (url.startsWith('https://')) return true;
+  if (/^\/src\/assets\/images\/[a-zA-Z0-9_.\-]+$/.test(url)) return true;
+  if (allowBlob && url.startsWith('blob:')) return true;
+  return false;
+}
+
+/**
+ * Computes the automatic refund patch when a provider or client cancels a booking:
+ * - If `cmi_escrow` and `escrow_held` (and auto-refund is enabled for provider cancels),
+ *   automatically refunds 100% of `estimatedMad` (`paymentStatus: 'refunded'`).
  * - If `cash_on_completion`, keeps `unpaid_cod` with 0 refund.
  */
 export function computeCancellationSettlement(
   booking: Pick<BookingRecord, 'paymentMethod' | 'paymentStatus' | 'estimatedMad'>,
   cancelledBy: 'client' | 'provider' | 'admin',
-  reason: string
+  reason: string,
+  autoRefundOnProviderCancel = true
 ): Pick<
   BookingRecord,
   | 'status'
@@ -290,8 +328,10 @@ export function computeCancellationSettlement(
   const isEscrowHeld =
     booking.paymentMethod === 'cmi_escrow' &&
     (booking.paymentStatus === 'escrow_held' || booking.paymentStatus === undefined);
+  const shouldRefund =
+    isEscrowHeld && (cancelledBy !== 'provider' || autoRefundOnProviderCancel);
 
-  if (isEscrowHeld) {
+  if (shouldRefund) {
     return {
       status: 'cancelled',
       paymentStatus: 'refunded',

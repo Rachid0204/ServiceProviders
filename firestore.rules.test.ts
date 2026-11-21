@@ -125,3 +125,36 @@ test('Phase 2 & 3 Security Policy Audit: non-admins cannot tamper with estimated
   assert.ok(rulesContent.includes('match /systemSettings/{configId}'));
 });
 
+test('Architect Audit Hardening: safe asset URLs, full array validation, financial invariants, chat anti-spoofing, and storage/server controls', () => {
+  // Asset URL sanitization and full list validation (no unvalidated tail items)
+  assert.ok(rulesContent.includes('function isSafeAssetUrl(url)'));
+  assert.ok(rulesContent.includes('function isValidSkillList(skills)'));
+  assert.ok(rulesContent.includes('function isValidPortfolioList(images)'));
+
+  // Dynamic fee lookup + strict escrow payout/fee/refund invariants + reviewed escrow release
+  assert.ok(rulesContent.includes('function getConfiguredPlatformFeePct()'));
+  assert.ok(rulesContent.includes('incoming().providerId != request.auth.uid'));
+  assert.ok(rulesContent.includes("existing().status == 'completed' || existing().status == 'reviewed'"));
+  assert.ok(rulesContent.includes("incoming().completedJobs == (('completedJobs' in existing()) ? existing().completedJobs : 0) + 1"));
+  assert.ok(rulesContent.includes("getAfter(/databases/$(database)/documents/bookings/$(incoming().lastCompletedBookingId)).data.status == 'completed'"));
+
+  // Chat list fixed via parent booking lookup + anti-spoofing on message creation
+  assert.ok(rulesContent.includes('allow list: if isVerifiedUser() &&'));
+  assert.ok(rulesContent.includes('incoming().clientId == get(/databases/$(database)/documents/bookings/$(bookingId)).data.clientId'));
+  assert.ok(rulesContent.includes('incoming().providerId == get(/databases/$(database)/documents/bookings/$(bookingId)).data.providerId'));
+
+  // Withdrawal KYC & provider checks
+  assert.ok(rulesContent.includes('incoming().amountMad >= get(/databases/$(database)/documents/systemSettings/global).data.minWithdrawalMad'));
+  assert.ok(rulesContent.includes('get(/databases/$(database)/documents/providers/$(request.auth.uid)).data.verifiedBadge == true'));
+
+  // Storage email verification, Admin read access, and exists() guard
+  assert.ok(storageRulesContent.includes('function isVerifiedUser()'));
+  assert.ok(storageRulesContent.includes('function isAdmin()'));
+  assert.ok(storageRulesContent.includes('firestore.exists('));
+
+  // Server security headers and 501 CMI stub
+  assert.ok(serverContent.includes("app.disable('x-powered-by')"));
+  assert.ok(serverContent.includes('res.status(501)'));
+});
+
+

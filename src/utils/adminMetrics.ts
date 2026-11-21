@@ -279,8 +279,34 @@ export function flattenProviderReviews(providers: VettedProvider[]): AdminReview
   return items.sort((a, b) => b.date.localeCompare(a.date));
 }
 
-function escapeCsvCell(value: string | number | undefined): string {
-  const str = String(value ?? '');
+/**
+ * Recalculates a provider's average rating and review count after an admin removes a review.
+ */
+export function recalculateRatingAfterReviewRemoval(
+  currentAvg: number,
+  currentCount: number,
+  removedRating: number
+): { ratingAvg: number; reviewCount: number } {
+  const safeCount = Math.max(0, Math.round(currentCount));
+  if (safeCount <= 1) {
+    return { ratingAvg: 5.0, reviewCount: 0 };
+  }
+  const nextCount = safeCount - 1;
+  const remainingPoints = currentAvg * safeCount - removedRating;
+  const clampedAvg = Math.max(1, Math.min(5, remainingPoints / nextCount));
+  return {
+    ratingAvg: Math.round(clampedAvg * 10) / 10,
+    reviewCount: nextCount,
+  };
+}
+
+const CSV_FORMULA_PREFIX = /^[=+\-@\t\r]/;
+
+export function escapeCsvCell(value: string | number | undefined): string {
+  let str = String(value ?? '');
+  if (CSV_FORMULA_PREFIX.test(str)) {
+    str = `'${str}`;
+  }
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }

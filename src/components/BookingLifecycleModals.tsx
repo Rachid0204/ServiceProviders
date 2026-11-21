@@ -19,6 +19,7 @@ import {
   calculateEscrowSplit,
   canTransitionBookingStatus,
   formatMadCurrency,
+  getTodayIsoDate,
   type BookingRecord,
   type LanguageCode,
   type TimeSlot,
@@ -31,6 +32,7 @@ interface BookingDetailModalProps {
   lang: LanguageCode;
   t: Translations;
   activeRole: UserRole;
+  platformFeePct?: number;
   onClose: () => void;
   onOpenChat: (booking: BookingRecord) => void;
   onOpenReschedule: (booking: BookingRecord) => void;
@@ -44,6 +46,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   lang,
   t,
   activeRole,
+  platformFeePct = 10,
   onClose,
   onOpenChat,
   onOpenReschedule,
@@ -54,7 +57,8 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   const isAr = lang === 'ar';
   const [isReleasing, setIsReleasing] = useState(false);
 
-  const split = calculateEscrowSplit(booking.estimatedMad, 10, 100);
+  const providerSharePct = Math.max(0, 100 - platformFeePct);
+  const split = calculateEscrowSplit(booking.estimatedMad, platformFeePct, 100);
   const providerPayout = booking.providerPayoutMad ?? split.providerPayoutMad;
   const platformFee = booking.platformFeeMad ?? split.platformFeeMad;
   const refundedClient = booking.refundedClientMad ?? 0;
@@ -172,7 +176,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           </div>
         )}
 
-        {/* Financial & CMI Escrow Breakdown Card (90% / 10% Split) */}
+        {/* Financial & CMI Escrow Breakdown Card */}
         <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 text-xs">
           <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
             <div className="flex items-center gap-2 font-bold text-slate-900">
@@ -184,8 +188,8 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               <span>
                 {booking.paymentMethod === 'cmi_escrow'
                   ? isAr
-                    ? 'تفصيل ضمان CMI وتوزيع العمولة (90% / 10%)'
-                    : 'Ventilation Séquestre CMI (90% Maâlem / 10% Plateforme)'
+                    ? `تفصيل ضمان CMI وتوزيع العمولة (${providerSharePct}% / ${platformFeePct}%)`
+                    : `Ventilation Séquestre CMI (${providerSharePct}% Maâlem / ${platformFeePct}% Plateforme)`
                   : isAr
                   ? 'الدفع نقداً عند انتهاء الخدمة'
                   : 'Règlement Espèces fin de chantier (COD)'}
@@ -196,32 +200,34 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 pt-1">
-            <div className="p-2.5 bg-white border border-slate-200 rounded-lg">
-              <div className="text-[11px] text-slate-500">
-                {isAr ? 'حصة المعلم (90%)' : 'Part Maâlem (90%)'}
+          {booking.paymentMethod === 'cmi_escrow' && (
+            <div className="grid grid-cols-3 gap-2 pt-1">
+              <div className="p-2.5 bg-white border border-slate-200 rounded-lg">
+                <div className="text-[11px] text-slate-500">
+                  {isAr ? `حصة المعلم (${providerSharePct}%)` : `Part Maâlem (${providerSharePct}%)`}
+                </div>
+                <div className="font-mono-tabular font-bold text-emerald-700 text-sm mt-0.5">
+                  {formatMadCurrency(providerPayout, lang)}
+                </div>
               </div>
-              <div className="font-mono-tabular font-bold text-emerald-700 text-sm mt-0.5">
-                {formatMadCurrency(providerPayout, lang)}
+              <div className="p-2.5 bg-white border border-slate-200 rounded-lg">
+                <div className="text-[11px] text-slate-500">
+                  {isAr ? `عمولة المنصة (${platformFeePct}%)` : `Frais plateforme (${platformFeePct}%)`}
+                </div>
+                <div className="font-mono-tabular font-bold text-slate-900 text-sm mt-0.5">
+                  {formatMadCurrency(platformFee, lang)}
+                </div>
+              </div>
+              <div className="p-2.5 bg-white border border-slate-200 rounded-lg">
+                <div className="text-[11px] text-slate-500">
+                  {isAr ? 'مسترجع للزبون' : 'Remboursé client'}
+                </div>
+                <div className="font-mono-tabular font-bold text-amber-700 text-sm mt-0.5">
+                  {formatMadCurrency(refundedClient, lang)}
+                </div>
               </div>
             </div>
-            <div className="p-2.5 bg-white border border-slate-200 rounded-lg">
-              <div className="text-[11px] text-slate-500">
-                {isAr ? 'عمولة المنصة (10%)' : 'Frais plateforme (10%)'}
-              </div>
-              <div className="font-mono-tabular font-bold text-slate-900 text-sm mt-0.5">
-                {formatMadCurrency(platformFee, lang)}
-              </div>
-            </div>
-            <div className="p-2.5 bg-white border border-slate-200 rounded-lg">
-              <div className="text-[11px] text-slate-500">
-                {isAr ? 'مسترجع للزبون' : 'Remboursé client'}
-              </div>
-              <div className="font-mono-tabular font-bold text-amber-700 text-sm mt-0.5">
-                {formatMadCurrency(refundedClient, lang)}
-              </div>
-            </div>
-          </div>
+          )}
 
           {canReleaseEscrow && (
             <div className="pt-2">
@@ -347,12 +353,14 @@ export const CancellationModal: React.FC<CancellationModalProps> = ({
   const [selectedPreset, setSelectedPreset] = useState<string>(presetReasons[0]);
   const [customNote, setCustomNote] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const isEscrowRefundable =
     booking.paymentMethod === 'cmi_escrow' && booking.paymentStatus === 'escrow_held';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
     setIsSubmitting(true);
     try {
       const fullReason = customNote.trim()
@@ -360,6 +368,10 @@ export const CancellationModal: React.FC<CancellationModalProps> = ({
         : selectedPreset;
       await onConfirmCancel(booking.id, fullReason, actorRole);
       onClose();
+    } catch {
+      setSubmitError(
+        isAr ? 'تعذر إلغاء الحجز. حاول مرة أخرى.' : 'Impossible d’annuler la réservation.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -440,6 +452,7 @@ export const CancellationModal: React.FC<CancellationModalProps> = ({
             <textarea
               id="cancel-custom-note"
               rows={2}
+              maxLength={300}
               value={customNote}
               onChange={(e) => setCustomNote(e.target.value)}
               placeholder={
@@ -450,6 +463,12 @@ export const CancellationModal: React.FC<CancellationModalProps> = ({
               className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
             />
           </div>
+
+          {submitError && (
+            <div role="alert" className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800">
+              {submitError}
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <button
@@ -497,18 +516,32 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
   onConfirmReschedule,
 }) => {
   const isAr = lang === 'ar';
-  const [newDate, setNewDate] = useState<string>(booking.preferredDate);
+  const todayIso = getTodayIsoDate();
+  const [newDate, setNewDate] = useState<string>(
+    booking.preferredDate >= todayIso ? booking.preferredDate : todayIso
+  );
   const [newSlot, setNewSlot] = useState<TimeSlot>(booking.preferredTimeSlot);
   const [note, setNote] = useState<string>(booking.rescheduleNote ?? '');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newDate) return;
+    setSubmitError(null);
+    if (!newDate || newDate < todayIso) {
+      setSubmitError(
+        isAr ? 'يرجى اختيار تاريخ صالح.' : 'Veuillez choisir une date égale ou ultérieure à aujourd’hui.'
+      );
+      return;
+    }
     setIsSubmitting(true);
     try {
       await onConfirmReschedule(booking.id, newDate, newSlot, note);
       onClose();
+    } catch {
+      setSubmitError(
+        isAr ? 'تعذر حفظ الموعد الجديد.' : 'Impossible de reprogrammer ce créneau.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -552,6 +585,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
             <input
               id="reschedule-date"
               type="date"
+              min={todayIso}
               value={newDate}
               onChange={(e) => setNewDate(e.target.value)}
               className="w-full px-3.5 py-2 text-xs font-mono-tabular bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
@@ -590,6 +624,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
             <input
               id="reschedule-note"
               type="text"
+              maxLength={200}
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder={
@@ -600,6 +635,12 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({
               className="w-full px-3.5 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
             />
           </div>
+
+          {submitError && (
+            <div role="alert" className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800">
+              {submitError}
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <button

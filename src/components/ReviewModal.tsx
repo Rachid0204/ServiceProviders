@@ -35,24 +35,43 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   const [quality, setQuality] = useState<number>(5);
   const [value, setValue] = useState<number>(5);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
+    const trimmedComment = comment.trim();
+    const finalComment =
+      trimmedComment.length > 0
+        ? trimmedComment
+        : isAr
+        ? 'تدخل سريع وعمل متقن للغاية. شكراً جزيلاً للمعلم!'
+        : 'Intervention rapide et travail très soigné. Merci Maâlem !';
+
+    if (finalComment.length < 2 || finalComment.length > 500) {
+      setSubmitError(
+        isAr
+          ? 'يجب أن يتراوح التعليق بين حرفين و 500 حرف.'
+          : 'Le commentaire doit contenir entre 2 et 500 caractères.'
+      );
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const categoriesPayload: ReviewCategoryBreakdown | undefined = showOptionalCategories
         ? { punctuality, quality, value }
         : undefined;
-      await onSubmitReview(
-        booking.id,
-        rating,
-        comment.trim() ||
-          (isAr
-            ? 'تدخل سريع وعمل متقن للغاية. شكراً جزيلاً للمعلم!'
-            : 'Intervention rapide et travail très soigné. Merci Maâlem !'),
-        categoriesPayload
-      );
+      await onSubmitReview(booking.id, rating, finalComment, categoriesPayload);
       onClose();
+    } catch (err) {
+      setSubmitError(
+        err instanceof Error
+          ? err.message
+          : isAr
+          ? 'تعذر إرسال التقييم. يرجى المحاولة مجدداً.'
+          : 'Impossible d’enregistrer votre avis. Veuillez réessayer.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -190,12 +209,22 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
             <textarea
               id="review-comment"
               rows={3}
+              maxLength={500}
               value={comment}
               onChange={(e) => setComment(e.target.value)}
               placeholder={t.reviewCommentPlaceholder}
               className="w-full px-3.5 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
             />
           </div>
+
+          {submitError && (
+            <div
+              role="alert"
+              className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800"
+            >
+              {submitError}
+            </div>
+          )}
 
           <div className="flex items-center justify-end gap-2 pt-2">
             <button

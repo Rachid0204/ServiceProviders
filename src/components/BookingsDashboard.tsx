@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Wrench,
   CheckCircle2,
@@ -13,7 +13,9 @@ import {
   ShieldCheck,
   Calendar,
   FileText,
+  AlertCircle,
 } from 'lucide-react';
+import type { User } from 'firebase/auth';
 import {
   calculateEscrowSplit,
   formatMadCurrency,
@@ -32,6 +34,10 @@ import type { Translations } from '../i18n/translations';
 interface BookingsDashboardProps {
   lang: LanguageCode;
   t: Translations;
+  firebaseUser: User | null;
+  platformFeePct: number;
+  bookingActionError: string | null;
+  onDismissError: () => void;
   dashboardTab: 'client' | 'provider';
   onChangeDashboardTab: (tab: 'client' | 'provider') => void;
   allProviders: VettedProvider[];
@@ -56,6 +62,10 @@ interface BookingsDashboardProps {
 export const BookingsDashboard: React.FC<BookingsDashboardProps> = ({
   lang,
   t,
+  firebaseUser,
+  platformFeePct,
+  bookingActionError,
+  onDismissError,
   dashboardTab,
   onChangeDashboardTab,
   allProviders,
@@ -73,6 +83,25 @@ export const BookingsDashboard: React.FC<BookingsDashboardProps> = ({
   onOpenReview,
 }) => {
   const isAr = lang === 'ar';
+  const providerSharePct = Math.max(0, 100 - platformFeePct);
+
+  // Strictly scope bookings to the active tab role so users never trigger cross-role PERMISSION_DENIED errors
+  const visibleBookings = useMemo(() => {
+    if (firebaseUser) {
+      return dashboardTab === 'client'
+        ? bookings.filter((b) => b.clientId === firebaseUser.uid)
+        : bookings.filter((b) => b.providerId === firebaseUser.uid);
+    }
+    if (dashboardTab === 'provider' && activeMaalemProvider) {
+      return bookings.filter((b) => b.providerId === activeMaalemProvider.id);
+    }
+    return bookings;
+  }, [firebaseUser, dashboardTab, bookings, activeMaalemProvider]);
+
+  const ownProviderProfile = useMemo(
+    () => (firebaseUser ? allProviders.find((p) => p.uid === firebaseUser.uid) : activeMaalemProvider),
+    [firebaseUser, allProviders, activeMaalemProvider]
+  );
 
   const getStatusLabel = (status: BookingStatus): string => {
     switch (status) {
@@ -93,7 +122,9 @@ export const BookingsDashboard: React.FC<BookingsDashboardProps> = ({
 
   const getPaymentStatusLabel = (status?: PaymentStatus): string => {
     if (status === 'paid') {
-      return isAr ? 'مدفوع (90% معلم / 10% عمولة)' : 'Payé (90% Maâlem / 10% Frais)';
+      return isAr
+        ? `مدفوع (${providerSharePct}% معلم / ${platformFeePct}% عمولة)`
+        : `Payé (${providerSharePct}% Maâlem / ${platformFeePct}% Frais)`;
     }
     if (status === 'refunded') {
       return isAr ? 'مسترجع 100% للزبون' : 'Remboursé 100% Client';
@@ -150,32 +181,65 @@ export const BookingsDashboard: React.FC<BookingsDashboardProps> = ({
         </div>
       </div>
 
-      {/* Provider Dashboard Bar: Active Maâlem Selector & Availability Toggle */}
-      {dashboardTab === 'provider' && activeMaalemProvider && (
+      {bookingActionError && (
+        <div
+          role="alert"
+          className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl flex items-center justify-between gap-3 text-xs text-rose-900"
+        >
+          <div className="flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 text-rose-700 shrink-0" />
+            <span>{bookingActionError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={onDismissError}
+            className="text-rose-700 font-semibold hover:underline cursor-pointer shrink-0"
+          >
+            {t.closeBtn}
+          </button>
+        </div>
+      )}
+
+      {/* Provider Dashboard Bar: Authenticated users control ONLY their own provider profile; unauthenticated preview may switch demo providers */}
+      {dashboardTab === 'provider' && ownProviderProfile && (
         <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
           <div className="flex flex-wrap items-center gap-3">
             <Wrench className="w-5 h-5 text-emerald-700 shrink-0" />
             <div>
-              <label
-                htmlFor="active-maalem-select"
-                className="block text-[11px] text-slate-500 font-medium"
-              >
-                {isAr
-                  ? 'حساب المعلم النشط في اللوحة'
-                  : 'Profil Maâlem actif dans le tableau de bord'}
-              </label>
-              <select
-                id="active-maalem-select"
-                value={activeMaalemProvider.id}
-                onChange={(e) => onSelectActiveMaalemId(e.target.value)}
-                className="mt-0.5 text-sm font-bold text-slate-900 bg-transparent border-b border-slate-300 focus:outline-none focus:border-emerald-600"
-              >
-                {allProviders.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {isAr ? p.fullNameAr : p.fullNameFr} ({t.categories[p.category]})
-                  </option>
-                ))}
-              </select>
+              {firebaseUser ? (
+                <>
+                  <span className="block text-[11px] text-slate-500 font-medium">
+                    {isAr ? 'حساب المعلم الخاص بك' : 'Votre profil Maâlem actif'}
+                  </span>
+                  <span className="text-sm font-bold text-slate-900">
+                    {isAr ? ownProviderProfile.fullNameAr : ownProviderProfile.fullNameFr} (
+                    {t.categories[ownProviderProfile.category]})
+                  </span>
+                </>
+              ) : (
+                <>
+                  <label
+                    htmlFor="active-maalem-select"
+                    className="block text-[11px] text-slate-500 font-medium"
+                  >
+                    {isAr
+                      ? 'حساب المعلم في وضع المعاينة'
+                      : 'Profil Maâlem (mode aperçu démo)'}
+                  </label>
+                  <select
+                    id="active-maalem-select"
+                    value={ownProviderProfile.id}
+                    onChange={(e) => onSelectActiveMaalemId(e.target.value)}
+                    className="mt-0.5 text-sm font-bold text-slate-900 bg-transparent border-b border-slate-300 focus:outline-none focus:border-emerald-600"
+                  >
+                    {allProviders.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {isAr ? p.fullNameAr : p.fullNameFr} ({t.categories[p.category]})
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
             </div>
           </div>
 
@@ -185,15 +249,15 @@ export const BookingsDashboard: React.FC<BookingsDashboardProps> = ({
             </span>
             <button
               type="button"
-              onClick={() => onToggleProviderAvailability(activeMaalemProvider)}
-              aria-pressed={activeMaalemProvider.isAvailableNow}
+              onClick={() => onToggleProviderAvailability(ownProviderProfile)}
+              aria-pressed={ownProviderProfile.isAvailableNow}
               className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
-                activeMaalemProvider.isAvailableNow
+                ownProviderProfile.isAvailableNow
                   ? 'bg-emerald-700 text-white border-emerald-700'
                   : 'bg-slate-100 text-slate-700 border-slate-300'
               }`}
             >
-              {activeMaalemProvider.isAvailableNow
+              {ownProviderProfile.isAvailableNow
                 ? t.availableNowText
                 : t.busyScheduledText}
             </button>
@@ -202,13 +266,13 @@ export const BookingsDashboard: React.FC<BookingsDashboardProps> = ({
       )}
 
       {/* Bookings List */}
-      {bookings.length === 0 ? (
+      {visibleBookings.length === 0 ? (
         <div className="bg-white border border-slate-200 rounded-xl p-6 text-xs text-slate-600">
           {t.noRequestsYet}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {bookings.map((booking) => {
+          {visibleBookings.map((booking) => {
             const whatsappUrl = buildWhatsAppUrl({
               phone:
                 dashboardTab === 'client' ? booking.providerPhone : booking.clientPhone,
@@ -219,7 +283,7 @@ export const BookingsDashboard: React.FC<BookingsDashboardProps> = ({
               serviceType: booking.serviceType,
             });
             const threadCount = (chatThreads[booking.id] || []).length;
-            const split = calculateEscrowSplit(booking.estimatedMad, 10, 100);
+            const split = calculateEscrowSplit(booking.estimatedMad, platformFeePct, 100);
             const providerPayout = booking.providerPayoutMad ?? split.providerPayoutMad;
             const platformFee = booking.platformFeeMad ?? split.platformFeeMad;
 
@@ -313,14 +377,14 @@ export const BookingsDashboard: React.FC<BookingsDashboardProps> = ({
                     {booking.description}
                   </p>
 
-                  {/* 90/10 Escrow Settlement or Auto-Refund Pill Banner */}
+                  {/* Dynamic Escrow Settlement or Auto-Refund Pill Banner */}
                   {booking.paymentMethod === 'cmi_escrow' &&
                     booking.paymentStatus === 'paid' && (
                       <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-900 flex items-center justify-between gap-2">
                         <span className="font-semibold">
                           {isAr
-                            ? 'تم صرف ضمان CMI (90% / 10%)'
-                            : 'Séquestre CMI libéré (90% / 10%)'}
+                            ? `تم صرف ضمان CMI (${providerSharePct}% / ${platformFeePct}%)`
+                            : `Séquestre CMI libéré (${providerSharePct}% / ${platformFeePct}%)`}
                         </span>
                         <span className="font-mono-tabular font-bold">
                           {formatMadCurrency(providerPayout, lang)} Maâlem ·{' '}
@@ -385,7 +449,8 @@ export const BookingsDashboard: React.FC<BookingsDashboardProps> = ({
                       >
                         <MessageSquare className="w-3.5 h-3.5 text-emerald-700" />
                         <span>
-                          {t.openChatBtn} ({threadCount})
+                          {t.openChatBtn}
+                          {!firebaseUser ? ` (${threadCount})` : ''}
                         </span>
                       </button>
 
@@ -466,8 +531,8 @@ export const BookingsDashboard: React.FC<BookingsDashboardProps> = ({
                             <ShieldCheck className="w-3.5 h-3.5" />
                             <span>
                               {isAr
-                                ? 'تأكيد وصرف ضمان CMI (90%/10%)'
-                                : 'Confirmer & Libérer CMI (90%/10%)'}
+                                ? `تأكيد وصرف ضمان CMI (${providerSharePct}%/${platformFeePct}%)`
+                                : `Confirmer & Libérer CMI (${providerSharePct}%/${platformFeePct}%)`}
                             </span>
                           </button>
                         )}

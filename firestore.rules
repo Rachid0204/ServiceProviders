@@ -64,6 +64,43 @@ service cloud.firestore {
       return isValidCategory(spec) || spec == 'none';
     }
 
+    function isSafeAssetUrl(url) {
+      return url is string && url.size() >= 1 && url.size() <= 2048 && (
+        url.matches('^https://.*') ||
+        url.matches('^/src/assets/images/[a-zA-Z0-9_.\\-]+$')
+      );
+    }
+
+    function isValidSkillList(skills) {
+      return skills is list && skills.size() >= 1 && skills.size() <= 10 &&
+        (skills.size() < 1 || (skills[0] is string && skills[0].size() >= 1 && skills[0].size() <= 64)) &&
+        (skills.size() < 2 || (skills[1] is string && skills[1].size() >= 1 && skills[1].size() <= 64)) &&
+        (skills.size() < 3 || (skills[2] is string && skills[2].size() >= 1 && skills[2].size() <= 64)) &&
+        (skills.size() < 4 || (skills[3] is string && skills[3].size() >= 1 && skills[3].size() <= 64)) &&
+        (skills.size() < 5 || (skills[4] is string && skills[4].size() >= 1 && skills[4].size() <= 64)) &&
+        (skills.size() < 6 || (skills[5] is string && skills[5].size() >= 1 && skills[5].size() <= 64)) &&
+        (skills.size() < 7 || (skills[6] is string && skills[6].size() >= 1 && skills[6].size() <= 64)) &&
+        (skills.size() < 8 || (skills[7] is string && skills[7].size() >= 1 && skills[7].size() <= 64)) &&
+        (skills.size() < 9 || (skills[8] is string && skills[8].size() >= 1 && skills[8].size() <= 64)) &&
+        (skills.size() < 10 || (skills[9] is string && skills[9].size() >= 1 && skills[9].size() <= 64));
+    }
+
+    function isValidPortfolioList(images) {
+      return images is list && images.size() >= 1 && images.size() <= 6 &&
+        (images.size() < 1 || isSafeAssetUrl(images[0])) &&
+        (images.size() < 2 || isSafeAssetUrl(images[1])) &&
+        (images.size() < 3 || isSafeAssetUrl(images[2])) &&
+        (images.size() < 4 || isSafeAssetUrl(images[3])) &&
+        (images.size() < 5 || isSafeAssetUrl(images[4])) &&
+        (images.size() < 6 || isSafeAssetUrl(images[5]));
+    }
+
+    function getConfiguredPlatformFeePct() {
+      return exists(/databases/$(database)/documents/systemSettings/global)
+        ? get(/databases/$(database)/documents/systemSettings/global).data.platformFeePct
+        : 10;
+    }
+
     function isValidLocationMap(loc) {
       return loc is map &&
         loc.keys().hasAll(['lat', 'lng', 'city', 'quartier']) &&
@@ -161,6 +198,7 @@ service cloud.firestore {
           'verifiedBadge',
           'phone',
           'completedJobs',
+          'lastCompletedBookingId',
           'lastReviewBookingId',
           'location',
           'createdAt',
@@ -175,16 +213,15 @@ service cloud.firestore {
         data.hourlyRateMAD is int && data.hourlyRateMAD >= 50 && data.hourlyRateMAD <= 50000 &&
         data.fixedVisitFeeMAD is int && data.fixedVisitFeeMAD >= 0 && data.fixedVisitFeeMAD <= 10000 &&
         data.experienceYears is int && data.experienceYears >= 0 && data.experienceYears <= 60 &&
-        data.skills is list && data.skills.size() >= 1 && data.skills.size() <= 10 &&
-        data.skills[0] is string && data.skills[0].size() <= 64 &&
-        data.portfolioImages is list && data.portfolioImages.size() >= 1 && data.portfolioImages.size() <= 6 &&
-        data.portfolioImages[0] is string && data.portfolioImages[0].size() <= 2048 &&
+        isValidSkillList(data.skills) &&
+        isValidPortfolioList(data.portfolioImages) &&
         data.ratingAvg is number && data.ratingAvg >= 0 && data.ratingAvg <= 5 &&
         data.reviewCount is int && data.reviewCount >= 0 && data.reviewCount <= 100000 &&
         data.isAvailableNow is bool &&
         data.verifiedBadge is bool &&
         (!('phone' in data) || (data.phone is string && data.phone.size() >= 12 && data.phone.size() <= 16 && data.phone.matches('^\\+212[5-7][0-9]{8}$'))) &&
         (!('completedJobs' in data) || (data.completedJobs is int && data.completedJobs >= 0 && data.completedJobs <= 100000)) &&
+        (!('lastCompletedBookingId' in data) || (data.lastCompletedBookingId is string && data.lastCompletedBookingId.size() >= 1 && data.lastCompletedBookingId.size() <= 128 && data.lastCompletedBookingId.matches('^[a-zA-Z0-9_\\-]+$'))) &&
         (!('lastReviewBookingId' in data) || (data.lastReviewBookingId is string && data.lastReviewBookingId.size() >= 1 && data.lastReviewBookingId.size() <= 128 && data.lastReviewBookingId.matches('^[a-zA-Z0-9_\\-]+$'))) &&
         isValidLocationMap(data.location) &&
         data.createdAt is timestamp &&
@@ -294,7 +331,7 @@ service cloud.firestore {
         data.neighborhood is string && data.neighborhood.size() >= 2 && data.neighborhood.size() <= 80 &&
         data.addressPin is string && data.addressPin.size() >= 2 && data.addressPin.size() <= 160 &&
         data.description is string && data.description.size() >= 10 && data.description.size() <= 600 &&
-        (!('problemPhotoUrl' in data) || (data.problemPhotoUrl is string && data.problemPhotoUrl.size() <= 2048)) &&
+        (!('problemPhotoUrl' in data) || isSafeAssetUrl(data.problemPhotoUrl)) &&
         data.preferredDate is string && data.preferredDate.size() >= 8 && data.preferredDate.size() <= 32 &&
         data.preferredTimeSlot is string && data.preferredTimeSlot.size() <= 32 && (
           data.preferredTimeSlot == '09:00 - 12:00' ||
@@ -371,7 +408,7 @@ service cloud.firestore {
           data.senderRole == 'provider'
         ) &&
         data.text is string && data.text.size() >= 1 && data.text.size() <= 500 &&
-        (!('photoUrl' in data) || (data.photoUrl is string && data.photoUrl.size() <= 2048)) &&
+        (!('photoUrl' in data) || isSafeAssetUrl(data.photoUrl)) &&
         data.createdAt is timestamp;
     }
 
@@ -557,6 +594,7 @@ service cloud.firestore {
         incoming().ratingAvg == 5.0 &&
         incoming().reviewCount == 0 &&
         (!('completedJobs' in incoming()) || incoming().completedJobs == 0) &&
+        !('lastCompletedBookingId' in incoming()) &&
         !('lastReviewBookingId' in incoming()) &&
         (incoming().verifiedBadge == false || isAdmin()) &&
         exists(/databases/$(database)/documents/users/$(request.auth.uid));
@@ -589,6 +627,24 @@ service cloud.firestore {
               'location',
               'updatedAt'
             ])
+          ) ||
+          // Action 1B: Provider atomically increments completedJobs inside the same batch as completing a booking
+          (
+            request.auth.uid == uid &&
+            incoming().verifiedBadge == existing().verifiedBadge &&
+            incoming().ratingAvg == existing().ratingAvg &&
+            incoming().reviewCount == existing().reviewCount &&
+            ('lastCompletedBookingId' in incoming()) &&
+            (!('lastCompletedBookingId' in existing()) || incoming().lastCompletedBookingId != existing().lastCompletedBookingId) &&
+            incoming().completedJobs == (('completedJobs' in existing()) ? existing().completedJobs : 0) + 1 &&
+            incoming().diff(existing()).affectedKeys().hasOnly([
+              'completedJobs',
+              'lastCompletedBookingId',
+              'updatedAt'
+            ]) &&
+            get(/databases/$(database)/documents/bookings/$(incoming().lastCompletedBookingId)).data.providerId == uid &&
+            get(/databases/$(database)/documents/bookings/$(incoming().lastCompletedBookingId)).data.status == 'in_progress' &&
+            getAfter(/databases/$(database)/documents/bookings/$(incoming().lastCompletedBookingId)).data.status == 'completed'
           ) ||
           // Action 2: Client atomic rating aggregation inside the same batch as creating /reviews/{bookingId}
           (
@@ -642,7 +698,7 @@ service cloud.firestore {
       allow delete: if isVerifiedUser() && isValidId(reviewId) && isAdmin();
     }
 
-    // 15. Match: /bookings/{bookingId} (Strict sequential state machine, 90/10 escrow split, auto-refund, reschedule & admin oversight)
+    // 15. Match: /bookings/{bookingId} (Strict sequential state machine, exact escrow split invariants, auto-refund, reschedule & admin oversight)
     match /bookings/{bookingId} {
       allow get: if isVerifiedUser() &&
         isValidId(bookingId) &&
@@ -657,7 +713,15 @@ service cloud.firestore {
         isValidId(bookingId) &&
         isValidBooking(incoming()) &&
         incoming().clientId == request.auth.uid &&
+        incoming().providerId != request.auth.uid &&
         incoming().status == 'pending' &&
+        !('providerPayoutMad' in incoming()) &&
+        !('platformFeeMad' in incoming()) &&
+        !('refundedClientMad' in incoming()) &&
+        !('cancellationReason' in incoming()) &&
+        !('cancelledBy' in incoming()) &&
+        !('reviewRating' in incoming()) &&
+        !('reviewComment' in incoming()) &&
         (
           (incoming().paymentMethod == 'cmi_escrow' && incoming().paymentStatus == 'escrow_held') ||
           (incoming().paymentMethod == 'cash_on_completion' && incoming().paymentStatus == 'unpaid_cod')
@@ -672,35 +736,23 @@ service cloud.firestore {
         incoming().clientId == existing().clientId &&
         incoming().providerId == existing().providerId &&
         incoming().estimatedMad == existing().estimatedMad &&
+        incoming().paymentMethod == existing().paymentMethod &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time && (
           isAdmin() || (
-            existing().status != 'reviewed' &&
             existing().status != 'cancelled' && (
-              // Action 1: Client cancels pending or accepted booking (auto-refunds if CMI escrow was held)
+              // Action 2: Client confirms & releases held CMI escrow on completed or reviewed booking (exact fee/payout split invariant)
               (
                 request.auth.uid == existing().clientId &&
-                (existing().status == 'pending' || existing().status == 'accepted') &&
-                incoming().status == 'cancelled' &&
-                incoming().diff(existing()).affectedKeys().hasOnly([
-                  'status',
-                  'paymentStatus',
-                  'providerPayoutMad',
-                  'platformFeeMad',
-                  'refundedClientMad',
-                  'cancellationReason',
-                  'cancelledBy',
-                  'updatedAt'
-                ])
-              ) ||
-              // Action 2: Client confirms & releases held CMI escrow on completed booking (90% provider payout + 10% platform fee)
-              (
-                request.auth.uid == existing().clientId &&
-                existing().status == 'completed' &&
-                incoming().status == 'completed' &&
+                (existing().status == 'completed' || existing().status == 'reviewed') &&
+                incoming().status == existing().status &&
                 existing().paymentMethod == 'cmi_escrow' &&
                 existing().paymentStatus == 'escrow_held' &&
                 incoming().paymentStatus == 'paid' &&
+                incoming().refundedClientMad == 0 &&
+                incoming().providerPayoutMad + incoming().platformFeeMad == existing().estimatedMad &&
+                incoming().platformFeeMad * 100 >= existing().estimatedMad * getConfiguredPlatformFeePct() - 100 &&
+                incoming().platformFeeMad * 100 <= existing().estimatedMad * getConfiguredPlatformFeePct() + 100 &&
                 incoming().diff(existing()).affectedKeys().hasOnly([
                   'paymentStatus',
                   'providerPayoutMad',
@@ -708,84 +760,131 @@ service cloud.firestore {
                   'refundedClientMad',
                   'updatedAt'
                 ])
-              ) ||
-              // Action 3: Client or Provider reschedules a pending or accepted booking
-              (
-                (request.auth.uid == existing().clientId || request.auth.uid == existing().providerId) &&
-                (existing().status == 'pending' || existing().status == 'accepted') &&
-                incoming().status == existing().status &&
-                incoming().diff(existing()).affectedKeys().hasOnly([
-                  'preferredDate',
-                  'preferredTimeSlot',
-                  'rescheduleNote',
-                  'updatedAt'
-                ])
-              ) ||
-              // Action 4: Client submits 1-5 star review on completed booking (atomically creating /reviews/{bookingId})
-              (
-                request.auth.uid == existing().clientId &&
-                existing().status == 'completed' &&
-                incoming().status == 'reviewed' &&
-                incoming().diff(existing()).affectedKeys().hasOnly([
-                  'status',
-                  'paymentStatus',
-                  'providerPayoutMad',
-                  'platformFeeMad',
-                  'refundedClientMad',
-                  'reviewRating',
-                  'reviewComment',
-                  'updatedAt'
-                ]) &&
-                existsAfter(/databases/$(database)/documents/reviews/$(bookingId))
-              ) ||
-              // Action 5: Provider accepts or declines/cancels a pending booking (provider cancel auto-refunds CMI escrow)
-              (
-                request.auth.uid == existing().providerId &&
-                existing().status == 'pending' &&
-                (incoming().status == 'accepted' || incoming().status == 'cancelled') &&
-                incoming().diff(existing()).affectedKeys().hasOnly([
-                  'status',
-                  'paymentStatus',
-                  'providerPayoutMad',
-                  'platformFeeMad',
-                  'refundedClientMad',
-                  'cancellationReason',
-                  'cancelledBy',
-                  'updatedAt'
-                ])
-              ) ||
-              // Action 6: Provider starts an accepted booking or cancels before start (provider cancel auto-refunds CMI escrow)
-              (
-                request.auth.uid == existing().providerId &&
-                existing().status == 'accepted' &&
-                (incoming().status == 'in_progress' || incoming().status == 'cancelled') &&
-                incoming().diff(existing()).affectedKeys().hasOnly([
-                  'status',
-                  'paymentStatus',
-                  'providerPayoutMad',
-                  'platformFeeMad',
-                  'refundedClientMad',
-                  'cancellationReason',
-                  'cancelledBy',
-                  'updatedAt'
-                ])
-              ) ||
-              // Action 7: Provider marks an in_progress booking completed (COD settles to paid; CMI escrow stays escrow_held)
-              (
-                request.auth.uid == existing().providerId &&
-                existing().status == 'in_progress' &&
-                incoming().status == 'completed' &&
-                (
-                  (existing().paymentMethod == 'cash_on_completion' && incoming().paymentStatus == 'paid') ||
-                  (existing().paymentMethod == 'cmi_escrow' && incoming().paymentStatus == existing().paymentStatus)
-                ) &&
-                incoming().diff(existing()).affectedKeys().hasOnly([
-                  'status',
-                  'paymentStatus',
-                  'providerPayoutMad',
-                  'platformFeeMad',
-                  'updatedAt'
-                ])
+              ) || (
+                existing().status != 'reviewed' && (
+                  // Action 1: Client cancels pending or accepted booking (auto-refunds if CMI escrow was held)
+                  (
+                    request.auth.uid == existing().clientId &&
+                    (existing().status == 'pending' || existing().status == 'accepted') &&
+                    incoming().status == 'cancelled' &&
+                    incoming().cancelledBy == 'client' &&
+                    incoming().providerPayoutMad == 0 &&
+                    incoming().platformFeeMad == 0 &&
+                    (
+                      (
+                        existing().paymentMethod == 'cmi_escrow' &&
+                        existing().paymentStatus == 'escrow_held' &&
+                        incoming().paymentStatus == 'refunded' &&
+                        incoming().refundedClientMad == existing().estimatedMad
+                      ) || (
+                        existing().paymentMethod == 'cash_on_completion' &&
+                        incoming().paymentStatus == existing().paymentStatus &&
+                        incoming().refundedClientMad == 0
+                      )
+                    ) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly([
+                      'status',
+                      'paymentStatus',
+                      'providerPayoutMad',
+                      'platformFeeMad',
+                      'refundedClientMad',
+                      'cancellationReason',
+                      'cancelledBy',
+                      'updatedAt'
+                    ])
+                  ) ||
+                  // Action 3: Client or Provider reschedules a pending or accepted booking
+                  (
+                    (request.auth.uid == existing().clientId || request.auth.uid == existing().providerId) &&
+                    (existing().status == 'pending' || existing().status == 'accepted') &&
+                    incoming().status == existing().status &&
+                    incoming().diff(existing()).affectedKeys().hasOnly([
+                      'preferredDate',
+                      'preferredTimeSlot',
+                      'rescheduleNote',
+                      'updatedAt'
+                    ])
+                  ) ||
+                  // Action 4: Client submits 1-5 star review on completed booking (atomically creating /reviews/{bookingId}; no payment tampering)
+                  (
+                    request.auth.uid == existing().clientId &&
+                    existing().status == 'completed' &&
+                    incoming().status == 'reviewed' &&
+                    incoming().diff(existing()).affectedKeys().hasOnly([
+                      'status',
+                      'reviewRating',
+                      'reviewComment',
+                      'updatedAt'
+                    ]) &&
+                    existsAfter(/databases/$(database)/documents/reviews/$(bookingId))
+                  ) ||
+                  // Action 5a: Provider accepts a pending booking (status only)
+                  (
+                    request.auth.uid == existing().providerId &&
+                    existing().status == 'pending' &&
+                    incoming().status == 'accepted' &&
+                    incoming().diff(existing()).affectedKeys().hasOnly([
+                      'status',
+                      'updatedAt'
+                    ])
+                  ) ||
+                  // Action 5b: Provider declines/cancels a pending or accepted booking (auto-refunds CMI escrow)
+                  (
+                    request.auth.uid == existing().providerId &&
+                    (existing().status == 'pending' || existing().status == 'accepted') &&
+                    incoming().status == 'cancelled' &&
+                    incoming().cancelledBy == 'provider' &&
+                    incoming().providerPayoutMad == 0 &&
+                    incoming().platformFeeMad == 0 &&
+                    (
+                      (
+                        existing().paymentMethod == 'cmi_escrow' &&
+                        existing().paymentStatus == 'escrow_held' &&
+                        incoming().paymentStatus == 'refunded' &&
+                        incoming().refundedClientMad == existing().estimatedMad
+                      ) || (
+                        existing().paymentMethod == 'cash_on_completion' &&
+                        incoming().paymentStatus == existing().paymentStatus &&
+                        incoming().refundedClientMad == 0
+                      )
+                    ) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly([
+                      'status',
+                      'paymentStatus',
+                      'providerPayoutMad',
+                      'platformFeeMad',
+                      'refundedClientMad',
+                      'cancellationReason',
+                      'cancelledBy',
+                      'updatedAt'
+                    ])
+                  ) ||
+                  // Action 6: Provider starts an accepted booking (status only)
+                  (
+                    request.auth.uid == existing().providerId &&
+                    existing().status == 'accepted' &&
+                    incoming().status == 'in_progress' &&
+                    incoming().diff(existing()).affectedKeys().hasOnly([
+                      'status',
+                      'updatedAt'
+                    ])
+                  ) ||
+                  // Action 7: Provider marks an in_progress booking completed (COD settles to paid; CMI escrow stays escrow_held)
+                  (
+                    request.auth.uid == existing().providerId &&
+                    existing().status == 'in_progress' &&
+                    incoming().status == 'completed' &&
+                    (
+                      (existing().paymentMethod == 'cash_on_completion' && incoming().paymentStatus == 'paid') ||
+                      (existing().paymentMethod == 'cmi_escrow' && incoming().paymentStatus == existing().paymentStatus)
+                    ) &&
+                    incoming().diff(existing()).affectedKeys().hasOnly([
+                      'status',
+                      'paymentStatus',
+                      'updatedAt'
+                    ])
+                  )
+                )
               )
             )
           )
@@ -794,7 +893,7 @@ service cloud.firestore {
       allow delete: if isVerifiedUser() && isValidId(bookingId) && isAdmin();
     }
 
-    // 16. Match: /chats/{bookingId}/messages/{messageId} (Only involved clientId or providerId; admin read for dispute resolution)
+    // 16. Match: /chats/{bookingId}/messages/{messageId} (Authorized via parent booking; prevents spoofing & fixes list queries)
     match /chats/{bookingId}/messages/{messageId} {
       allow get: if isVerifiedUser() &&
         isValidId(bookingId) &&
@@ -804,19 +903,29 @@ service cloud.firestore {
           isAdmin()
         );
 
-      allow list: if (
-        isVerifiedUser() &&
-        (resource.data.clientId == request.auth.uid || resource.data.providerId == request.auth.uid)
-      ) || isAdmin();
+      allow list: if isVerifiedUser() &&
+        isValidId(bookingId) && (
+          get(/databases/$(database)/documents/bookings/$(bookingId)).data.clientId == request.auth.uid ||
+          get(/databases/$(database)/documents/bookings/$(bookingId)).data.providerId == request.auth.uid ||
+          isAdmin()
+        );
 
       allow create: if isVerifiedUser() &&
         isValidId(bookingId) &&
         isValidId(messageId) &&
         isValidChatMessage(incoming()) &&
         incoming().bookingId == bookingId &&
-        incoming().createdAt == request.time && (
-          get(/databases/$(database)/documents/bookings/$(bookingId)).data.clientId == request.auth.uid ||
-          get(/databases/$(database)/documents/bookings/$(bookingId)).data.providerId == request.auth.uid
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/bookings/$(bookingId)) &&
+        incoming().clientId == get(/databases/$(database)/documents/bookings/$(bookingId)).data.clientId &&
+        incoming().providerId == get(/databases/$(database)/documents/bookings/$(bookingId)).data.providerId && (
+          (
+            get(/databases/$(database)/documents/bookings/$(bookingId)).data.clientId == request.auth.uid &&
+            incoming().senderRole == 'client'
+          ) || (
+            get(/databases/$(database)/documents/bookings/$(bookingId)).data.providerId == request.auth.uid &&
+            incoming().senderRole == 'provider'
+          )
         );
 
       allow update, delete: if false;
@@ -835,7 +944,7 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // 18. Match: /withdrawals/{withdrawalId} (Providers can view own; verified admins manage approve/freeze/reject)
+    // 18. Match: /withdrawals/{withdrawalId} (Registered providers can request withdrawals respecting KYC & min thresholds; admins manage status)
     match /withdrawals/{withdrawalId} {
       allow get: if isVerifiedUser() &&
         isValidId(withdrawalId) &&
@@ -846,10 +955,23 @@ service cloud.firestore {
       allow create: if isVerifiedUser() &&
         isValidId(withdrawalId) &&
         isValidWithdrawal(incoming()) &&
-        (incoming().providerId == request.auth.uid || isAdmin()) &&
         incoming().status == 'pending' &&
         incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time;
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            incoming().providerId == request.auth.uid &&
+            exists(/databases/$(database)/documents/providers/$(request.auth.uid)) &&
+            (
+              !exists(/databases/$(database)/documents/systemSettings/global) || (
+                incoming().amountMad >= get(/databases/$(database)/documents/systemSettings/global).data.minWithdrawalMad &&
+                (
+                  !get(/databases/$(database)/documents/systemSettings/global).data.requireKycForEscrowPayout ||
+                  get(/databases/$(database)/documents/providers/$(request.auth.uid)).data.verifiedBadge == true
+                )
+              )
+            )
+          )
+        );
 
       allow update: if isAdmin() &&
         isValidId(withdrawalId) &&

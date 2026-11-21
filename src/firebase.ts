@@ -5,11 +5,7 @@ import {
   signInWithPopup,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
-import {
-  getFirestore,
-  doc,
-  getDocFromServer,
-} from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseAppletConfig from '../firebase-applet-config.json';
 
@@ -168,12 +164,12 @@ export interface FirestoreErrorInfo {
   };
 }
 
-export function handleFirestoreError(
+export function buildFirestoreErrorInfo(
   error: unknown,
   operationType: OperationType,
   path: string | null
-): never {
-  const errInfo: FirestoreErrorInfo = {
+): FirestoreErrorInfo {
+  return {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
       userId: auth.currentUser?.uid,
@@ -190,22 +186,29 @@ export function handleFirestoreError(
     operationType,
     path,
   };
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
+}
+
+/**
+ * Logs a structured Firestore error without throwing (safe inside onSnapshot callbacks
+ * where synchronous throws escape React's ErrorBoundary).
+ */
+export function reportFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+): FirestoreErrorInfo {
+  const errInfo = buildFirestoreErrorInfo(error, operationType, path);
+  console.error('Firestore Error:', JSON.stringify(errInfo));
+  return errInfo;
+}
+
+export function handleFirestoreError(
+  error: unknown,
+  operationType: OperationType,
+  path: string | null
+): never {
+  const errInfo = reportFirestoreError(error, operationType, path);
   throw new Error(JSON.stringify(errInfo));
-}
-
-async function testConnection(): Promise<void> {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
-    }
-  }
-}
-
-if (typeof window !== 'undefined') {
-  void testConnection();
 }
 
 export async function signInWithGoogle() {

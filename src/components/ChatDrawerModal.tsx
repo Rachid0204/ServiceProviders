@@ -4,22 +4,25 @@ import {
   collection,
   query,
   orderBy,
+  limit,
   onSnapshot,
   doc,
   setDoc,
   serverTimestamp,
+  type Timestamp,
 } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, reportFirestoreError, OperationType } from '../firebase';
 import {
   buildWhatsAppUrl,
+  isSafeImageUrl,
   type BookingRecord,
   type ChatMessageRecord,
   type LanguageCode,
   type UserRole,
 } from '../utils/marketplace';
 import type { Translations } from '../i18n/translations';
-import { uploadMarketplacePhoto } from '../utils/storageUpload';
+import { uploadMarketplacePhoto, revokePreviewObjectUrl } from '../utils/storageUpload';
 
 interface ChatDrawerModalProps {
   booking: BookingRecord;
@@ -30,9 +33,24 @@ interface ChatDrawerModalProps {
   firebaseUser: User | null;
   activeRole: UserRole;
   activeUserName: string;
+  readOnly?: boolean;
   localMessages: ChatMessageRecord[];
   onSendLocalMessage: (msg: ChatMessageRecord) => void;
   onClose: () => void;
+}
+
+function formatMessageTime(ts: unknown): string {
+  if (ts && typeof ts === 'object' && 'toDate' in ts) {
+    try {
+      return (ts as Timestamp).toDate().toLocaleTimeString([], {
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      // fallback
+    }
+  }
+  return new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
@@ -44,6 +62,7 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
   firebaseUser,
   activeRole,
   activeUserName,
+  readOnly = false,
   localMessages,
   onSendLocalMessage,
   onClose,
@@ -57,12 +76,25 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
   // Deduplication guard against rapid double-submit / Enter key spam
   const lastSentRef = useRef<{ bookingId: string; text: string; timestamp: number } | null>(null);
 
-  // Real-time Firestore listener on `chats/{bookingId}/messages` when authenticated (cleanly unsubscribes on unmount/switch)
+  const isLiveChat = Boolean(firebaseUser && !booking.id.startsWith('booking-demo-'));
+
+  useEffect(() => {
+    return () => {
+      revokePreviewObjectUrl(photoUrl);
+    };
+  }, [photoUrl]);
+
+  // Real-time Firestore listener on `chats/{bookingId}/messages` when authenticated
   useEffect(() => {
     setFirestoreMessages([]);
-    if (!firebaseUser || booking.id.startsWith('booking-demo-')) return;
+    setUploadError(null);
+    if (!isLiveChat) return;
     const messagesPath = `chats/${booking.id}/messages`;
-    const q = query(collection(db, 'chats', booking.id, 'messages'), orderBy('createdAt', 'asc'));
+    const q = query(
+      collection(db, 'chats', booking.id, 'messages'),
+      orderBy('createdAt', 'asc'),
+      limit(200)
+    );
 
     const unsubscribe = onSnapshot(
       q,
@@ -78,29 +110,33 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
             senderName: String(data.senderName || ''),
             senderRole: (data.senderRole as UserRole) || 'client',
             text: String(data.text || ''),
-            photoUrl: data.photoUrl ? String(data.photoUrl) : undefined,
-            createdAtIso: new Date().toLocaleTimeString([], {
-              hour: '2-digit',
-              minute: '2-digit',
-            }),
+            photoUrl:
+              typeof data.photoUrl === 'string' && isSafeImageUrl(data.photoUrl)
+                ? data.photoUrl
+                : undefined,
+            createdAtIso: formatMessageTime(data.createdAt),
           };
         });
         setFirestoreMessages(loaded);
       },
       (err) => {
-        handleFirestoreError(err, OperationType.LIST, messagesPath);
+        reportFirestoreError(err, OperationType.LIST, messagesPath);
+        setUploadError(
+          lang === 'ar'
+            ? 'تعذر تحميل رسائل المحادثة من Firestore.'
+            : 'Impossible de charger les messages en temps réel.'
+        );
       }
     );
 
     return () => unsubscribe();
-  }, [firebaseUser, booking.id, booking.clientId, booking.providerId]);
+  }, [isLiveChat, booking.id, booking.clientId, booking.providerId, lang]);
 
-  const combinedMessages =
-    firestoreMessages.length > 0 ? firestoreMessages : localMessages;
+  const combinedMessages = isLiveChat ? firestoreMessages : localMessages;
 
-  // Same client + provider conversation switcher (e.g. #MK-101 and #MK-103)
+  // Same client + provider conversation switcher keyed strictly by UIDs (never by name)
   const peerBookings = relatedBookings.filter(
-    (b) => b.providerId === booking.providerId && b.clientName === booking.clientName
+    (b) => b.providerId === booking.providerId && b.clientId === booking.clientId
   );
 
   const handleChatPhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,7 +152,10 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
         userId: firebaseUser?.uid ?? null,
         lang,
       });
-      setPhotoUrl(result.url);
+      setPhotoUrl((prev) => {
+        revokePreviewObjectUrl(prev);
+        return result.url;
+      });
     } catch (err) {
       setUploadError(
         err instanceof Error
@@ -133,7 +172,8 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
 
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = text.trim();
+    if (readOnly) return;
+    const trimmed = text.trim().slice(0, 500);
     if (!trimmed && !photoUrl) return;
 
     const now = Date.now();
@@ -144,29 +184,67 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
       lastSentRef.current.text === trimmed &&
       now - lastSentRef.current.timestamp < 1500
     ) {
-      // Prevent duplicate message from rapid double-click / double-submit
       setText('');
       return;
     }
     lastSentRef.current = { bookingId: booking.id, text: trimmed, timestamp: now };
 
-    const msgId = `msg-${now}`;
-    const safePhotoUrl = photoUrl && photoUrl.length <= 2048 ? photoUrl : undefined;
+    const msgId = `msg-${now}-${Math.floor(Math.random() * 1000)}`;
+    const safePhotoUrl = isSafeImageUrl(photoUrl) ? photoUrl : undefined;
     const effectiveSenderRole: 'client' | 'provider' =
-      activeRole === 'provider' ? 'provider' : 'client';
+      firebaseUser && booking.providerId === firebaseUser.uid
+        ? 'provider'
+        : firebaseUser && booking.clientId === firebaseUser.uid
+        ? 'client'
+        : activeRole === 'provider'
+        ? 'provider'
+        : 'client';
+
+    const rawSenderName =
+      activeUserName ||
+      (effectiveSenderRole === 'provider' ? booking.providerName : booking.clientName);
+    const safeSenderName =
+      rawSenderName.trim().length >= 2 ? rawSenderName.trim().slice(0, 80) : 'Utilisateur';
+    const messageText =
+      trimmed || (lang === 'ar' ? '📷 صورة مرفقة من الموقع' : '📷 Photo du chantier jointe');
+
+    if (isLiveChat && firebaseUser) {
+      const path = `chats/${booking.id}/messages/${msgId}`;
+      try {
+        await setDoc(doc(db, 'chats', booking.id, 'messages', msgId), {
+          bookingId: booking.id,
+          clientId: booking.clientId,
+          providerId: booking.providerId,
+          senderId: firebaseUser.uid,
+          senderName: safeSenderName,
+          senderRole: effectiveSenderRole,
+          text: messageText,
+          ...(safePhotoUrl ? { photoUrl: safePhotoUrl } : {}),
+          createdAt: serverTimestamp(),
+        });
+        setText('');
+        setPhotoUrl('');
+        setUploadError(null);
+      } catch (err) {
+        reportFirestoreError(err, OperationType.CREATE, path);
+        setUploadError(
+          lang === 'ar'
+            ? 'تعذر إرسال الرسالة. تأكد من صلاحياتك في هذا الحجز.'
+            : 'Impossible d’envoyer le message. Vérifiez votre accès à cette réservation.'
+        );
+      }
+      return;
+    }
+
     const newMsg: ChatMessageRecord = {
       id: msgId,
       bookingId: booking.id,
       clientId: booking.clientId,
       providerId: booking.providerId,
-      senderId:
-        firebaseUser?.uid ??
-        (effectiveSenderRole === 'provider' ? booking.providerId : booking.clientId),
-      senderName:
-        activeUserName ||
-        (effectiveSenderRole === 'provider' ? booking.providerName : booking.clientName),
+      senderId: effectiveSenderRole === 'provider' ? booking.providerId : booking.clientId,
+      senderName: safeSenderName,
       senderRole: effectiveSenderRole,
-      text: trimmed || (lang === 'ar' ? '📷 صورة مرفقة من الموقع' : '📷 Photo du chantier jointe'),
+      text: messageText,
       photoUrl: photoUrl || undefined,
       createdAtIso: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
@@ -175,25 +253,6 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
     setText('');
     setPhotoUrl('');
     setUploadError(null);
-
-    if (firebaseUser && !booking.id.startsWith('booking-demo-')) {
-      const path = `chats/${booking.id}/messages/${msgId}`;
-      try {
-        await setDoc(doc(db, 'chats', booking.id, 'messages', msgId), {
-          bookingId: booking.id,
-          clientId: booking.clientId,
-          providerId: booking.providerId,
-          senderId: firebaseUser.uid,
-          senderName: newMsg.senderName,
-          senderRole: effectiveSenderRole,
-          text: newMsg.text,
-          ...(safePhotoUrl ? { photoUrl: safePhotoUrl } : {}),
-          createdAt: serverTimestamp(),
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, path);
-      }
-    }
   };
 
   const whatsappUrl = buildWhatsAppUrl({
@@ -327,7 +386,7 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
         )}
 
         {/* Photo Attachment Preview */}
-        {photoUrl && (
+        {!readOnly && photoUrl && (
           <div className="px-4 py-2 bg-emerald-50 border-t border-emerald-200 flex items-center justify-between text-xs">
             <div className="flex items-center gap-2 text-emerald-800 font-medium">
               <ImageIcon className="w-4 h-4" />
@@ -335,7 +394,10 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
             </div>
             <button
               type="button"
-              onClick={() => setPhotoUrl('')}
+              onClick={() => {
+                revokePreviewObjectUrl(photoUrl);
+                setPhotoUrl('');
+              }}
               className="text-rose-700 font-semibold hover:underline cursor-pointer"
             >
               {t.removePhotoBtn}
@@ -343,41 +405,50 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
           </div>
         )}
 
-        {/* Composer Footer */}
-        <form
-          onSubmit={handleSend}
-          className="p-3.5 bg-white border-t border-slate-200 flex items-center gap-2"
-        >
-          <label
-            title={t.chatAttachPhotoBtn}
-            aria-label={t.chatAttachPhotoBtn}
-            className="p-2.5 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer shrink-0 inline-flex items-center justify-center"
+        {/* Composer Footer (or Read-Only Admin Inspection Notice) */}
+        {readOnly ? (
+          <div className="p-3.5 bg-slate-50 border-t border-slate-200 text-xs text-slate-600 text-center">
+            {lang === 'ar'
+              ? 'وضع القراءة فقط للإدارة (مراجعة المحادثة لحل النزاعات).'
+              : 'Mode lecture seule administrateur (inspection du fil de discussion pour arbitrage).'}
+          </div>
+        ) : (
+          <form
+            onSubmit={handleSend}
+            className="p-3.5 bg-white border-t border-slate-200 flex items-center gap-2"
           >
-            <Camera className="w-4 h-4" />
+            <label
+              title={t.chatAttachPhotoBtn}
+              aria-label={t.chatAttachPhotoBtn}
+              className="p-2.5 text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer shrink-0 inline-flex items-center justify-center"
+            >
+              <Camera className="w-4 h-4" />
+              <input
+                type="file"
+                accept="image/*"
+                disabled={isUploadingPhoto}
+                onChange={handleChatPhotoUpload}
+                className="hidden"
+              />
+            </label>
             <input
-              type="file"
-              accept="image/*"
-              disabled={isUploadingPhoto}
-              onChange={handleChatPhotoUpload}
-              className="hidden"
+              type="text"
+              maxLength={500}
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder={t.chatInputPlaceholder}
+              className="flex-1 px-3.5 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
             />
-          </label>
-          <input
-            type="text"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={t.chatInputPlaceholder}
-            className="flex-1 px-3.5 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-300 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
-          />
-          <button
-            type="submit"
-            disabled={isUploadingPhoto}
-            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 disabled:opacity-60 transition-colors cursor-pointer shrink-0"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>{t.chatSendBtn}</span>
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={isUploadingPhoto}
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 disabled:opacity-60 transition-colors cursor-pointer shrink-0"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>{t.chatSendBtn}</span>
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

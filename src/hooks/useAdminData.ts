@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   collection,
   query,
@@ -9,18 +9,18 @@ import {
   getDoc,
   setDoc,
   updateDoc,
-  deleteDoc,
+  writeBatch,
   serverTimestamp,
   type DocumentData,
   type Timestamp,
 } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, reportFirestoreError, OperationType } from '../firebase';
 import {
   BOOTSTRAP_ADMIN_EMAIL,
-  DEFAULT_SYSTEM_SETTINGS,
   computeAdminAnalytics,
   flattenProviderReviews,
+  recalculateRatingAfterReviewRemoval,
   type AdminActionType,
   type AdminAuditLog,
   type AdminReviewItem,
@@ -32,6 +32,8 @@ import {
 import {
   calculateEscrowSplit,
   getNextPaymentStatus,
+  isValidMoroccanPhone,
+  normalizeMoroccanPhone,
   type BookingRecord,
   type BookingStatus,
   type MoroccanCity,
@@ -45,9 +47,7 @@ import {
 import type { ProviderOverride } from './useProviders';
 import type { AdminBookingPatch } from './useBookings';
 
-const SETTINGS_STORAGE_KEY = 'moul_lkhedma_system_settings';
-
-// Seeded pending-CIN Maâlem applicants (appear in Admin CIN queue for immediate review & approval)
+// Preview-only pending-CIN applicants (never mixed into live authenticated Admin views)
 const SEEDED_PENDING_APPLICANTS: VettedProvider[] = [
   {
     uid: 'maalem-rachid-marrakech',
@@ -64,7 +64,7 @@ const SEEDED_PENDING_APPLICANTS: VettedProvider[] = [
     experienceYears: 7,
     skills: ['Installation Split Inverter', 'Entretien préventif', 'Diagnostic carte'],
     skillsAr: ['تركيب مكيفات Inverter', 'صيانة وقائية', 'تشخيص اللوحة الإلكترونية'],
-    portfolioImages: ['/src/assets/images/service_ac_repair_1794980477179.jpg'],
+    portfolioImages: ['/src/assets/images/service_electrical_smart_1794980478001.jpg'],
     ratingAvg: 5.0,
     reviewCount: 0,
     isAvailableNow: true,
@@ -100,7 +100,7 @@ const SEEDED_PENDING_APPLICANTS: VettedProvider[] = [
     experienceYears: 9,
     skills: ['Peinture décorative Khayal', 'Tadelakt artisanal', 'Enduit sans odeur'],
     skillsAr: ['صباغة خيال الديكورية', 'تدلاكت تقليدي', 'معجون بدون رائحة'],
-    portfolioImages: ['/src/assets/images/service_painting_decor_1794980477092.jpg'],
+    portfolioImages: ['/src/assets/images/service_home_painting_1794980476260.jpg'],
     ratingAvg: 5.0,
     reviewCount: 0,
     isAvailableNow: false,
@@ -120,112 +120,6 @@ const SEEDED_PENDING_APPLICANTS: VettedProvider[] = [
       quartierAr: 'المدينة الجديدة',
     },
     reviews: [],
-  },
-];
-
-// Seeded realistic Moroccan client accounts for Admin Users Directory preview
-const SEEDED_CLIENT_USERS: UserProfileRecord[] = [
-  {
-    uid: 'demo-client-karim',
-    role: 'client',
-    fullName: 'Karim Tazi',
-    phone: '+212661234567',
-    city: 'Casablanca',
-    neighborhood: 'Maârif',
-    languagePref: 'fr',
-    verifiedBadge: true,
-  },
-  {
-    uid: 'demo-client-leila',
-    role: 'client',
-    fullName: 'Leila Bennani',
-    phone: '+212664782190',
-    city: 'Rabat',
-    neighborhood: 'Agdal',
-    languagePref: 'fr',
-    verifiedBadge: true,
-  },
-  {
-    uid: 'demo-client-omar',
-    role: 'client',
-    fullName: 'عمر العلوي (Omar Alaoui)',
-    phone: '+212665903412',
-    city: 'Tangier',
-    neighborhood: 'Malabata',
-    languagePref: 'ar',
-    verifiedBadge: false,
-  },
-  {
-    uid: 'demo-client-sanaa',
-    role: 'both',
-    fullName: 'Sanaa El Idrissi',
-    phone: '+212666148209',
-    city: 'Marrakech',
-    neighborhood: 'Guéliz',
-    languagePref: 'fr',
-    verifiedBadge: true,
-    specialty: 'Ménage',
-    hourlyRateMad: 120,
-  },
-];
-
-const SEEDED_WITHDRAWALS: WithdrawalRecord[] = [
-  {
-    id: 'wd-101',
-    providerId: 'maalem-driss-casa',
-    providerName: 'Maâlem Driss Berrada',
-    city: 'Casablanca',
-    bankName: 'Attijariwafa Bank',
-    ribMasked: '007 780 0004519000301842 64',
-    amountMad: 1450,
-    status: 'pending',
-    createdAtIso: '2026-11-18 11:20',
-  },
-  {
-    id: 'wd-102',
-    providerId: 'maalem-youssef-rabat',
-    providerName: 'Maâlem Youssef El Amrani',
-    city: 'Rabat',
-    bankName: 'Banque Populaire',
-    ribMasked: '181 810 2111649200190012 31',
-    amountMad: 980,
-    status: 'pending',
-    createdAtIso: '2026-11-18 09:45',
-  },
-  {
-    id: 'wd-103',
-    providerId: 'maalem-tarik-casa',
-    providerName: 'Maâlem Tarik Zemmouri',
-    city: 'Casablanca',
-    bankName: 'CIH Bank',
-    ribMasked: '230 780 4189021000284719 18',
-    amountMad: 2100,
-    status: 'approved',
-    adminNote: 'Virement national RIB exécuté',
-    createdAtIso: '2026-11-17 16:30',
-  },
-];
-
-const INITIAL_AUDIT_LOGS: AdminAuditLog[] = [
-  {
-    id: 'log-seed-1',
-    adminUid: 'bootstrap-admin',
-    adminEmail: BOOTSTRAP_ADMIN_EMAIL,
-    actionType: 'cin_approved',
-    targetCollection: 'providers',
-    targetId: 'maalem-driss-casa',
-    summary: 'CIN & diplôme ISTA vérifiés pour Maâlem Driss Berrada (Casablanca · Maârif)',
-    createdAtIso: '2026-11-16 10:15',
-  },
-  {
-    id: 'log-seed-2',
-    adminUid: 'bootstrap-admin',
-    adminEmail: BOOTSTRAP_ADMIN_EMAIL,
-    actionType: 'cin_approved',
-    targetCollection: 'providers',
-    targetId: 'maalem-youssef-rabat',
-    summary: 'CIN & agrément électricité validés pour Maâlem Youssef El Amrani (Rabat · Agdal)',
-    createdAtIso: '2026-11-17 14:42',
   },
 ];
 
@@ -301,22 +195,35 @@ function mapAdminFirestoreBooking(id: string, data: DocumentData): BookingRecord
 export interface AdminToastMessage {
   fr: string;
   ar: string;
+  variant?: 'success' | 'error';
 }
 
 export function useAdminData(params: {
+  enabled: boolean;
   firebaseUser: User | null;
   authReady: boolean;
   allProviders: VettedProvider[];
+  firestoreProviders: VettedProvider[];
   bookings: BookingRecord[];
+  systemSettings: SystemSettingsRecord;
+  onUpdateLocalSettings: (next: SystemSettingsRecord) => void;
   onApplyProviderOverride: (providerId: string, patch: ProviderOverride) => void;
-  onRemoveProviderReview: (providerId: string, reviewId: string) => void;
+  onRemoveProviderReview: (
+    providerId: string,
+    reviewId: string,
+    recalculated?: { ratingAvg: number; reviewCount: number }
+  ) => void;
   onApplyBookingPatch: (bookingId: string, patch: AdminBookingPatch) => void;
 }) {
   const {
+    enabled,
     firebaseUser,
     authReady,
     allProviders,
+    firestoreProviders,
     bookings,
+    systemSettings,
+    onUpdateLocalSettings,
     onApplyProviderOverride,
     onRemoveProviderReview,
     onApplyBookingPatch,
@@ -326,25 +233,17 @@ export function useAdminData(params: {
   const [liveUsers, setLiveUsers] = useState<UserProfileRecord[]>([]);
   const [liveBookings, setLiveBookings] = useState<BookingRecord[]>([]);
   const [liveLogs, setLiveLogs] = useState<AdminAuditLog[]>([]);
-  const [localLogs, setLocalLogs] = useState<AdminAuditLog[]>(INITIAL_AUDIT_LOGS);
-  const [pendingApplicants, setPendingApplicants] = useState<VettedProvider[]>(
-    SEEDED_PENDING_APPLICANTS
-  );
-  const [withdrawals, setWithdrawals] = useState<WithdrawalRecord[]>(SEEDED_WITHDRAWALS);
-  const [systemSettings, setSystemSettings] = useState<SystemSettingsRecord>(() => {
-    try {
-      const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-      if (raw) {
-        return { ...DEFAULT_SYSTEM_SETTINGS, ...(JSON.parse(raw) as SystemSettingsRecord) };
-      }
-    } catch {
-      // use default
-    }
-    return DEFAULT_SYSTEM_SETTINGS;
-  });
-  const [localUserOverrides, setLocalUserOverrides] = useState<Record<string, boolean>>({});
+  const [liveWithdrawals, setLiveWithdrawals] = useState<WithdrawalRecord[]>([]);
+  const [liveReviews, setLiveReviews] = useState<AdminReviewItem[]>([]);
   const [isLoadingAdmin, setIsLoadingAdmin] = useState<boolean>(false);
   const [adminToast, setAdminToast] = useState<AdminToastMessage | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    };
+  }, []);
 
   const isBootstrappedAdmin = Boolean(
     firebaseUser?.emailVerified && firebaseUser.email === BOOTSTRAP_ADMIN_EMAIL
@@ -370,18 +269,21 @@ export function useAdminData(params: {
     };
   }, [authReady, firebaseUser, isBootstrappedAdmin]);
 
-  // Attach real-time Firestore listeners ONLY when authenticated as verified admin
+  // Attach real-time Firestore listeners ONLY when on the Admin view AND authenticated as a verified admin
   useEffect(() => {
-    if (!authReady || !isLiveAdmin) {
+    if (!enabled || !authReady || !isLiveAdmin) {
       setLiveUsers([]);
       setLiveBookings([]);
       setLiveLogs([]);
+      setLiveWithdrawals([]);
+      setLiveReviews([]);
+      setIsLoadingAdmin(false);
       return;
     }
 
     setIsLoadingAdmin(true);
     const unsubUsers = onSnapshot(
-      query(collection(db, 'users')),
+      query(collection(db, 'users'), limit(300)),
       (snap) => {
         const list: UserProfileRecord[] = snap.docs.map((d) => {
           const data = d.data();
@@ -409,17 +311,75 @@ export function useAdminData(params: {
       },
       (err) => {
         setIsLoadingAdmin(false);
-        handleFirestoreError(err, OperationType.LIST, 'users');
+        reportFirestoreError(err, OperationType.LIST, 'users');
       }
     );
 
     const unsubBookings = onSnapshot(
-      query(collection(db, 'bookings')),
+      query(collection(db, 'bookings'), limit(300)),
       (snap) => {
         setLiveBookings(snap.docs.map((d) => mapAdminFirestoreBooking(d.id, d.data())));
       },
       (err) => {
-        handleFirestoreError(err, OperationType.LIST, 'bookings');
+        reportFirestoreError(err, OperationType.LIST, 'bookings');
+      }
+    );
+
+    const unsubWithdrawals = onSnapshot(
+      query(collection(db, 'withdrawals'), limit(200)),
+      (snap) => {
+        setLiveWithdrawals(
+          snap.docs.map((d) => {
+            const data = d.data();
+            return {
+              id: d.id,
+              providerId: String(data.providerId || ''),
+              providerName: String(data.providerName || 'Maâlem'),
+              city: (data.city as MoroccanCity) || 'Casablanca',
+              bankName: String(data.bankName || ''),
+              ribMasked: String(data.ribMasked || ''),
+              amountMad: Number(data.amountMad || 0),
+              status: (data.status as WithdrawalStatus) || 'pending',
+              adminNote: data.adminNote ? String(data.adminNote) : undefined,
+              createdAtIso: formatTimestamp(data.createdAt),
+            };
+          })
+        );
+      },
+      (err) => {
+        reportFirestoreError(err, OperationType.LIST, 'withdrawals');
+      }
+    );
+
+    const unsubReviews = onSnapshot(
+      query(collection(db, 'reviews'), limit(200)),
+      (snap) => {
+        const providerById = new Map(allProviders.map((p) => [p.id, p]));
+        const items: AdminReviewItem[] = snap.docs.map((d) => {
+          const data = d.data();
+          const pid = String(data.providerId || '');
+          const prov = providerById.get(pid);
+          return {
+            id: d.id,
+            providerId: pid,
+            providerNameFr: prov?.fullNameFr || pid,
+            providerNameAr: prov?.fullNameAr || pid,
+            category: prov?.category || 'Plomberie',
+            city: prov?.location.city || 'Casablanca',
+            authorName: String(data.authorName || 'Client'),
+            quartier: String(data.quartier || ''),
+            rating: Number(data.rating || 5),
+            date: formatTimestamp(data.createdAt).slice(0, 10),
+            commentFr: String(data.comment || ''),
+            commentAr: String(data.comment || ''),
+            isLiveFirestore: true,
+          };
+        });
+        items.sort((a, b) => b.date.localeCompare(a.date));
+        setLiveReviews(items);
+      },
+      (err) => {
+        reportFirestoreError(err, OperationType.LIST, 'reviews');
       }
     );
 
@@ -432,7 +392,7 @@ export function useAdminData(params: {
             return {
               id: d.id,
               adminUid: String(data.adminUid || ''),
-              adminEmail: String(data.adminEmail || BOOTSTRAP_ADMIN_EMAIL),
+              adminEmail: String(data.adminEmail || ''),
               actionType: (data.actionType as AdminActionType) || 'booking_override',
               targetCollection: (data.targetCollection as AdminTargetCollection) || 'bookings',
               targetId: String(data.targetId || ''),
@@ -443,20 +403,23 @@ export function useAdminData(params: {
         );
       },
       (err) => {
-        handleFirestoreError(err, OperationType.LIST, 'adminLogs');
+        reportFirestoreError(err, OperationType.LIST, 'adminLogs');
       }
     );
 
     return () => {
       unsubUsers();
       unsubBookings();
+      unsubWithdrawals();
+      unsubReviews();
       unsubLogs();
     };
-  }, [authReady, isLiveAdmin]);
+  }, [enabled, authReady, isLiveAdmin, allProviders]);
 
   const showToast = (msg: AdminToastMessage) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setAdminToast(msg);
-    setTimeout(() => {
+    toastTimerRef.current = setTimeout(() => {
       setAdminToast((prev) => (prev === msg ? null : prev));
     }, 3600);
   };
@@ -467,101 +430,44 @@ export function useAdminData(params: {
     targetId: string,
     summary: string
   ) => {
-    const logId = `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-    const now = new Date();
-    const createdAtIso = `${now.toISOString().slice(0, 10)} ${now.toTimeString().slice(0, 5)}`;
+    if (!isLiveAdmin || !firebaseUser) return;
+    const logId = `log-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
     const safeSummary = summary.slice(0, 295);
-    const adminUid = firebaseUser?.uid || 'preview-admin';
-    const adminEmail = firebaseUser?.email || BOOTSTRAP_ADMIN_EMAIL;
-
-    const entry: AdminAuditLog = {
-      id: logId,
-      adminUid,
-      adminEmail,
-      actionType,
-      targetCollection,
-      targetId,
-      summary: safeSummary,
-      createdAtIso,
-    };
-
-    setLocalLogs((prev) => [entry, ...prev]);
-
-    if (isLiveAdmin && firebaseUser) {
-      try {
-        await setDoc(doc(db, 'adminLogs', logId), {
-          adminUid: firebaseUser.uid,
-          adminEmail: firebaseUser.email || BOOTSTRAP_ADMIN_EMAIL,
-          actionType,
-          targetCollection,
-          targetId,
-          summary: safeSummary,
-          createdAt: serverTimestamp(),
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, `adminLogs/${logId}`);
-      }
+    try {
+      await setDoc(doc(db, 'adminLogs', logId), {
+        adminUid: firebaseUser.uid,
+        adminEmail: firebaseUser.email || BOOTSTRAP_ADMIN_EMAIL,
+        actionType,
+        targetCollection,
+        targetId,
+        summary: safeSummary,
+        createdAt: serverTimestamp(),
+      });
+    } catch (err) {
+      reportFirestoreError(err, OperationType.CREATE, `adminLogs/${logId}`);
     }
   };
 
-  // Merge active marketplace providers + pending CIN applicants (deduplicated)
+  // Live Admin strictly sees Firestore collections (no hardcoded demo fixtures polluting KPIs/CSV)
   const adminProviders = useMemo(() => {
-    const map = new Map<string, VettedProvider>();
-    pendingApplicants.forEach((p) => map.set(p.id, p));
-    allProviders.forEach((p) => map.set(p.id, p));
-    return Array.from(map.values());
-  }, [allProviders, pendingApplicants]);
+    if (isLiveAdmin) return firestoreProviders;
+    return SEEDED_PENDING_APPLICANTS;
+  }, [isLiveAdmin, firestoreProviders]);
 
-  // Merge live admin bookings + marketplace bookings (deduplicated)
   const adminBookings = useMemo(() => {
-    const map = new Map<string, BookingRecord>();
-    liveBookings.forEach((b) => map.set(b.id, b));
-    bookings.forEach((b) => {
-      if (!map.has(b.id)) map.set(b.id, b);
-    });
-    return Array.from(map.values());
-  }, [liveBookings, bookings]);
+    if (isLiveAdmin) return liveBookings;
+    return bookings;
+  }, [isLiveAdmin, liveBookings, bookings]);
 
-  // Merge live Firestore users + provider user mirrors + seeded clients
   const adminUsers = useMemo(() => {
-    const map = new Map<string, UserProfileRecord>();
-    SEEDED_CLIENT_USERS.forEach((u) => map.set(u.uid, u));
-    adminProviders.forEach((p) => {
-      if (!map.has(p.uid)) {
-        map.set(p.uid, {
-          uid: p.uid,
-          role: 'provider',
-          fullName: p.fullNameFr,
-          phone: p.phone,
-          city: p.location.city,
-          neighborhood: p.location.quartier,
-          languagePref: 'fr',
-          verifiedBadge: p.verifiedBadge,
-          specialty: p.category,
-          hourlyRateMad: p.hourlyRateMAD,
-        });
-      }
-    });
-    liveUsers.forEach((u) => map.set(u.uid, u));
+    if (isLiveAdmin) return liveUsers;
+    return [];
+  }, [isLiveAdmin, liveUsers]);
 
-    return Array.from(map.values()).map((u) =>
-      u.uid in localUserOverrides ? { ...u, verifiedBadge: localUserOverrides[u.uid] } : u
-    );
-  }, [liveUsers, adminProviders, localUserOverrides]);
-
-  const adminReviews = useMemo<AdminReviewItem[]>(
-    () => flattenProviderReviews(adminProviders),
-    [adminProviders]
-  );
-
-  const auditLogs = useMemo(() => {
-    const map = new Map<string, AdminAuditLog>();
-    liveLogs.forEach((l) => map.set(l.id, l));
-    localLogs.forEach((l) => {
-      if (!map.has(l.id)) map.set(l.id, l);
-    });
-    return Array.from(map.values());
-  }, [liveLogs, localLogs]);
+  const adminReviews = useMemo<AdminReviewItem[]>(() => {
+    if (isLiveAdmin) return liveReviews;
+    return flattenProviderReviews(allProviders);
+  }, [isLiveAdmin, liveReviews, allProviders]);
 
   const analytics = useMemo(
     () =>
@@ -574,159 +480,168 @@ export function useAdminData(params: {
     [adminProviders, adminBookings, adminUsers, systemSettings.platformFeePct]
   );
 
-  // Action 1: Approve or revoke CIN verification on a provider (syncs providers/{uid} + users/{uid})
+  // Action 1: Atomically approve or revoke CIN verification across providers/{uid} + users/{uid}
   const toggleProviderCinVerification = async (provider: VettedProvider) => {
+    if (!isLiveAdmin) return;
     const nextVerified = !provider.verifiedBadge;
 
-    setPendingApplicants((prev) =>
-      prev.map((p) =>
-        p.id === provider.id
-          ? {
-              ...p,
-              verifiedBadge: nextVerified,
-              cinVerified: nextVerified,
-              cinNumberMasked: nextVerified ? 'CIN Vérifiée' : 'En attente',
-            }
-          : p
-      )
-    );
+    try {
+      const providerRef = doc(db, 'providers', provider.uid);
+      const userRef = doc(db, 'users', provider.uid);
+      const [providerSnap, userSnap] = await Promise.all([
+        getDoc(providerRef),
+        getDoc(userRef),
+      ]);
 
-    onApplyProviderOverride(provider.id, {
-      verifiedBadge: nextVerified,
-      cinVerified: nextVerified,
-      cinNumberMasked: nextVerified ? 'CIN Vérifiée' : 'En attente',
-    });
-    setLocalUserOverrides((prev) => ({ ...prev, [provider.uid]: nextVerified }));
-
-    if (isLiveAdmin && !provider.id.startsWith('maalem-')) {
-      try {
-        const providerRef = doc(db, 'providers', provider.uid);
-        const providerSnap = await getDoc(providerRef);
-        if (providerSnap.exists()) {
-          await updateDoc(providerRef, {
-            verifiedBadge: nextVerified,
-            updatedAt: serverTimestamp(),
-          });
-        }
-        const userRef = doc(db, 'users', provider.uid);
-        const userSnap = await getDoc(userRef);
-        if (userSnap.exists()) {
-          await updateDoc(userRef, {
-            verifiedBadge: nextVerified,
-            updatedAt: serverTimestamp(),
-          });
-        }
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `providers/${provider.uid}`);
+      const batch = writeBatch(db);
+      let touched = false;
+      if (providerSnap.exists()) {
+        batch.update(providerRef, {
+          verifiedBadge: nextVerified,
+          updatedAt: serverTimestamp(),
+        });
+        touched = true;
       }
-    }
-
-    await appendAuditLog(
-      nextVerified ? 'cin_approved' : 'cin_revoked',
-      'providers',
-      provider.uid,
-      `${nextVerified ? 'CIN approuvée' : 'CIN révoquée'} pour ${provider.fullNameFr} (${provider.location.city})`
-    );
-
-    showToast(
-      nextVerified
-        ? {
-            fr: `Badge CIN vérifié activé pour ${provider.fullNameFr}`,
-            ar: `تم تفعيل شارة البطاقة الوطنية (CIN) للمعلم ${provider.fullNameAr}`,
-          }
-        : {
-            fr: `Badge CIN révoqué pour ${provider.fullNameFr}`,
-            ar: `تم سحب شارة البطاقة الوطنية (CIN) عن ${provider.fullNameAr}`,
-          }
-    );
-  };
-
-  // Action 2: Toggle provider availability from Admin Console
-  const adminToggleProviderAvailability = async (provider: VettedProvider) => {
-    const nextAvail = !provider.isAvailableNow;
-    setPendingApplicants((prev) =>
-      prev.map((p) => (p.id === provider.id ? { ...p, isAvailableNow: nextAvail } : p))
-    );
-    onApplyProviderOverride(provider.id, { isAvailableNow: nextAvail });
-
-    if (isLiveAdmin && !provider.id.startsWith('maalem-')) {
-      try {
-        const providerRef = doc(db, 'providers', provider.uid);
-        const snap = await getDoc(providerRef);
-        if (snap.exists()) {
-          await updateDoc(providerRef, {
-            isAvailableNow: nextAvail,
-            updatedAt: serverTimestamp(),
-          });
-        }
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `providers/${provider.uid}`);
+      if (userSnap.exists()) {
+        batch.update(userRef, {
+          verifiedBadge: nextVerified,
+          updatedAt: serverTimestamp(),
+        });
+        touched = true;
       }
-    }
+      if (touched) {
+        await batch.commit();
+      }
 
-    await appendAuditLog(
-      'availability_toggled',
-      'providers',
-      provider.uid,
-      `Disponibilité passée à ${nextAvail ? 'Disponible' : 'Sur rendez-vous'} pour ${provider.fullNameFr}`
-    );
-  };
-
-  // Action 3: Toggle user verifiedBadge directly from Users Directory
-  const toggleUserVerifiedBadge = async (user: UserProfileRecord) => {
-    const nextVerified = !user.verifiedBadge;
-    setLocalUserOverrides((prev) => ({ ...prev, [user.uid]: nextVerified }));
-
-    if (user.role === 'provider' || user.role === 'both') {
-      onApplyProviderOverride(user.uid, {
+      onApplyProviderOverride(provider.id, {
         verifiedBadge: nextVerified,
         cinVerified: nextVerified,
         cinNumberMasked: nextVerified ? 'CIN Vérifiée' : 'En attente',
       });
-      setPendingApplicants((prev) =>
-        prev.map((p) =>
-          p.uid === user.uid
-            ? {
-                ...p,
-                verifiedBadge: nextVerified,
-                cinVerified: nextVerified,
-                cinNumberMasked: nextVerified ? 'CIN Vérifiée' : 'En attente',
-              }
-            : p
-        )
+
+      await appendAuditLog(
+        nextVerified ? 'cin_approved' : 'cin_revoked',
+        'providers',
+        provider.uid,
+        `${nextVerified ? 'CIN approuvée' : 'CIN révoquée'} pour ${provider.fullNameFr} (${provider.location.city})`
       );
-    }
 
-    if (isLiveAdmin && !user.uid.startsWith('demo-') && !user.uid.startsWith('maalem-')) {
-      try {
-        const userRef = doc(db, 'users', user.uid);
-        const snap = await getDoc(userRef);
-        if (snap.exists()) {
-          await updateDoc(userRef, {
-            verifiedBadge: nextVerified,
-            updatedAt: serverTimestamp(),
-          });
-        }
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
-      }
+      showToast(
+        nextVerified
+          ? {
+              fr: `Badge CIN vérifié activé pour ${provider.fullNameFr}`,
+              ar: `تم تفعيل شارة البطاقة الوطنية (CIN) للمعلم ${provider.fullNameAr}`,
+            }
+          : {
+              fr: `Badge CIN révoqué pour ${provider.fullNameFr}`,
+              ar: `تم سحب شارة البطاقة الوطنية (CIN) عن ${provider.fullNameAr}`,
+            }
+      );
+    } catch (err) {
+      reportFirestoreError(err, OperationType.UPDATE, `providers/${provider.uid}`);
+      showToast({
+        fr: 'Erreur Firestore lors de la mise à jour CIN.',
+        ar: 'تعذر تحديث حالة البطاقة الوطنية في قاعدة البيانات.',
+        variant: 'error',
+      });
     }
-
-    await appendAuditLog(
-      nextVerified ? 'cin_approved' : 'cin_revoked',
-      'users',
-      user.uid,
-      `Statut vérifié ${nextVerified ? 'activé' : 'retiré'} pour ${user.fullName}`
-    );
-    showToast({
-      fr: `${user.fullName} — ${nextVerified ? 'CIN Vérifiée' : 'Vérification retirée'}`,
-      ar: `${user.fullName} — ${nextVerified ? 'تم التوثيق (CIN)' : 'تم إلغاء التوثيق'}`,
-    });
   };
 
-  // Action 4A: Release CMI Escrow (90% provider payout + 10% platform fee)
+  // Action 2: Toggle provider availability from Admin Console
+  const adminToggleProviderAvailability = async (provider: VettedProvider) => {
+    if (!isLiveAdmin) return;
+    const nextAvail = !provider.isAvailableNow;
+
+    try {
+      const providerRef = doc(db, 'providers', provider.uid);
+      const snap = await getDoc(providerRef);
+      if (snap.exists()) {
+        await updateDoc(providerRef, {
+          isAvailableNow: nextAvail,
+          updatedAt: serverTimestamp(),
+        });
+      }
+      onApplyProviderOverride(provider.id, { isAvailableNow: nextAvail });
+      await appendAuditLog(
+        'availability_toggled',
+        'providers',
+        provider.uid,
+        `Disponibilité passée à ${nextAvail ? 'Disponible' : 'Sur rendez-vous'} pour ${provider.fullNameFr}`
+      );
+    } catch (err) {
+      reportFirestoreError(err, OperationType.UPDATE, `providers/${provider.uid}`);
+      showToast({
+        fr: 'Erreur lors de la mise à jour de disponibilité.',
+        ar: 'تعذر تحديث حالة التوفر.',
+        variant: 'error',
+      });
+    }
+  };
+
+  // Action 3: Atomically toggle user verifiedBadge across users/{uid} AND providers/{uid}
+  const toggleUserVerifiedBadge = async (user: UserProfileRecord) => {
+    if (!isLiveAdmin) return;
+    const nextVerified = !user.verifiedBadge;
+
+    try {
+      const userRef = doc(db, 'users', user.uid);
+      const providerRef = doc(db, 'providers', user.uid);
+      const [userSnap, providerSnap] = await Promise.all([
+        getDoc(userRef),
+        getDoc(providerRef),
+      ]);
+
+      const batch = writeBatch(db);
+      let touched = false;
+      if (userSnap.exists()) {
+        batch.update(userRef, {
+          verifiedBadge: nextVerified,
+          updatedAt: serverTimestamp(),
+        });
+        touched = true;
+      }
+      if (providerSnap.exists()) {
+        batch.update(providerRef, {
+          verifiedBadge: nextVerified,
+          updatedAt: serverTimestamp(),
+        });
+        touched = true;
+      }
+      if (touched) {
+        await batch.commit();
+      }
+
+      if (user.role === 'provider' || user.role === 'both') {
+        onApplyProviderOverride(user.uid, {
+          verifiedBadge: nextVerified,
+          cinVerified: nextVerified,
+          cinNumberMasked: nextVerified ? 'CIN Vérifiée' : 'En attente',
+        });
+      }
+
+      await appendAuditLog(
+        nextVerified ? 'cin_approved' : 'cin_revoked',
+        'users',
+        user.uid,
+        `Statut vérifié ${nextVerified ? 'activé' : 'retiré'} pour ${user.fullName}`
+      );
+      showToast({
+        fr: `${user.fullName} — ${nextVerified ? 'CIN Vérifiée' : 'Vérification retirée'}`,
+        ar: `${user.fullName} — ${nextVerified ? 'تم التوثيق (CIN)' : 'تم إلغاء التوثيق'}`,
+      });
+    } catch (err) {
+      reportFirestoreError(err, OperationType.UPDATE, `users/${user.uid}`);
+      showToast({
+        fr: 'Erreur Firestore lors de la mise à jour utilisateur.',
+        ar: 'تعذر تحديث حالة المستخدم.',
+        variant: 'error',
+      });
+    }
+  };
+
+  // Action 4A: Release CMI Escrow using configured platformFeePct
   const releaseCmiEscrow = async (booking: BookingRecord) => {
-    if (booking.paymentStatus === 'paid') return;
+    if (!isLiveAdmin || booking.paymentStatus === 'paid') return;
 
     const split = calculateEscrowSplit(
       booking.estimatedMad,
@@ -740,79 +655,77 @@ export function useAdminData(params: {
       refundedClientMad: 0,
     };
 
-    onApplyBookingPatch(booking.id, patch);
-    setLiveBookings((prev) =>
-      prev.map((b) => (b.id === booking.id ? { ...b, ...patch } : b))
-    );
+    try {
+      await updateDoc(doc(db, 'bookings', booking.id), {
+        ...patch,
+        updatedAt: serverTimestamp(),
+      });
+      onApplyBookingPatch(booking.id, patch);
 
-    if (isLiveAdmin && !booking.id.startsWith('booking-demo-')) {
-      try {
-        await updateDoc(doc(db, 'bookings', booking.id), {
-          ...patch,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `bookings/${booking.id}`);
-      }
+      await appendAuditLog(
+        'escrow_released',
+        'bookings',
+        booking.id,
+        `Séquestre CMI #${booking.bookingRef} (${booking.estimatedMad} DH) libéré : ${split.providerPayoutMad} DH Maâlem + ${split.platformFeeMad} DH commission (${systemSettings.platformFeePct}%)`
+      );
+      showToast({
+        fr: `Séquestre CMI libéré (#${booking.bookingRef}) : ${split.providerPayoutMad} DH Maâlem / ${split.platformFeeMad} DH frais`,
+        ar: `تم صرف ضمان CMI (#${booking.bookingRef}): ${split.providerPayoutMad} د.م. للمعلم / ${split.platformFeeMad} د.م. عمولة`,
+      });
+    } catch (err) {
+      reportFirestoreError(err, OperationType.UPDATE, `bookings/${booking.id}`);
+      showToast({
+        fr: 'Erreur lors de la libération du séquestre CMI.',
+        ar: 'تعذر صرف ضمان CMI.',
+        variant: 'error',
+      });
     }
-
-    await appendAuditLog(
-      'escrow_released',
-      'bookings',
-      booking.id,
-      `Séquestre CMI #${booking.bookingRef} (${booking.estimatedMad} DH) libéré : ${split.providerPayoutMad} DH Maâlem (90%) + ${split.platformFeeMad} DH commission (10%)`
-    );
-    showToast({
-      fr: `Séquestre CMI libéré (#${booking.bookingRef}) : ${split.providerPayoutMad} DH Maâlem / ${split.platformFeeMad} DH frais`,
-      ar: `تم صرف ضمان CMI (#${booking.bookingRef}): ${split.providerPayoutMad} د.م. للمعلم / ${split.platformFeeMad} د.م. عمولة`,
-    });
   };
 
   // Action 4B: Full 100% Client Refund on CMI Escrow
   const refundCmiEscrow = async (booking: BookingRecord) => {
-    if (booking.paymentStatus === 'refunded') return;
+    if (!isLiveAdmin || booking.paymentStatus === 'refunded') return;
 
     const patch: AdminBookingPatch = {
       status: 'cancelled',
       paymentStatus: 'refunded',
       providerPayoutMad: 0,
       platformFeeMad: 0,
-      refundedClientMad: booking.estimatedMad,
+      refundedClientMad: Math.round(booking.estimatedMad),
       cancellationReason: 'Remboursement intégral CMI ordonné par l’administration',
       cancelledBy: 'admin',
     };
 
-    onApplyBookingPatch(booking.id, patch);
-    setLiveBookings((prev) =>
-      prev.map((b) => (b.id === booking.id ? { ...b, ...patch } : b))
-    );
+    try {
+      await updateDoc(doc(db, 'bookings', booking.id), {
+        ...patch,
+        updatedAt: serverTimestamp(),
+      });
+      onApplyBookingPatch(booking.id, patch);
 
-    if (isLiveAdmin && !booking.id.startsWith('booking-demo-')) {
-      try {
-        await updateDoc(doc(db, 'bookings', booking.id), {
-          ...patch,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `bookings/${booking.id}`);
-      }
+      await appendAuditLog(
+        'escrow_refunded',
+        'bookings',
+        booking.id,
+        `Remboursement CMI intégral (100% = ${booking.estimatedMad} DH) exécuté pour #${booking.bookingRef} (${booking.clientName})`
+      );
+      showToast({
+        fr: `Remboursement CMI 100% (${booking.estimatedMad} DH) effectué — #${booking.bookingRef}`,
+        ar: `تم استرجاع ضمان CMI بالكامل (${booking.estimatedMad} د.م.) للزبون — #${booking.bookingRef}`,
+      });
+    } catch (err) {
+      reportFirestoreError(err, OperationType.UPDATE, `bookings/${booking.id}`);
+      showToast({
+        fr: 'Erreur lors du remboursement CMI.',
+        ar: 'تعذر استرجاع مبلغ CMI.',
+        variant: 'error',
+      });
     }
-
-    await appendAuditLog(
-      'escrow_refunded',
-      'bookings',
-      booking.id,
-      `Remboursement CMI intégral (100% = ${booking.estimatedMad} DH) exécuté pour #${booking.bookingRef} (${booking.clientName})`
-    );
-    showToast({
-      fr: `Remboursement CMI 100% (${booking.estimatedMad} DH) effectué — #${booking.bookingRef}`,
-      ar: `تم استرجاع ضمان CMI بالكامل (${booking.estimatedMad} د.م.) للزبون — #${booking.bookingRef}`,
-    });
   };
 
   // Action 4C: Dispute Split (50% net provider / 50% net client + platform fee)
   const disputeSplitEscrow = async (booking: BookingRecord) => {
-    if (booking.paymentStatus === 'disputed_split') return;
+    if (!isLiveAdmin || booking.paymentStatus === 'disputed_split') return;
 
     const split = calculateEscrowSplit(
       booking.estimatedMad,
@@ -827,102 +740,130 @@ export function useAdminData(params: {
       refundedClientMad: split.refundedClientMad,
     };
 
-    onApplyBookingPatch(booking.id, patch);
-    setLiveBookings((prev) =>
-      prev.map((b) => (b.id === booking.id ? { ...b, ...patch } : b))
-    );
+    try {
+      await updateDoc(doc(db, 'bookings', booking.id), {
+        ...patch,
+        updatedAt: serverTimestamp(),
+      });
+      onApplyBookingPatch(booking.id, patch);
 
-    if (isLiveAdmin && !booking.id.startsWith('booking-demo-')) {
-      try {
-        await updateDoc(doc(db, 'bookings', booking.id), {
-          ...patch,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `bookings/${booking.id}`);
-      }
+      await appendAuditLog(
+        'dispute_split',
+        'bookings',
+        booking.id,
+        `Arbitrage litige CMI #${booking.bookingRef} : ${split.providerPayoutMad} DH Maâlem / ${split.refundedClientMad} DH Client / ${split.platformFeeMad} DH Frais`
+      );
+      showToast({
+        fr: `Arbitrage CMI #${booking.bookingRef} : ${split.providerPayoutMad} DH Maâlem · ${split.refundedClientMad} DH Client`,
+        ar: `تسوية نزاع CMI #${booking.bookingRef}: ${split.providerPayoutMad} د.م. للمعلم · ${split.refundedClientMad} د.م. للزبون`,
+      });
+    } catch (err) {
+      reportFirestoreError(err, OperationType.UPDATE, `bookings/${booking.id}`);
+      showToast({
+        fr: 'Erreur lors de l’arbitrage du litige.',
+        ar: 'تعذر تسجيل تسوية النزاع.',
+        variant: 'error',
+      });
     }
-
-    await appendAuditLog(
-      'dispute_split',
-      'bookings',
-      booking.id,
-      `Arbitrage litige CMI #${booking.bookingRef} : ${split.providerPayoutMad} DH Maâlem / ${split.refundedClientMad} DH Client / ${split.platformFeeMad} DH Frais`
-    );
-    showToast({
-      fr: `Arbitrage CMI #${booking.bookingRef} : ${split.providerPayoutMad} DH Maâlem · ${split.refundedClientMad} DH Client`,
-      ar: `تسوية نزاع CMI #${booking.bookingRef}: ${split.providerPayoutMad} د.م. للمعلم · ${split.refundedClientMad} د.م. للزبون`,
-    });
   };
 
   // Action 5: Admin status override for dispute resolution
   const overrideBookingStatus = async (booking: BookingRecord, nextStatus: BookingStatus) => {
-    if (booking.status === nextStatus) return;
+    if (!isLiveAdmin || booking.status === nextStatus) return;
     const nextPaymentStatus = getNextPaymentStatus(
       booking.paymentMethod,
       booking.paymentStatus,
       nextStatus
     );
 
-    onApplyBookingPatch(booking.id, { status: nextStatus, paymentStatus: nextPaymentStatus });
-    setLiveBookings((prev) =>
-      prev.map((b) =>
-        b.id === booking.id
-          ? { ...b, status: nextStatus, paymentStatus: nextPaymentStatus }
-          : b
-      )
-    );
+    try {
+      await updateDoc(doc(db, 'bookings', booking.id), {
+        status: nextStatus,
+        paymentStatus: nextPaymentStatus,
+        updatedAt: serverTimestamp(),
+      });
+      onApplyBookingPatch(booking.id, { status: nextStatus, paymentStatus: nextPaymentStatus });
 
-    if (isLiveAdmin && !booking.id.startsWith('booking-demo-')) {
-      try {
-        await updateDoc(doc(db, 'bookings', booking.id), {
-          status: nextStatus,
-          paymentStatus: nextPaymentStatus,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `bookings/${booking.id}`);
-      }
+      await appendAuditLog(
+        'booking_override',
+        'bookings',
+        booking.id,
+        `Statut #${booking.bookingRef} modifié par admin : ${booking.status} → ${nextStatus}`
+      );
+      showToast({
+        fr: `Statut #${booking.bookingRef} mis à jour (${nextStatus})`,
+        ar: `تم تحديث حالة الطلب #${booking.bookingRef} (${nextStatus})`,
+      });
+    } catch (err) {
+      reportFirestoreError(err, OperationType.UPDATE, `bookings/${booking.id}`);
+      showToast({
+        fr: 'Erreur lors du changement de statut.',
+        ar: 'تعذر تحديث حالة الطلب.',
+        variant: 'error',
+      });
     }
-
-    await appendAuditLog(
-      'booking_override',
-      'bookings',
-      booking.id,
-      `Statut #${booking.bookingRef} modifié par admin : ${booking.status} → ${nextStatus}`
-    );
-    showToast({
-      fr: `Statut #${booking.bookingRef} mis à jour (${nextStatus})`,
-      ar: `تم تحديث حالة الطلب #${booking.bookingRef} (${nextStatus})`,
-    });
   };
 
-  // Action 6: Delete moderated review
+  // Action 6: Delete moderated review and atomically recalculate provider ratingAvg & reviewCount
   const deleteModeratedReview = async (review: AdminReviewItem) => {
-    onRemoveProviderReview(review.providerId, review.id);
+    if (!isLiveAdmin) return;
 
-    if (isLiveAdmin && !review.id.startsWith('rev-')) {
-      try {
-        const revRef = doc(db, 'reviews', review.id);
-        const snap = await getDoc(revRef);
-        if (snap.exists()) {
-          await deleteDoc(revRef);
-        }
-      } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `reviews/${review.id}`);
+    try {
+      const revRef = doc(db, 'reviews', review.id);
+      const providerRef = doc(db, 'providers', review.providerId);
+      const [revSnap, providerSnap] = await Promise.all([
+        getDoc(revRef),
+        getDoc(providerRef),
+      ]);
+
+      let recalculated: { ratingAvg: number; reviewCount: number } | undefined;
+      const batch = writeBatch(db);
+      let touched = false;
+
+      if (revSnap.exists()) {
+        batch.delete(revRef);
+        touched = true;
       }
-    }
 
-    await appendAuditLog(
-      'review_deleted',
-      'reviews',
-      review.id,
-      `Avis (${review.rating}/5) de ${review.authorName} sur ${review.providerNameFr} modéré et retiré`
-    );
-    showToast({
-      fr: `Avis de ${review.authorName} supprimé par modération`,
-      ar: `تم حذف تقييم ${review.authorName} من قبل الإدارة`,
-    });
+      if (providerSnap.exists()) {
+        const pData = providerSnap.data();
+        recalculated = recalculateRatingAfterReviewRemoval(
+          Number(pData.ratingAvg ?? 5.0),
+          Number(pData.reviewCount ?? 0),
+          review.rating
+        );
+        batch.update(providerRef, {
+          ratingAvg: recalculated.ratingAvg,
+          reviewCount: recalculated.reviewCount,
+          updatedAt: serverTimestamp(),
+        });
+        touched = true;
+      }
+
+      if (touched) {
+        await batch.commit();
+      }
+
+      onRemoveProviderReview(review.providerId, review.id, recalculated);
+
+      await appendAuditLog(
+        'review_deleted',
+        'reviews',
+        review.id,
+        `Avis (${review.rating}/5) de ${review.authorName} sur ${review.providerNameFr} modéré et retiré`
+      );
+      showToast({
+        fr: `Avis de ${review.authorName} supprimé par modération`,
+        ar: `تم حذف تقييم ${review.authorName} من قبل الإدارة`,
+      });
+    } catch (err) {
+      reportFirestoreError(err, OperationType.DELETE, `reviews/${review.id}`);
+      showToast({
+        fr: 'Erreur lors de la suppression de l’avis.',
+        ar: 'تعذر حذف التقييم.',
+        variant: 'error',
+      });
+    }
   };
 
   // Action 7: Approve, Freeze, or Reject Provider Withdrawal Request
@@ -931,7 +872,7 @@ export function useAdminData(params: {
     nextStatus: WithdrawalStatus,
     adminNote?: string
   ) => {
-    if (withdrawal.status === nextStatus) return;
+    if (!isLiveAdmin || withdrawal.status === nextStatus) return;
 
     const defaultNotes: Record<WithdrawalStatus, string> = {
       pending: 'En attente de vérification RIB',
@@ -941,84 +882,93 @@ export function useAdminData(params: {
     };
     const finalNote = (adminNote ?? defaultNotes[nextStatus]).slice(0, 250);
 
-    setWithdrawals((prev) =>
-      prev.map((w) =>
-        w.id === withdrawal.id
-          ? { ...w, status: nextStatus, adminNote: finalNote }
-          : w
-      )
-    );
+    try {
+      await updateDoc(doc(db, 'withdrawals', withdrawal.id), {
+        status: nextStatus,
+        adminNote: finalNote,
+        updatedAt: serverTimestamp(),
+      });
 
-    if (isLiveAdmin && !withdrawal.id.startsWith('wd-')) {
-      try {
-        await updateDoc(doc(db, 'withdrawals', withdrawal.id), {
-          status: nextStatus,
-          adminNote: finalNote,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `withdrawals/${withdrawal.id}`);
-      }
+      await appendAuditLog(
+        'withdrawal_updated',
+        'withdrawals',
+        withdrawal.id,
+        `Retrait ${withdrawal.id} (${withdrawal.amountMad} DH · ${withdrawal.providerName}) passé à : ${nextStatus}`
+      );
+
+      showToast({
+        fr: `Retrait ${withdrawal.providerName} (${withdrawal.amountMad} DH) → ${nextStatus.toUpperCase()}`,
+        ar: `طلب السحب ${withdrawal.providerName} (${withdrawal.amountMad} د.م.) ← ${nextStatus}`,
+      });
+    } catch (err) {
+      reportFirestoreError(err, OperationType.UPDATE, `withdrawals/${withdrawal.id}`);
+      showToast({
+        fr: 'Erreur lors de la mise à jour du retrait.',
+        ar: 'تعذر تحديث طلب السحب.',
+        variant: 'error',
+      });
     }
-
-    await appendAuditLog(
-      'withdrawal_updated',
-      'withdrawals',
-      withdrawal.id,
-      `Retrait ${withdrawal.id} (${withdrawal.amountMad} DH · ${withdrawal.providerName}) passé à : ${nextStatus}`
-    );
-
-    showToast({
-      fr: `Retrait ${withdrawal.providerName} (${withdrawal.amountMad} DH) → ${nextStatus.toUpperCase()}`,
-      ar: `طلب السحب ${withdrawal.providerName} (${withdrawal.amountMad} د.م.) ← ${nextStatus}`,
-    });
   };
 
-  // Action 8: Persist System Settings (localStorage + Firestore systemSettings/global)
+  // Action 8: Persist System Settings to Firestore systemSettings/global (with strict validation)
   const saveSystemSettings = async (patch: Partial<SystemSettingsRecord>) => {
+    if (!isLiveAdmin || !firebaseUser) return;
+    const normalizedPhone = normalizeMoroccanPhone(
+      patch.supportWhatsAppPhone ?? systemSettings.supportWhatsAppPhone
+    );
+    if (!isValidMoroccanPhone(normalizedPhone)) {
+      showToast({
+        fr: 'Numéro WhatsApp support invalide (format marocain +212 requis).',
+        ar: 'رقم واتساب الدعم غير صالح (صيغة +212 مطلوبة).',
+        variant: 'error',
+      });
+      return;
+    }
+
     const now = new Date();
     const updatedAtIso = `${now.toISOString().slice(0, 10)} ${now.toTimeString().slice(0, 5)}`;
     const nextSettings: SystemSettingsRecord = {
       ...systemSettings,
       ...patch,
-      updatedByEmail: firebaseUser?.email || BOOTSTRAP_ADMIN_EMAIL,
+      platformFeePct: Math.max(0, Math.min(50, Math.round(patch.platformFeePct ?? systemSettings.platformFeePct))),
+      minWithdrawalMad: Math.max(50, Math.min(20000, Math.round(patch.minWithdrawalMad ?? systemSettings.minWithdrawalMad))),
+      supportWhatsAppPhone: normalizedPhone,
+      updatedByEmail: firebaseUser.email || BOOTSTRAP_ADMIN_EMAIL,
       updatedAtIso,
     };
 
-    setSystemSettings(nextSettings);
     try {
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(nextSettings));
-    } catch {
-      // ignore storage quota errors
+      await setDoc(doc(db, 'systemSettings', 'global'), {
+        platformFeePct: nextSettings.platformFeePct,
+        minWithdrawalMad: nextSettings.minWithdrawalMad,
+        autoRefundOnProviderCancel: nextSettings.autoRefundOnProviderCancel,
+        requireKycForEscrowPayout: nextSettings.requireKycForEscrowPayout,
+        supportWhatsAppPhone: nextSettings.supportWhatsAppPhone,
+        updatedByEmail: nextSettings.updatedByEmail,
+        updatedAt: serverTimestamp(),
+      });
+
+      onUpdateLocalSettings(nextSettings);
+
+      await appendAuditLog(
+        'settings_updated',
+        'settings',
+        'global',
+        `Paramètres système enregistrés : Commission ${nextSettings.platformFeePct}%, Retrait min ${nextSettings.minWithdrawalMad} DH`
+      );
+
+      showToast({
+        fr: `Paramètres système sauvegardés (Commission ${nextSettings.platformFeePct}%)`,
+        ar: `تم حفظ إعدادات النظام بنجاح (العمولة ${nextSettings.platformFeePct}%)`,
+      });
+    } catch (err) {
+      reportFirestoreError(err, OperationType.WRITE, 'systemSettings/global');
+      showToast({
+        fr: 'Erreur Firestore lors de la sauvegarde des paramètres.',
+        ar: 'تعذر حفظ إعدادات النظام.',
+        variant: 'error',
+      });
     }
-
-    if (isLiveAdmin && firebaseUser) {
-      try {
-        await setDoc(doc(db, 'systemSettings', 'global'), {
-          platformFeePct: nextSettings.platformFeePct,
-          minWithdrawalMad: nextSettings.minWithdrawalMad,
-          autoRefundOnProviderCancel: nextSettings.autoRefundOnProviderCancel,
-          requireKycForEscrowPayout: nextSettings.requireKycForEscrowPayout,
-          supportWhatsAppPhone: nextSettings.supportWhatsAppPhone,
-          updatedByEmail: nextSettings.updatedByEmail,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, 'systemSettings/global');
-      }
-    }
-
-    await appendAuditLog(
-      'settings_updated',
-      'settings',
-      'global',
-      `Paramètres système enregistrés : Commission ${nextSettings.platformFeePct}%, Retrait min ${nextSettings.minWithdrawalMad} DH`
-    );
-
-    showToast({
-      fr: `Paramètres système sauvegardés (Commission ${nextSettings.platformFeePct}%)`,
-      ar: `تم حفظ إعدادات النظام بنجاح (العمولة ${nextSettings.platformFeePct}%)`,
-    });
   };
 
   return {
@@ -1029,8 +979,8 @@ export function useAdminData(params: {
     adminBookings,
     adminUsers,
     adminReviews,
-    auditLogs,
-    withdrawals,
+    auditLogs: liveLogs,
+    withdrawals: liveWithdrawals,
     systemSettings,
     analytics,
     toggleProviderCinVerification,

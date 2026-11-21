@@ -2,17 +2,18 @@ import { useState, useEffect, useMemo } from 'react';
 import {
   collection,
   query,
+  limit,
   onSnapshot,
   doc,
   updateDoc,
   serverTimestamp,
-  type Timestamp,
 } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, reportFirestoreError, OperationType } from '../firebase';
 import { VETTED_PROVIDERS } from '../data/providers';
 import {
   CITY_COORDINATES,
+  isSafeImageUrl,
   type MoroccanCity,
   type ServiceCategory,
   type UserProfileRecord,
@@ -26,6 +27,7 @@ export type ProviderOverride = Partial<
     | 'isAvailableNow'
     | 'ratingAvg'
     | 'reviewCount'
+    | 'completedJobs'
     | 'reviews'
     | 'verifiedBadge'
     | 'cinVerified'
@@ -35,16 +37,7 @@ export type ProviderOverride = Partial<
   removedReviewIds?: string[];
 };
 
-function formatFirestoreDate(ts: unknown): string {
-  if (ts && typeof ts === 'object' && 'toDate' in ts) {
-    try {
-      return (ts as Timestamp).toDate().toISOString().slice(0, 10);
-    } catch {
-      return new Date().toISOString().slice(0, 10);
-    }
-  }
-  return new Date().toISOString().slice(0, 10);
-}
+const SEEDED_BY_ID = new Map(VETTED_PROVIDERS.map((p) => [p.id, p]));
 
 export function useProviders(
   firebaseUser: User | null,
@@ -54,15 +47,16 @@ export function useProviders(
   const [firestoreProviders, setFirestoreProviders] = useState<VettedProvider[]>([]);
   const [providerOverrides, setProviderOverrides] = useState<Record<string, ProviderOverride>>({});
 
-  // Listen to public providers in Firestore `providers` collection
+  // Listen to public providers in Firestore `providers` collection (bounded to prevent unbounded reads)
   useEffect(() => {
     const providersPath = 'providers';
-    const q = query(collection(db, providersPath));
+    const q = query(collection(db, providersPath), limit(200));
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
         const loaded: VettedProvider[] = snapshot.docs.map((d) => {
           const data = d.data();
+          const seeded = SEEDED_BY_ID.get(d.id);
           const loc = data.location || {
             lat: 33.5883,
             lng: -7.6325,
@@ -70,95 +64,73 @@ export function useProviders(
             quartier: 'Maârif',
           };
           const isVerified = Boolean(data.verifiedBadge);
+          const rawImages = Array.isArray(data.portfolioImages)
+            ? data.portfolioImages.map(String).filter((u) => isSafeImageUrl(u))
+            : [];
           return {
             uid: d.id,
             id: d.id,
-            fullNameFr: String(data.fullNameFr || 'Maâlem'),
-            fullNameAr: String(data.fullNameAr || 'معلم'),
-            category: (data.category as ServiceCategory) || 'Plomberie',
-            bioFr: String(data.bioFr || ''),
-            bioAr: String(data.bioAr || ''),
-            hourlyRateMAD: Number(data.hourlyRateMAD || 150),
-            fixedVisitFeeMAD: Number(data.fixedVisitFeeMAD ?? 70),
-            experienceYears: Number(data.experienceYears ?? 5),
-            skills: Array.isArray(data.skills) ? data.skills.map(String) : ['Service vérifié'],
-            skillsAr: Array.isArray(data.skills) ? data.skills.map(String) : ['خدمة موثقة'],
+            fullNameFr: String(data.fullNameFr || seeded?.fullNameFr || 'Maâlem'),
+            fullNameAr: String(data.fullNameAr || seeded?.fullNameAr || 'معلم'),
+            category: (data.category as ServiceCategory) || seeded?.category || 'Plomberie',
+            bioFr: String(data.bioFr || seeded?.bioFr || ''),
+            bioAr: String(data.bioAr || seeded?.bioAr || ''),
+            hourlyRateMAD: Number(data.hourlyRateMAD || seeded?.hourlyRateMAD || 150),
+            fixedVisitFeeMAD: Number(data.fixedVisitFeeMAD ?? seeded?.fixedVisitFeeMAD ?? 70),
+            experienceYears: Number(data.experienceYears ?? seeded?.experienceYears ?? 5),
+            skills: Array.isArray(data.skills)
+              ? data.skills.map(String)
+              : seeded?.skills || ['Service vérifié'],
+            skillsAr:
+              seeded?.skillsAr ||
+              (Array.isArray(data.skills) ? data.skills.map(String) : ['خدمة موثقة']),
             portfolioImages:
-              Array.isArray(data.portfolioImages) && data.portfolioImages.length > 0
-                ? data.portfolioImages.map(String)
-                : ['/src/assets/images/hero_moroccan_craftsman_1794980476857.jpg'],
+              rawImages.length > 0
+                ? rawImages
+                : seeded?.portfolioImages || [
+                    '/src/assets/images/hero_moroccan_craftsman_1794980476857.jpg',
+                  ],
             ratingAvg: Number(data.ratingAvg ?? 5.0),
             reviewCount: Number(data.reviewCount ?? 0),
             isAvailableNow: Boolean(data.isAvailableNow),
             verifiedBadge: isVerified,
             cinVerified: isVerified,
-            cinNumberMasked: isVerified ? 'CIN Vérifiée' : 'En attente',
-            diplomaFr: isVerified
-              ? 'Qualification Professionnelle Vérifiée — Maroc'
-              : 'Profil prestataire inscrit sur Moul L’Khedma',
-            diplomaAr: isVerified
-              ? 'تأهيل مهني موثق — المغرب'
-              : 'مقدم خدمة مسجل على منصة مول الخدمة',
-            completedJobs: typeof data.completedJobs === 'number' ? data.completedJobs : 0,
-            responseMinutes: 20,
-            phone: typeof data.phone === 'string' && data.phone ? data.phone : '+212661000000',
+            cinNumberMasked: isVerified
+              ? seeded?.cinNumberMasked || 'CIN Vérifiée'
+              : 'En attente',
+            diplomaFr:
+              seeded?.diplomaFr ||
+              (isVerified
+                ? 'Qualification Professionnelle Vérifiée — Maroc'
+                : 'Profil prestataire inscrit sur Moul L’Khedma'),
+            diplomaAr:
+              seeded?.diplomaAr ||
+              (isVerified
+                ? 'تأهيل مهني موثق — المغرب'
+                : 'مقدم خدمة مسجل على منصة مول الخدمة'),
+            completedJobs:
+              typeof data.completedJobs === 'number'
+                ? data.completedJobs
+                : seeded?.completedJobs ?? 0,
+            responseMinutes: seeded?.responseMinutes ?? 20,
+            phone:
+              typeof data.phone === 'string' && data.phone
+                ? data.phone
+                : seeded?.phone || '+212661000000',
             location: {
               lat: Number(loc.lat || 33.5883),
               lng: Number(loc.lng || -7.6325),
               city: (loc.city as MoroccanCity) || 'Casablanca',
               quartier: String(loc.quartier || 'Centre'),
-              quartierAr: String(loc.quartier || 'المركز'),
+              quartierAr: seeded?.location.quartierAr || String(loc.quartier || 'المركز'),
             },
-            reviews: [],
+            reviews: seeded?.reviews || [],
           };
         });
         setFirestoreProviders(loaded);
       },
       (err) => {
-        handleFirestoreError(err, OperationType.LIST, providersPath);
-      }
-    );
-    return () => unsubscribe();
-  }, []);
-
-  // Listen to public reviews in Firestore `reviews` collection
-  useEffect(() => {
-    const reviewsPath = 'reviews';
-    const q = query(collection(db, reviewsPath));
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        if (snapshot.empty) return;
-        const grouped: Record<string, VettedProvider['reviews']> = {};
-        snapshot.docs.forEach((d) => {
-          const data = d.data();
-          const pid = String(data.providerId || '');
-          if (!pid) return;
-          if (!grouped[pid]) grouped[pid] = [];
-          grouped[pid].push({
-            id: d.id,
-            authorName: String(data.authorName || 'Client'),
-            quartier: String(data.quartier || ''),
-            rating: Number(data.rating || 5),
-            date: formatFirestoreDate(data.createdAt),
-            commentFr: String(data.comment || ''),
-            commentAr: String(data.comment || ''),
-          });
-        });
-
-        setProviderOverrides((prev) => {
-          const next = { ...prev };
-          for (const [pid, revs] of Object.entries(grouped)) {
-            next[pid] = {
-              ...next[pid],
-              reviews: revs,
-            };
-          }
-          return next;
-        });
-      },
-      (err) => {
-        handleFirestoreError(err, OperationType.LIST, reviewsPath);
+        reportFirestoreError(err, OperationType.LIST, providersPath);
       }
     );
     return () => unsubscribe();
@@ -242,15 +214,20 @@ export function useProviders(
         ...cleanOverride,
         reviews: filteredReviews,
         reviewCount:
-          removedSet.size > 0
-            ? Math.max(0, (cleanOverride.reviewCount ?? p.reviewCount) - removedSet.size)
-            : cleanOverride.reviewCount ?? p.reviewCount,
+          cleanOverride.reviewCount !== undefined
+            ? cleanOverride.reviewCount
+            : removedSet.size > 0
+            ? Math.max(0, p.reviewCount - removedSet.size)
+            : p.reviewCount,
       };
     });
   }, [firestoreProviders, userProfile, providerOverrides, t]);
 
   const toggleProviderAvailability = async (provider: VettedProvider) => {
-    const nextVal = !provider.isAvailableNow;
+    const previousVal = provider.isAvailableNow;
+    const nextVal = !previousVal;
+
+    // Optimistic update with rollback on Firestore error
     setProviderOverrides((prev) => ({
       ...prev,
       [provider.id]: {
@@ -267,7 +244,14 @@ export function useProviders(
           updatedAt: serverTimestamp(),
         });
       } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, path);
+        reportFirestoreError(err, OperationType.UPDATE, path);
+        setProviderOverrides((prev) => ({
+          ...prev,
+          [provider.id]: {
+            ...prev[provider.id],
+            isAvailableNow: previousVal,
+          },
+        }));
       }
     }
   };
@@ -288,7 +272,7 @@ export function useProviders(
           ...prev[providerId],
           ratingAvg: update.ratingAvg,
           reviewCount: update.reviewCount,
-          reviews: [update.review, ...existingReviews],
+          reviews: [update.review, ...existingReviews.filter((r) => r.id !== update.review.id)],
         },
       };
     });
@@ -304,16 +288,22 @@ export function useProviders(
     }));
   };
 
-  const removeProviderReview = (providerId: string, reviewId: string) => {
+  const removeProviderReview = (
+    providerId: string,
+    reviewId: string,
+    recalculated?: { ratingAvg: number; reviewCount: number }
+  ) => {
     setProviderOverrides((prev) => {
       const current = prev[providerId] || {};
       const existingRemoved = current.removedReviewIds || [];
-      if (existingRemoved.includes(reviewId)) return prev;
       return {
         ...prev,
         [providerId]: {
           ...current,
-          removedReviewIds: [...existingRemoved, reviewId],
+          ...(recalculated ?? {}),
+          removedReviewIds: existingRemoved.includes(reviewId)
+            ? existingRemoved
+            : [...existingRemoved, reviewId],
         },
       };
     });
@@ -321,6 +311,7 @@ export function useProviders(
 
   return {
     allProviders,
+    firestoreProviders,
     toggleProviderAvailability,
     applyLocalReviewOverride,
     applyAdminProviderOverride,
