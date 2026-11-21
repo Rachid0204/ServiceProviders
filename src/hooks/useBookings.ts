@@ -3,23 +3,27 @@ import {
   collection,
   query,
   where,
+  limit,
   onSnapshot,
   doc,
   getDoc,
   setDoc,
   updateDoc,
   writeBatch,
+  runTransaction,
   serverTimestamp,
   type DocumentData,
   type Timestamp,
 } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
-import { db, handleFirestoreError, OperationType } from '../firebase';
+import { db, handleFirestoreError, reportFirestoreError, OperationType } from '../firebase';
 import {
   calculateEscrowSplit,
   canTransitionBookingStatus,
   computeCancellationSettlement,
+  generateBookingIds,
   getNextPaymentStatus,
+  isSafeImageUrl,
   recalculateProviderRating,
   type BookingRecord,
   type BookingStatus,
@@ -35,7 +39,7 @@ import {
   type VettedProvider,
 } from '../utils/marketplace';
 
-// Consistent demo bookings matching seeded providers in src/data/providers.ts
+// Consistent demo bookings used ONLY in unauthenticated local preview mode
 const INITIAL_DEMO_BOOKINGS: BookingRecord[] = [
   {
     id: 'booking-demo-101',
@@ -210,7 +214,10 @@ function mapFirestoreBooking(id: string, data: DocumentData): BookingRecord {
     neighborhood: String(data.neighborhood),
     addressPin: String(data.addressPin || data.neighborhood),
     description: String(data.description),
-    problemPhotoUrl: data.problemPhotoUrl ? String(data.problemPhotoUrl) : undefined,
+    problemPhotoUrl:
+      typeof data.problemPhotoUrl === 'string' && isSafeImageUrl(data.problemPhotoUrl)
+        ? data.problemPhotoUrl
+        : undefined,
     preferredDate: String(data.preferredDate),
     preferredTimeSlot: (data.preferredTimeSlot as TimeSlot) || '09:00 - 12:00',
     paymentMethod,
@@ -238,6 +245,8 @@ function mapFirestoreBooking(id: string, data: DocumentData): BookingRecord {
 }
 
 export interface SubmitBookingPayload {
+  bookingId?: string;
+  bookingRef?: string;
   provider: VettedProvider;
   clientName: string;
   clientPhone: string;
@@ -270,6 +279,8 @@ export function useBookings(params: {
   authReady: boolean;
   lang: LanguageCode;
   allProviders: VettedProvider[];
+  platformFeePct: number;
+  autoRefundOnProviderCancel: boolean;
   onApplyReviewOverride: (
     providerId: string,
     update: {
@@ -279,7 +290,15 @@ export function useBookings(params: {
     }
   ) => void;
 }) {
-  const { firebaseUser, authReady, lang, allProviders, onApplyReviewOverride } = params;
+  const {
+    firebaseUser,
+    authReady,
+    lang,
+    allProviders,
+    platformFeePct,
+    autoRefundOnProviderCancel,
+    onApplyReviewOverride,
+  } = params;
 
   const [localBookings, setLocalBookings] = useState<BookingRecord[]>(INITIAL_DEMO_BOOKINGS);
   const [clientLiveBookings, setClientLiveBookings] = useState<BookingRecord[]>([]);
@@ -287,8 +306,9 @@ export function useBookings(params: {
   const [chatThreads, setChatThreads] = useState<Record<string, ChatMessageRecord[]>>(
     INITIAL_DEMO_CHATS
   );
+  const [bookingActionError, setBookingActionError] = useState<string | null>(null);
 
-  // Dual real-time Firestore listeners: clientId == uid AND providerId == uid
+  // Dual real-time Firestore listeners: clientId == uid AND providerId == uid (bounded)
   useEffect(() => {
     if (!authReady || !firebaseUser) {
       setClientLiveBookings([]);
@@ -299,11 +319,13 @@ export function useBookings(params: {
     const bookingsPath = 'bookings';
     const clientQuery = query(
       collection(db, bookingsPath),
-      where('clientId', '==', firebaseUser.uid)
+      where('clientId', '==', firebaseUser.uid),
+      limit(100)
     );
     const providerQuery = query(
       collection(db, bookingsPath),
-      where('providerId', '==', firebaseUser.uid)
+      where('providerId', '==', firebaseUser.uid),
+      limit(100)
     );
 
     const unsubClient = onSnapshot(
@@ -312,7 +334,7 @@ export function useBookings(params: {
         setClientLiveBookings(snapshot.docs.map((d) => mapFirestoreBooking(d.id, d.data())));
       },
       (err) => {
-        handleFirestoreError(err, OperationType.LIST, bookingsPath);
+        reportFirestoreError(err, OperationType.LIST, bookingsPath);
       }
     );
 
@@ -322,7 +344,7 @@ export function useBookings(params: {
         setProviderLiveBookings(snapshot.docs.map((d) => mapFirestoreBooking(d.id, d.data())));
       },
       (err) => {
-        handleFirestoreError(err, OperationType.LIST, bookingsPath);
+        reportFirestoreError(err, OperationType.LIST, bookingsPath);
       }
     );
 
@@ -332,29 +354,38 @@ export function useBookings(params: {
     };
   }, [authReady, firebaseUser]);
 
-  // Deduplicated bookings list combining live Firestore records and local/demo items
+  // Authenticated sessions strictly use live Firestore bookings (never polluted by demo fixtures)
   const bookings = useMemo(() => {
-    const byId = new Map<string, BookingRecord>();
-    clientLiveBookings.forEach((b) => byId.set(b.id, b));
-    providerLiveBookings.forEach((b) => byId.set(b.id, b));
-    localBookings.forEach((b) => {
-      if (!byId.has(b.id)) byId.set(b.id, b);
-    });
-    return Array.from(byId.values());
-  }, [clientLiveBookings, providerLiveBookings, localBookings]);
+    if (firebaseUser) {
+      const byId = new Map<string, BookingRecord>();
+      clientLiveBookings.forEach((b) => byId.set(b.id, b));
+      providerLiveBookings.forEach((b) => byId.set(b.id, b));
+      return Array.from(byId.values());
+    }
+    return localBookings;
+  }, [firebaseUser, clientLiveBookings, providerLiveBookings, localBookings]);
 
   const submitBooking = async (payload: SubmitBookingPayload): Promise<string> => {
-    const bookingId = `booking-${Date.now()}`;
-    const bookingRef = `MK-${Math.floor(100 + (Date.now() % 900))}`;
+    setBookingActionError(null);
+    if (firebaseUser && payload.provider.id === firebaseUser.uid) {
+      throw new Error(
+        lang === 'ar'
+          ? 'لا يمكنك حجز خدمتك الخاصة.'
+          : 'Vous ne pouvez pas réserver votre propre profil Maâlem.'
+      );
+    }
+
+    const generated = generateBookingIds();
+    const bookingId = payload.bookingId || generated.bookingId;
+    const bookingRef = payload.bookingRef || generated.bookingRef;
     const providerDisplayName =
       lang === 'ar' ? payload.provider.fullNameAr : payload.provider.fullNameFr;
     const paymentStatus: PaymentStatus =
       payload.paymentMethod === 'cmi_escrow' ? 'escrow_held' : 'unpaid_cod';
 
-    const safePhotoUrl =
-      payload.problemPhotoUrl && payload.problemPhotoUrl.length <= 2048
-        ? payload.problemPhotoUrl
-        : undefined;
+    const safePhotoUrl = isSafeImageUrl(payload.problemPhotoUrl)
+      ? payload.problemPhotoUrl
+      : undefined;
 
     const newBooking: BookingRecord = {
       id: bookingId,
@@ -411,8 +442,10 @@ export function useBookings(params: {
       } catch (err) {
         handleFirestoreError(err, OperationType.CREATE, path);
       }
+      return bookingRef;
     }
 
+    // Local unauthenticated preview mode only
     setLocalBookings((prev) => [newBooking, ...prev]);
     setChatThreads((prev) => ({
       ...prev,
@@ -438,12 +471,13 @@ export function useBookings(params: {
     return bookingRef;
   };
 
-  // Enforces strict sequential booking state machine & payment status transitions (including provider cancel auto-refund)
+  // Enforces strict sequential booking state machine, payment status transitions, and atomic completedJobs increment
   const updateBookingStatus = async (
     bookingId: string,
     nextStatus: BookingStatus,
     actorRole: UserRole
   ) => {
+    setBookingActionError(null);
     const target = bookings.find((b) => b.id === bookingId);
     if (!target) return;
     if (!canTransitionBookingStatus(target.status, nextStatus, actorRole)) {
@@ -467,7 +501,7 @@ export function useBookings(params: {
       nextStatus
     );
 
-    if (firebaseUser && !bookingId.startsWith('booking-demo-')) {
+    if (firebaseUser) {
       const path = `bookings/${bookingId}`;
       try {
         const updatePayload: Record<string, unknown> = {
@@ -477,10 +511,36 @@ export function useBookings(params: {
         if (nextStatus === 'completed' && nextPaymentStatus !== target.paymentStatus) {
           updatePayload.paymentStatus = nextPaymentStatus;
         }
+
+        if (nextStatus === 'completed' && target.providerId === firebaseUser.uid) {
+          const providerRef = doc(db, 'providers', firebaseUser.uid);
+          const providerSnap = await getDoc(providerRef);
+          if (providerSnap.exists()) {
+            const pData = providerSnap.data();
+            const currentJobs =
+              typeof pData.completedJobs === 'number' ? Math.round(pData.completedJobs) : 0;
+            const batch = writeBatch(db);
+            batch.update(doc(db, 'bookings', bookingId), updatePayload);
+            batch.update(providerRef, {
+              completedJobs: currentJobs + 1,
+              lastCompletedBookingId: bookingId,
+              updatedAt: serverTimestamp(),
+            });
+            await batch.commit();
+            return;
+          }
+        }
+
         await updateDoc(doc(db, 'bookings', bookingId), updatePayload);
       } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, path);
+        reportFirestoreError(err, OperationType.UPDATE, path);
+        setBookingActionError(
+          lang === 'ar'
+            ? 'تعذر تحديث حالة الطلب. تحقق من صلاحيات حسابك وحاول مرة أخرى.'
+            : 'Impossible de mettre à jour le statut de la réservation. Vérifiez vos permissions.'
+        );
       }
+      return;
     }
 
     setLocalBookings((prev) =>
@@ -492,8 +552,9 @@ export function useBookings(params: {
     );
   };
 
-  // Client confirms job completion & releases CMI Escrow (90% provider payout + 10% platform fee)
+  // Client confirms job completion & releases CMI Escrow (respecting configured platformFeePct)
   const clientConfirmAndReleaseEscrow = async (bookingId: string) => {
+    setBookingActionError(null);
     const target = bookings.find((b) => b.id === bookingId);
     if (!target) return;
     if (
@@ -504,9 +565,9 @@ export function useBookings(params: {
       return;
     }
 
-    const split = calculateEscrowSplit(target.estimatedMad, 10, 100);
+    const split = calculateEscrowSplit(target.estimatedMad, platformFeePct, 100);
 
-    if (firebaseUser && !bookingId.startsWith('booking-demo-')) {
+    if (firebaseUser) {
       const path = `bookings/${bookingId}`;
       try {
         await updateDoc(doc(db, 'bookings', bookingId), {
@@ -517,8 +578,14 @@ export function useBookings(params: {
           updatedAt: serverTimestamp(),
         });
       } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, path);
+        reportFirestoreError(err, OperationType.UPDATE, path);
+        setBookingActionError(
+          lang === 'ar'
+            ? 'تعذر صرف ضمان CMI. يرجى المحاولة مجدداً.'
+            : 'Impossible de libérer le séquestre CMI. Veuillez réessayer.'
+        );
       }
+      return;
     }
 
     setLocalBookings((prev) =>
@@ -542,6 +609,7 @@ export function useBookings(params: {
     reason: string,
     actorRole: UserRole
   ) => {
+    setBookingActionError(null);
     const target = bookings.find((b) => b.id === bookingId);
     if (!target) return;
     const effectiveRole: 'client' | 'provider' =
@@ -550,9 +618,14 @@ export function useBookings(params: {
       return;
     }
 
-    const settlement = computeCancellationSettlement(target, effectiveRole, reason);
+    const settlement = computeCancellationSettlement(
+      target,
+      effectiveRole,
+      reason,
+      autoRefundOnProviderCancel
+    );
 
-    if (firebaseUser && !bookingId.startsWith('booking-demo-')) {
+    if (firebaseUser) {
       const path = `bookings/${bookingId}`;
       try {
         await updateDoc(doc(db, 'bookings', bookingId), {
@@ -560,8 +633,15 @@ export function useBookings(params: {
           updatedAt: serverTimestamp(),
         });
       } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, path);
+        reportFirestoreError(err, OperationType.UPDATE, path);
+        setBookingActionError(
+          lang === 'ar'
+            ? 'تعذر إلغاء الحجز في قاعدة البيانات.'
+            : 'Impossible d’annuler la réservation.'
+        );
+        throw err;
       }
+      return;
     }
 
     setLocalBookings((prev) =>
@@ -576,12 +656,13 @@ export function useBookings(params: {
     newSlot: TimeSlot,
     note: string
   ) => {
+    setBookingActionError(null);
     const target = bookings.find((b) => b.id === bookingId);
     if (!target) return;
     if (target.status !== 'pending' && target.status !== 'accepted') return;
     const safeNote = note.trim().slice(0, 200);
 
-    if (firebaseUser && !bookingId.startsWith('booking-demo-')) {
+    if (firebaseUser) {
       const path = `bookings/${bookingId}`;
       try {
         await updateDoc(doc(db, 'bookings', bookingId), {
@@ -591,8 +672,15 @@ export function useBookings(params: {
           updatedAt: serverTimestamp(),
         });
       } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, path);
+        reportFirestoreError(err, OperationType.UPDATE, path);
+        setBookingActionError(
+          lang === 'ar'
+            ? 'تعذر إعادة جدولة الموعد.'
+            : 'Impossible de reprogrammer le créneau.'
+        );
+        throw err;
       }
+      return;
     }
 
     setLocalBookings((prev) =>
@@ -609,32 +697,105 @@ export function useBookings(params: {
     );
   };
 
-  // Atomic review write: bookings/{bookingId} -> 'reviewed' + reviews/{bookingId} + optional providers/{uid} rating aggregation
+  // Transactional review write: bookings/{bookingId} -> 'reviewed' + reviews/{bookingId} + providers/{uid} rating aggregation
   const submitClientReview = async (
     bookingId: string,
     rating: number,
     comment: string,
     reviewCategories?: ReviewCategoryBreakdown
   ) => {
+    setBookingActionError(null);
     const targetBooking = bookings.find((b) => b.id === bookingId);
     if (!targetBooking || !canTransitionBookingStatus(targetBooking.status, 'reviewed', 'client')) {
       return;
     }
 
-    const targetProvider = allProviders.find((p) => p.id === targetBooking.providerId);
-    const recalculated = targetProvider
-      ? recalculateProviderRating(targetProvider.ratingAvg, targetProvider.reviewCount, rating)
-      : { ratingAvg: rating, reviewCount: 1 };
+    const safeRating = Math.max(1, Math.min(5, Math.round(rating)));
+    const safeComment = comment.trim().slice(0, 500);
+    if (safeComment.length < 2) {
+      throw new Error(
+        lang === 'ar'
+          ? 'يرجى كتابة تعليق لا يقل عن حرفين.'
+          : 'Veuillez saisir un commentaire d’au moins 2 caractères.'
+      );
+    }
 
+    const targetProvider = allProviders.find((p) => p.id === targetBooking.providerId);
     const newReview = {
       id: bookingId,
       authorName: targetBooking.clientName,
       quartier: targetBooking.neighborhood,
-      rating,
+      rating: safeRating,
       date: new Date().toISOString().slice(0, 10),
-      commentFr: comment,
-      commentAr: comment,
+      commentFr: safeComment,
+      commentAr: safeComment,
     };
+
+    if (firebaseUser) {
+      const reviewPath = `reviews/${bookingId}`;
+      let committedRating: { ratingAvg: number; reviewCount: number } | null = null;
+      try {
+        committedRating = await runTransaction(db, async (tx) => {
+          const bookingRef = doc(db, 'bookings', bookingId);
+          const reviewRef = doc(db, 'reviews', bookingId);
+          const shouldUpdateProvider = targetBooking.providerId !== firebaseUser.uid;
+          const providerRef = doc(db, 'providers', targetBooking.providerId);
+
+          const providerSnap = shouldUpdateProvider ? await tx.get(providerRef) : null;
+
+          tx.update(bookingRef, {
+            status: 'reviewed',
+            reviewRating: safeRating,
+            reviewComment: safeComment,
+            updatedAt: serverTimestamp(),
+          });
+
+          tx.set(reviewRef, {
+            bookingId,
+            providerId: targetBooking.providerId,
+            clientId: firebaseUser.uid,
+            authorName: targetBooking.clientName,
+            quartier: targetBooking.neighborhood,
+            rating: safeRating,
+            comment: safeComment,
+            createdAt: serverTimestamp(),
+          });
+
+          if (providerSnap && providerSnap.exists()) {
+            const pData = providerSnap.data();
+            const liveCalc = recalculateProviderRating(
+              Number(pData.ratingAvg ?? 5.0),
+              Number(pData.reviewCount ?? 0),
+              safeRating
+            );
+            tx.update(providerRef, {
+              ratingAvg: liveCalc.ratingAvg,
+              reviewCount: liveCalc.reviewCount,
+              lastReviewBookingId: bookingId,
+              updatedAt: serverTimestamp(),
+            });
+            return liveCalc;
+          }
+          return null;
+        });
+      } catch (err) {
+        reportFirestoreError(err, OperationType.WRITE, reviewPath);
+        throw err;
+      }
+
+      if (targetProvider && committedRating) {
+        onApplyReviewOverride(targetProvider.id, {
+          ratingAvg: committedRating.ratingAvg,
+          reviewCount: committedRating.reviewCount,
+          review: newReview,
+        });
+      }
+      return;
+    }
+
+    const recalculated = targetProvider
+      ? recalculateProviderRating(targetProvider.ratingAvg, targetProvider.reviewCount, safeRating)
+      : { ratingAvg: safeRating, reviewCount: 1 };
 
     if (targetProvider) {
       onApplyReviewOverride(targetProvider.id, {
@@ -644,64 +805,14 @@ export function useBookings(params: {
       });
     }
 
-    if (firebaseUser && !bookingId.startsWith('booking-demo-')) {
-      const reviewPath = `reviews/${bookingId}`;
-      try {
-        const batch = writeBatch(db);
-        const bookingRef = doc(db, 'bookings', bookingId);
-        const reviewRef = doc(db, 'reviews', bookingId);
-
-        batch.update(bookingRef, {
-          status: 'reviewed',
-          reviewRating: rating,
-          reviewComment: comment,
-          updatedAt: serverTimestamp(),
-        });
-
-        batch.set(reviewRef, {
-          bookingId,
-          providerId: targetBooking.providerId,
-          clientId: firebaseUser.uid,
-          authorName: targetBooking.clientName,
-          quartier: targetBooking.neighborhood,
-          rating,
-          comment,
-          createdAt: serverTimestamp(),
-        });
-
-        if (targetBooking.providerId !== firebaseUser.uid) {
-          const providerRef = doc(db, 'providers', targetBooking.providerId);
-          const providerSnap = await getDoc(providerRef);
-          if (providerSnap.exists()) {
-            const pData = providerSnap.data();
-            const liveCalc = recalculateProviderRating(
-              Number(pData.ratingAvg ?? 5.0),
-              Number(pData.reviewCount ?? 0),
-              rating
-            );
-            batch.update(providerRef, {
-              ratingAvg: liveCalc.ratingAvg,
-              reviewCount: liveCalc.reviewCount,
-              lastReviewBookingId: bookingId,
-              updatedAt: serverTimestamp(),
-            });
-          }
-        }
-
-        await batch.commit();
-      } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, reviewPath);
-      }
-    }
-
     setLocalBookings((prev) =>
       prev.map((b) =>
         b.id === bookingId
           ? {
               ...b,
               status: 'reviewed',
-              reviewRating: rating,
-              reviewComment: comment,
+              reviewRating: safeRating,
+              reviewComment: safeComment,
               reviewCategories,
             }
           : b
@@ -725,6 +836,8 @@ export function useBookings(params: {
   return {
     bookings,
     chatThreads,
+    bookingActionError,
+    clearBookingActionError: () => setBookingActionError(null),
     submitBooking,
     updateBookingStatus,
     clientConfirmAndReleaseEscrow,

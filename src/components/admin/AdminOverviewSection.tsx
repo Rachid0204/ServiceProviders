@@ -262,7 +262,8 @@ export const AdminOverviewSection: React.FC<AdminOverviewSectionProps> = ({
                     </div>
                     <div className="text-[11px] text-slate-500 truncate mt-0.5">
                       {t.categories[p.category]} · {t.cities[p.location.city]} (
-                      {isAr ? p.location.quartierAr : p.location.quartier}) · {p.cinNumberMasked}
+                      {isAr ? p.location.quartierAr || p.location.quartier : p.location.quartier}) ·{' '}
+                      {p.cinNumberMasked}
                     </div>
                   </div>
                   <button

@@ -176,6 +176,13 @@
           "type": "number",
           "description": "Count of completed missions on the platform"
         },
+        "lastCompletedBookingId": {
+          "type": "string",
+          "description": "Booking ID of the latest atomic completedJobs increment",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
         "lastReviewBookingId": {
           "type": "string",
           "description": "Booking ID of the latest atomic review aggregation write",

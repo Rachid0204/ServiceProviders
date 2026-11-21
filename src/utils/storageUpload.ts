@@ -82,3 +82,16 @@ export async function uploadMarketplacePhoto(params: {
     uploadedToStorage: true,
   };
 }
+
+/**
+ * Safely revokes an ephemeral preview blob URL created when uploading without Firebase Auth.
+ */
+export function revokePreviewObjectUrl(url: string | undefined): void {
+  if (url && url.startsWith('blob:') && typeof URL !== 'undefined') {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // Ignore already-revoked URLs
+    }
+  }
+}

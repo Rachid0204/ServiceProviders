@@ -188,7 +188,7 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
                     <td className="py-3 px-4 text-slate-700">
                       <div className="font-medium">{t.cities[p.location.city]}</div>
                       <div className="text-[11px] text-slate-500">
-                        {isAr ? p.location.quartierAr : p.location.quartier}
+                        {isAr ? p.location.quartierAr || p.location.quartier : p.location.quartier}
                       </div>
                     </td>
                     <td className="py-3 px-4 font-mono-tabular text-slate-700 whitespace-nowrap" dir="ltr">
@@ -273,7 +273,7 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
         </div>
       </div>
 
-      {/* Signed-URL KYC & CIN Document Verification Modal */}
+      {/* KYC & CIN Verification Review Modal */}
       {kycModalProvider && (
         <div
           role="dialog"
@@ -286,8 +286,8 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
               <div>
                 <h2 id="kyc-modal-title" className="text-base font-bold text-slate-900">
                   {isAr
-                    ? 'معاينة وثائق البطاقة الوطنية (CIN) والدبلوم المهني'
-                    : 'Vérification Dossier KYC / CIN & Diplôme ISTA'}
+                    ? 'مراجعة ملف التحقق (CIN / KYC)'
+                    : 'Revue du Dossier KYC / CIN'}
                 </h2>
                 <p className="text-xs text-slate-600 mt-0.5">
                   {isAr ? kycModalProvider.fullNameAr : kycModalProvider.fullNameFr} ·{' '}
@@ -304,10 +304,10 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
               </button>
             </div>
 
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-1.5">
+            <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">
-                  {isAr ? 'رقم البطاقة الوطنية:' : 'Numéro CIN masqué :'}
+                  {isAr ? 'حالة البطاقة الوطنية:' : 'Statut CIN :'}
                 </span>
                 <span className="font-mono-tabular font-bold text-slate-900">
                   {kycModalProvider.cinNumberMasked}
@@ -315,49 +315,29 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">
-                  {isAr ? 'الشهادة المهنية:' : 'Qualification / Diplôme :'}
+                  {isAr ? 'الهاتف المسجل:' : 'Téléphone vérifié :'}
                 </span>
-                <span className="font-semibold text-slate-800">
-                  {isAr ? kycModalProvider.diplomaAr : kycModalProvider.diplomaFr}
+                <span className="font-mono-tabular font-semibold text-slate-800" dir="ltr">
+                  {kycModalProvider.phone}
                 </span>
               </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 pt-1">
-                <Lock className="w-3.5 h-3.5 shrink-0" />
-                <span className="font-mono-tabular truncate" dir="ltr">
-                  Signed URL (TTL 15m): https://storage.googleapis.com/serviceproviders-530c4.firebasestorage.app/kyc/{kycModalProvider.id}/cin-front.jpg?X-Goog-Expires=900
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500">
+                  {isAr ? 'الشهادة المهنية:' : 'Qualification / Diplôme :'}
+                </span>
+                <span className="font-semibold text-slate-800 text-end">
+                  {isAr ? kycModalProvider.diplomaAr : kycModalProvider.diplomaFr}
                 </span>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="border border-slate-200 rounded-lg p-2.5 bg-slate-50 space-y-1.5">
-                <div className="text-[11px] font-semibold text-slate-700">
-                  {isAr ? 'البطاقة الوطنية (الوجه الأمامي)' : 'Recto CIN (Signed URL)'}
-                </div>
-                <img
-                  src={
-                    kycModalProvider.portfolioImages[0]?.startsWith('/src/assets/images/')
-                      ? kycModalProvider.portfolioImages[0]
-                      : '/src/assets/images/service_electrical_smart_1794980478001.jpg'
-                  }
-                  onError={(e) => {
-                    e.currentTarget.src =
-                      '/src/assets/images/hero_moroccan_craftsman_1794980476857.jpg';
-                  }}
-                  alt="CIN Recto"
-                  className="w-full h-28 object-cover rounded border border-slate-300"
-                />
-              </div>
-              <div className="border border-slate-200 rounded-lg p-2.5 bg-slate-50 space-y-1.5">
-                <div className="text-[11px] font-semibold text-slate-700">
-                  {isAr ? 'شهادة OFPPT / ISTA' : 'Attestation OFPPT / ISTA'}
-                </div>
-                <img
-                  src="/src/assets/images/hero_moroccan_craftsman_1794980476857.jpg"
-                  alt="Diplôme ISTA"
-                  className="w-full h-28 object-cover rounded border border-slate-300"
-                />
-              </div>
+            <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2.5 text-xs text-amber-900">
+              <Lock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+              <span>
+                {isAr
+                  ? 'التحقق من وثائق البطاقة الوطنية (CIN) والدبلومات يتم يدوياً خارج المنصة إلى حين تفعيل خدمة رفع الوثائق المشفرة عبر Storage.'
+                  : 'Vérifiez manuellement la pièce CIN et le diplôme OFPPT/ISTA du prestataire avant d’activer le badge CIN (le stockage chiffré KYC n’est pas encore connecté).'}
+              </span>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-200">

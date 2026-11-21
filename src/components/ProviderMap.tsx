@@ -76,12 +76,18 @@ export const ProviderMap: React.FC<ProviderMapProps> = ({
       });
 
       const userMarker = L.marker([userCoords.lat, userCoords.lng], { icon: userIcon });
-      userMarker.bindPopup(
-        `<div style="font-family:sans-serif;font-size:12px;padding:2px;">
-          <strong>${lang === 'ar' ? 'موقعي الحالي' : 'Votre position'}</strong><br/>
-          <span>${userCoords.label || `${userCoords.lat.toFixed(4)}, ${userCoords.lng.toFixed(4)}`}</span>
-        </div>`
-      );
+      const userPopup = document.createElement('div');
+      userPopup.style.fontFamily = 'sans-serif';
+      userPopup.style.fontSize = '12px';
+      userPopup.style.padding = '2px';
+      const userTitle = document.createElement('strong');
+      userTitle.textContent = lang === 'ar' ? 'موقعي الحالي' : 'Votre position';
+      const userBr = document.createElement('br');
+      const userLabel = document.createElement('span');
+      userLabel.textContent =
+        userCoords.label || `${userCoords.lat.toFixed(4)}, ${userCoords.lng.toFixed(4)}`;
+      userPopup.append(userTitle, userBr, userLabel);
+      userMarker.bindPopup(userPopup);
       userMarker.addTo(layerGroup);
     }
 
@@ -98,11 +104,15 @@ export const ProviderMap: React.FC<ProviderMapProps> = ({
         : '#b45309';
 
       const priceLabel = formatMadCurrency(provider.hourlyRateMAD, lang);
+      const badgeEl = document.createElement('div');
+      badgeEl.style.cssText = `display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;background:${bgColor};color:#ffffff;font-weight:700;font-size:11px;white-space:nowrap;box-shadow:0 3px 10px rgba(15,23,42,0.28);border:2px solid #ffffff;`;
+      const badgeSpan = document.createElement('span');
+      badgeSpan.textContent = priceLabel;
+      badgeEl.appendChild(badgeSpan);
+
       const markerIcon = L.divIcon({
         className: 'custom-provider-marker',
-        html: `<div style="display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:8px;background:${bgColor};color:#ffffff;font-weight:700;font-size:11px;white-space:nowrap;box-shadow:0 3px 10px rgba(15,23,42,0.28);border:2px solid #ffffff;">
-          <span>${priceLabel}</span>
-        </div>`,
+        html: badgeEl,
         iconSize: [76, 28],
         iconAnchor: [38, 14],
       });
@@ -113,37 +123,52 @@ export const ProviderMap: React.FC<ProviderMapProps> = ({
         lang === 'ar'
           ? provider.location.quartierAr || provider.location.quartier
           : provider.location.quartier;
-      const distanceText =
-        provider.distanceKm != null
-          ? `<div style="color:#047857;font-weight:600;margin-top:2px;">${provider.distanceKm} ${t.distanceAwayUnit}</div>`
-          : '';
 
       const popupContainer = document.createElement('div');
       popupContainer.style.minWidth = '190px';
       popupContainer.style.fontFamily = 'inherit';
-      popupContainer.innerHTML = `
-        <div style="font-size:13px;font-weight:700;color:#0f172a;">${displayName}</div>
-        <div style="font-size:11px;color:#475569;margin-top:2px;">
-          ${t.categories[provider.category]} · ${t.cities[provider.location.city]} (${displayQuartier})
-        </div>
-        <div style="font-size:12px;font-weight:700;color:#0f172a;margin-top:4px;">
-          ${priceLabel}/h · ★ ${provider.ratingAvg.toFixed(1)} (${provider.reviewCount})
-        </div>
-        ${distanceText}
-        <div style="display:flex;gap:6px;margin-top:8px;">
-          <button type="button" data-action="details" style="flex:1;padding:5px 8px;font-size:11px;font-weight:600;background:#f1f5f9;color:#0f172a;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer;">
-            ${t.viewDetailsBtn}
-          </button>
-          <button type="button" data-action="book" style="flex:1;padding:5px 8px;font-size:11px;font-weight:600;background:#047857;color:#ffffff;border:none;border-radius:6px;cursor:pointer;">
-            ${t.bookProviderBtn}
-          </button>
-        </div>
-      `;
 
-      const detailsBtn = popupContainer.querySelector('[data-action="details"]');
-      const bookBtn = popupContainer.querySelector('[data-action="book"]');
-      detailsBtn?.addEventListener('click', () => onSelectProvider(provider));
-      bookBtn?.addEventListener('click', () => onBookProvider(provider));
+      const nameEl = document.createElement('div');
+      nameEl.style.cssText = 'font-size:13px;font-weight:700;color:#0f172a;';
+      nameEl.textContent = displayName;
+      popupContainer.appendChild(nameEl);
+
+      const metaEl = document.createElement('div');
+      metaEl.style.cssText = 'font-size:11px;color:#475569;margin-top:2px;';
+      metaEl.textContent = `${t.categories[provider.category]} · ${t.cities[provider.location.city]} (${displayQuartier})`;
+      popupContainer.appendChild(metaEl);
+
+      const ratingEl = document.createElement('div');
+      ratingEl.style.cssText = 'font-size:12px;font-weight:700;color:#0f172a;margin-top:4px;';
+      ratingEl.textContent = `${priceLabel}/h · ★ ${provider.ratingAvg.toFixed(1)} (${provider.reviewCount})`;
+      popupContainer.appendChild(ratingEl);
+
+      if (provider.distanceKm != null) {
+        const distEl = document.createElement('div');
+        distEl.style.cssText = 'color:#047857;font-weight:600;margin-top:2px;font-size:11px;';
+        distEl.textContent = `${provider.distanceKm} ${t.distanceAwayUnit}`;
+        popupContainer.appendChild(distEl);
+      }
+
+      const actionsEl = document.createElement('div');
+      actionsEl.style.cssText = 'display:flex;gap:6px;margin-top:8px;';
+
+      const detailsBtn = document.createElement('button');
+      detailsBtn.type = 'button';
+      detailsBtn.style.cssText =
+        'flex:1;padding:5px 8px;font-size:11px;font-weight:600;background:#f1f5f9;color:#0f172a;border:1px solid #cbd5e1;border-radius:6px;cursor:pointer;';
+      detailsBtn.textContent = t.viewDetailsBtn;
+      detailsBtn.addEventListener('click', () => onSelectProvider(provider));
+
+      const bookBtn = document.createElement('button');
+      bookBtn.type = 'button';
+      bookBtn.style.cssText =
+        'flex:1;padding:5px 8px;font-size:11px;font-weight:600;background:#047857;color:#ffffff;border:none;border-radius:6px;cursor:pointer;';
+      bookBtn.textContent = t.bookProviderBtn;
+      bookBtn.addEventListener('click', () => onBookProvider(provider));
+
+      actionsEl.append(detailsBtn, bookBtn);
+      popupContainer.appendChild(actionsEl);
 
       marker.bindPopup(popupContainer);
       marker.addTo(layerGroup);

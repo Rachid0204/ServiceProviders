@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   X,
   ShieldCheck,
+  ShieldAlert,
   Star,
   MapPin,
   Clock,
@@ -11,8 +12,18 @@ import {
   Navigation,
 } from 'lucide-react';
 import {
+  collection,
+  query,
+  where,
+  limit,
+  onSnapshot,
+  type Timestamp,
+} from 'firebase/firestore';
+import { db, reportFirestoreError, OperationType } from '../firebase';
+import {
   formatMadCurrency,
   type LanguageCode,
+  type ProviderReview,
   type VettedProvider,
 } from '../utils/marketplace';
 import type { Translations } from '../i18n/translations';
@@ -25,6 +36,17 @@ interface ProviderDetailModalProps {
   onBookProvider: (provider: VettedProvider) => void;
 }
 
+function formatReviewDate(ts: unknown): string {
+  if (ts && typeof ts === 'object' && 'toDate' in ts) {
+    try {
+      return (ts as Timestamp).toDate().toISOString().slice(0, 10);
+    } catch {
+      return new Date().toISOString().slice(0, 10);
+    }
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+
 export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
   provider,
   lang,
@@ -33,6 +55,46 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
   onBookProvider,
 }) => {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [liveReviews, setLiveReviews] = useState<ProviderReview[]>([]);
+
+  useEffect(() => {
+    setActiveImageIndex(0);
+    setLiveReviews([]);
+    const q = query(
+      collection(db, 'reviews'),
+      where('providerId', '==', provider.id),
+      limit(50)
+    );
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const loaded: ProviderReview[] = snapshot.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            authorName: String(data.authorName || 'Client'),
+            quartier: String(data.quartier || ''),
+            rating: Number(data.rating || 5),
+            date: formatReviewDate(data.createdAt),
+            commentFr: String(data.comment || ''),
+            commentAr: String(data.comment || ''),
+          };
+        });
+        loaded.sort((a, b) => b.date.localeCompare(a.date));
+        setLiveReviews(loaded);
+      },
+      (err) => {
+        reportFirestoreError(err, OperationType.LIST, `reviews?providerId=${provider.id}`);
+      }
+    );
+    return () => unsubscribe();
+  }, [provider.id]);
+
+  const displayedReviews = useMemo(() => {
+    if (liveReviews.length === 0) return provider.reviews;
+    const seen = new Set(liveReviews.map((r) => r.id));
+    return [...liveReviews, ...provider.reviews.filter((r) => !seen.has(r.id))];
+  }, [liveReviews, provider.reviews]);
 
   const displayName = lang === 'ar' ? provider.fullNameAr : provider.fullNameFr;
   const displayBio = lang === 'ar' ? provider.bioAr : provider.bioFr;
@@ -59,10 +121,17 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
                 {t.categories[provider.category]}
               </span>
               <span aria-hidden="true">·</span>
-              <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
-                <ShieldCheck className="w-4 h-4 shrink-0" />
-                <span>{t.verifiedCinLabel}</span>
-              </span>
+              {provider.verifiedBadge ? (
+                <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold">
+                  <ShieldCheck className="w-4 h-4 shrink-0" />
+                  <span>{t.verifiedCinLabel}</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-amber-700 font-semibold">
+                  <ShieldAlert className="w-4 h-4 shrink-0" />
+                  <span>{lang === 'ar' ? 'التحقق من CIN قيد المراجعة' : 'CIN en cours de vérification'}</span>
+                </span>
+              )}
               <span aria-hidden="true">·</span>
               <span
                 className={
@@ -138,7 +207,9 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
               <div className="text-xs text-slate-500">{t.experienceYears}</div>
               <div className="text-base font-bold tabular-nums text-slate-900 mt-0.5 flex items-center gap-1">
                 <Clock className="w-4 h-4 text-amber-600" />
-                <span>{provider.experienceYears} ans</span>
+                <span>
+                  {provider.experienceYears} {t.experienceYears}
+                </span>
               </div>
             </div>
           </div>
@@ -155,21 +226,54 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
           </div>
 
           {/* Verified Credentials Box */}
-          <div className="p-4 bg-emerald-50/50 border border-emerald-200 rounded-xl space-y-2.5">
-            <h3 className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-              <Award className="w-4 h-4 text-emerald-700 shrink-0" />
+          <div
+            className={`p-4 rounded-xl space-y-2.5 border ${
+              provider.verifiedBadge
+                ? 'bg-emerald-50/50 border-emerald-200'
+                : 'bg-amber-50/50 border-amber-200'
+            }`}
+          >
+            <h3
+              className={`text-xs font-bold flex items-center gap-1.5 ${
+                provider.verifiedBadge ? 'text-emerald-950' : 'text-amber-950'
+              }`}
+            >
+              <Award
+                className={`w-4 h-4 shrink-0 ${
+                  provider.verifiedBadge ? 'text-emerald-700' : 'text-amber-700'
+                }`}
+              />
               <span>{t.detailModalCredentialsTitle}</span>
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-              <div className="bg-white p-3 rounded-lg border border-emerald-100">
+              <div
+                className={`bg-white p-3 rounded-lg border ${
+                  provider.verifiedBadge ? 'border-emerald-100' : 'border-amber-100'
+                }`}
+              >
                 <div className="text-slate-500">{t.detailModalCinLabel}</div>
                 <div className="font-semibold text-slate-900 mt-0.5 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                  <span className="font-mono-tabular">{provider.cinNumberMasked}</span>
-                  <span className="text-emerald-700">({t.verifiedCinLabel})</span>
+                  {provider.verifiedBadge ? (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span className="font-mono-tabular">{provider.cinNumberMasked}</span>
+                      <span className="text-emerald-700">({t.verifiedCinLabel})</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                      <span className="text-amber-800">
+                        {lang === 'ar' ? 'قيد التحقق من الهوية' : 'Vérification en attente'}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
-              <div className="bg-white p-3 rounded-lg border border-emerald-100">
+              <div
+                className={`bg-white p-3 rounded-lg border ${
+                  provider.verifiedBadge ? 'border-emerald-100' : 'border-amber-100'
+                }`}
+              >
                 <div className="text-slate-500">{t.detailModalDiplomaLabel}</div>
                 <div className="font-semibold text-slate-900 mt-0.5">{displayDiploma}</div>
               </div>
@@ -217,30 +321,38 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
             <h3 className="text-sm font-bold text-slate-900">
               {t.detailModalReviewsTitle} ({provider.reviewCount})
             </h3>
-            <div className="space-y-3">
-              {provider.reviews.map((rev) => (
-                <div
-                  key={rev.id}
-                  className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5"
-                >
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="font-semibold text-slate-900">
-                      {rev.authorName}{' '}
-                      <span className="font-normal text-slate-500">· {rev.quartier}</span>
+            {displayedReviews.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                {lang === 'ar'
+                  ? 'لا توجد تقييمات مكتوبة بعد لهذا المعلم.'
+                  : 'Aucun avis écrit pour ce Maâlem pour le moment.'}
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {displayedReviews.map((rev) => (
+                  <div
+                    key={rev.id}
+                    className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-1.5"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="font-semibold text-slate-900">
+                        {rev.authorName}{' '}
+                        <span className="font-normal text-slate-500">· {rev.quartier}</span>
+                      </div>
+                      <div className="flex items-center gap-1 font-semibold text-slate-900 tabular-nums">
+                        <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+                        <span>{rev.rating.toFixed(1)}</span>
+                        <span className="text-slate-400 mx-1">·</span>
+                        <span className="text-slate-500 font-normal">{rev.date}</span>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 font-semibold text-slate-900 tabular-nums">
-                      <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
-                      <span>{rev.rating.toFixed(1)}</span>
-                      <span className="text-slate-400 mx-1">·</span>
-                      <span className="text-slate-500 font-normal">{rev.date}</span>
-                    </div>
+                    <p className="text-xs text-slate-700 leading-relaxed">
+                      {lang === 'ar' ? rev.commentAr : rev.commentFr}
+                    </p>
                   </div>
-                  <p className="text-xs text-slate-700 leading-relaxed">
-                    {lang === 'ar' ? rev.commentAr : rev.commentFr}
-                  </p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

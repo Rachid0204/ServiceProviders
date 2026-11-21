@@ -26,7 +26,6 @@ import type {
   VettedProvider,
 } from '../../utils/marketplace';
 import {
-  BOOTSTRAP_ADMIN_EMAIL,
   type AdminAnalyticsSummary,
   type AdminAuditLog,
   type AdminReviewItem,
@@ -131,6 +130,66 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
   const BackIcon = isAr ? ArrowRight : ArrowLeft;
   const pendingWithdrawalsCount = withdrawals.filter((w) => w.status === 'pending').length;
+
+  // Strict RBAC Gate: Do not render Admin console or operational data to unauthenticated or non-admin users
+  if (!isLiveAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-4">
+        <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 sm:p-8 shadow-sm space-y-5 text-center">
+          <div className="w-12 h-12 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center mx-auto">
+            <ShieldCheck className="w-6 h-6" />
+          </div>
+          <div className="space-y-1.5">
+            <h1 className="text-lg font-bold text-slate-900">
+              {isAr ? 'ولوج محصور بالإدارة' : 'Accès Administration Restreint'}
+            </h1>
+            <p className="text-xs text-slate-600 leading-relaxed">
+              {firebaseUser
+                ? isAr
+                  ? 'الحساب المتصل حالياً لا يملك صلاحيات المشرف الموثقة على Firestore.'
+                  : 'Le compte actuellement connecté ne dispose pas des privilèges administrateur vérifiés.'
+                : isAr
+                ? 'يرجى تسجيل الدخول بحساب مشرف موثق للوصول إلى لوحة التحكم والعمليات المالية.'
+                : 'Veuillez vous connecter avec un compte administrateur vérifié pour accéder à la console.'}
+            </p>
+          </div>
+          <div className="flex flex-col gap-2.5 pt-1">
+            {firebaseUser ? (
+              <button
+                type="button"
+                onClick={() => {
+                  void onSignOut();
+                }}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>{t.signOutBtn}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  void onGoogleSignIn();
+                }}
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>{isAr ? 'تسجيل دخول المشرف (Google)' : 'Connexion Administrateur Google'}</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onExitAdmin}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+            >
+              <BackIcon className="w-4 h-4" />
+              <span>{isAr ? 'العودة إلى المنصة' : 'Retour Marketplace'}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const navItems: Array<{
     id: AdminSectionId;
@@ -265,42 +324,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       <div className="p-4 border-t border-slate-200 space-y-2.5 text-xs">
         <div className="space-y-0.5">
           <div className="font-semibold text-slate-900 truncate">
-            {firebaseUser?.email || (isAr ? 'وضع المعاينة الإدارية' : 'Mode Aperçu Admin')}
+            {firebaseUser?.email}
           </div>
-          <div className="text-[11px] text-slate-500">
-            {isLiveAdmin
-              ? isAr
-                ? 'صلاحية Firestore مفعلة'
-                : 'Firestore Admin actif'
-              : isAr
-              ? `الحساب المخول: ${BOOTSTRAP_ADMIN_EMAIL}`
-              : `Admin autorisé : ${BOOTSTRAP_ADMIN_EMAIL}`}
+          <div className="text-[11px] text-emerald-700 font-medium">
+            {isAr ? 'صلاحية Firestore مفعلة' : 'Firestore Admin actif'}
           </div>
         </div>
 
-        {firebaseUser ? (
-          <button
-            type="button"
-            onClick={() => {
-              void onSignOut();
-            }}
-            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>{t.signOutBtn}</span>
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => {
-              void onGoogleSignIn();
-            }}
-            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
-          >
-            <LogIn className="w-3.5 h-3.5" />
-            <span>{isAr ? 'دخول المشرف (Google)' : 'Connexion Admin Google'}</span>
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => {
+            void onSignOut();
+          }}
+          className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          <span>{t.signOutBtn}</span>
+        </button>
       </div>
     </div>
   );
@@ -329,7 +369,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
       {/* Main Admin Workspace Viewport */}
       <div className="flex-1 min-w-0 flex flex-col">
-        {/* Top Breadcrumb Bar (SaaS Top Bar Contract: Breadcrumb Left, 2 Actions Right) */}
+        {/* Top Breadcrumb Bar */}
         <header className="sticky top-0 z-30 h-16 bg-white/95 backdrop-blur-xs border-b border-slate-200 px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-2 sm:gap-4">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
@@ -387,44 +427,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
 
         {/* Main Content Container */}
         <main className="flex-1 p-4 sm:p-6 lg:p-8 max-w-[1320px] w-full mx-auto space-y-6">
-          {/* Access Mode Notice & Action Feedback */}
-          {!isLiveAdmin && (
-            <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 lg:gap-4 text-xs">
-              <div className="text-slate-700">
-                <span className="font-bold text-slate-900">
-                  {isAr ? 'وضع المعاينة الإدارية المحلية' : 'Mode Aperçu Administration'}
-                </span>
-                <span className="mx-1.5 text-slate-400">·</span>
-                <span>
-                  {firebaseUser && firebaseUser.email !== BOOTSTRAP_ADMIN_EMAIL
-                    ? isAr
-                      ? `الحساب الحالي (${firebaseUser.email}) لا يملك صلاحيات المشرف على Firestore.`
-                      : `Le compte connecté (${firebaseUser.email}) n’a pas le rôle administrateur Firestore.`
-                    : isAr
-                    ? `جميع العمليات قابلة للتجربة فوراً. سجّل الدخول بحساب ${BOOTSTRAP_ADMIN_EMAIL} لمزامنة Firestore المباشرة.`
-                    : `Toutes les opérations sont testables immédiatement. Connectez-vous avec ${BOOTSTRAP_ADMIN_EMAIL} pour synchroniser en direct sur Firestore.`}
-                </span>
-              </div>
-              {!firebaseUser && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    void onGoogleSignIn();
-                  }}
-                  className="text-emerald-700 font-semibold hover:underline whitespace-nowrap shrink-0 cursor-pointer"
-                >
-                  {isAr ? 'تفعيل المزامنة المباشرة' : 'Activer sync Firestore'}
-                </button>
-              )}
-            </div>
-          )}
-
           {adminToast && (
             <div
               role="status"
-              className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center gap-2 text-xs font-semibold text-emerald-900"
+              className={`rounded-xl px-4 py-3 flex items-center gap-2 text-xs font-semibold border ${
+                adminToast.variant === 'error'
+                  ? 'bg-rose-50 border-rose-200 text-rose-900'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-900'
+              }`}
             >
-              <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+              <CheckCircle2
+                className={`w-4 h-4 shrink-0 ${
+                  adminToast.variant === 'error' ? 'text-rose-700' : 'text-emerald-700'
+                }`}
+              />
               <span>{isAr ? adminToast.ar : adminToast.fr}</span>
             </div>
           )}

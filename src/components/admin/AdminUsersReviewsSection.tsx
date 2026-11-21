@@ -398,7 +398,16 @@ export const AdminWithdrawalsSection: React.FC<AdminWithdrawalsSectionProps> = (
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs">
-            {withdrawals.map((w) => (
+            {withdrawals.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="py-10 px-4 text-center text-slate-500">
+                  {isAr
+                    ? 'لا توجد طلبات سحب مسجلة حالياً.'
+                    : 'Aucune demande de retrait enregistrée pour le moment.'}
+                </td>
+              </tr>
+            ) : (
+              withdrawals.map((w) => (
               <tr key={w.id} className="hover:bg-slate-50/80 transition-colors">
                 <td className="py-3 px-4 font-mono-tabular whitespace-nowrap">
                   <div className="font-bold text-slate-900">#{w.id.toUpperCase()}</div>
@@ -469,7 +478,8 @@ export const AdminWithdrawalsSection: React.FC<AdminWithdrawalsSectionProps> = (
                   </div>
                 </td>
               </tr>
-            ))}
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -504,13 +514,21 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
   );
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
+  React.useEffect(() => {
+    setPlatformFeePct(settings.platformFeePct);
+    setMinWithdrawalMad(settings.minWithdrawalMad);
+    setAutoRefundOnProviderCancel(settings.autoRefundOnProviderCancel);
+    setRequireKycForEscrowPayout(settings.requireKycForEscrowPayout);
+    setSupportWhatsAppPhone(settings.supportWhatsAppPhone);
+  }, [settings]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     try {
       await onSaveSettings({
-        platformFeePct: Math.max(0, Math.min(30, Number(platformFeePct))),
-        minWithdrawalMad: Math.max(50, Math.min(10000, Number(minWithdrawalMad))),
+        platformFeePct: Math.max(0, Math.min(30, Math.round(Number(platformFeePct)))),
+        minWithdrawalMad: Math.max(50, Math.min(10000, Math.round(Number(minWithdrawalMad)))),
         autoRefundOnProviderCancel,
         requireKycForEscrowPayout,
         supportWhatsAppPhone: supportWhatsAppPhone.trim() || '+212661428910',

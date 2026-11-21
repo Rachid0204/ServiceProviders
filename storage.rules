@@ -13,8 +13,19 @@ service firebase.storage {
       return request.auth != null;
     }
 
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
     function isOwner(uid) {
-      return isSignedIn() && request.auth.uid == uid;
+      return isVerifiedUser() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        request.auth.token.email == 'wahbi.rachid@gmail.com' ||
+        firestore.exists(/databases/ai-studio-721fde67-a110-4e25-bcc2-2f011a526460/documents/admins/$(request.auth.uid))
+      );
     }
 
     function isValidImageUpload() {
@@ -24,37 +35,38 @@ service firebase.storage {
     }
 
     function isBookingParticipant(bookingId) {
-      return isSignedIn() && (
-        firestore.get(/databases/ai-studio-721fde67-a110-4e25-bcc2-2f011a526460/documents/bookings/$(bookingId)).data.clientId == request.auth.uid ||
-        firestore.get(/databases/ai-studio-721fde67-a110-4e25-bcc2-2f011a526460/documents/bookings/$(bookingId)).data.providerId == request.auth.uid
-      );
+      return isVerifiedUser() &&
+        firestore.exists(/databases/ai-studio-721fde67-a110-4e25-bcc2-2f011a526460/documents/bookings/$(bookingId)) && (
+          firestore.get(/databases/ai-studio-721fde67-a110-4e25-bcc2-2f011a526460/documents/bookings/$(bookingId)).data.clientId == request.auth.uid ||
+          firestore.get(/databases/ai-studio-721fde67-a110-4e25-bcc2-2f011a526460/documents/bookings/$(bookingId)).data.providerId == request.auth.uid
+        );
     }
 
     // 3. Public Provider Portfolio Images (/providers/{uid}/portfolio/{fileName})
-    // Anyone can read provider portfolio images; only the provider owner can upload/update their own images.
+    // Anyone can read provider portfolio images; only the verified provider owner can upload/update their own images.
     match /providers/{uid}/portfolio/{fileName} {
       allow read: if true;
       allow write: if isOwner(uid) && isValidImageUpload();
     }
 
     // 4. Private User Avatar / Profile Uploads (/users/{uid}/{fileName})
-    // Users can only read/write their own user files.
+    // Users can only read/write their own user files; admins can read for verification.
     match /users/{uid}/{fileName} {
-      allow read: if isOwner(uid);
+      allow read: if isOwner(uid) || isAdmin();
       allow write: if isOwner(uid) && isValidImageUpload();
     }
 
     // 5. Booking Problem Photos (/bookings/{bookingId}/{userId}/{fileName})
-    // Only the involved booking participants can read; only the authenticated uploader can write.
+    // Only the involved booking participants or admins can read; only the authenticated uploader can write.
     match /bookings/{bookingId}/{userId}/{fileName} {
-      allow read: if isOwner(userId) || isBookingParticipant(bookingId);
+      allow read: if isOwner(userId) || isBookingParticipant(bookingId) || isAdmin();
       allow write: if isOwner(userId) && isValidImageUpload();
     }
 
     // 6. Real-Time Chat Photo Attachments (/chats/{bookingId}/{userId}/{fileName})
-    // Only the involved booking participants can read or send chat attachments.
+    // Only the involved booking participants (or admin read) can read or send chat attachments.
     match /chats/{bookingId}/{userId}/{fileName} {
-      allow read: if isOwner(userId) || isBookingParticipant(bookingId);
+      allow read: if isOwner(userId) || isBookingParticipant(bookingId) || isAdmin();
       allow write: if isOwner(userId) && isBookingParticipant(bookingId) && isValidImageUpload();
     }
   }

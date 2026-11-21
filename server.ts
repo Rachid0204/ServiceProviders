@@ -15,7 +15,36 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT || 8080);
 
+app.disable('x-powered-by');
 app.use(express.json({ limit: '64kb' }));
+
+// Baseline HTTP security headers
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'geolocation=(self), camera=(), microphone=()');
+  next();
+});
+
+// Lightweight in-memory sliding-window rate limiter for /api/* routes (120 req/min per IP)
+const apiRateBuckets = new Map<string, { count: number; resetAt: number }>();
+app.use('/api', (req, res, next) => {
+  const now = Date.now();
+  const key = req.ip || 'unknown';
+  const entry = apiRateBuckets.get(key);
+  if (!entry || entry.resetAt <= now) {
+    apiRateBuckets.set(key, { count: 1, resetAt: now + 60_000 });
+    next();
+    return;
+  }
+  entry.count += 1;
+  if (entry.count > 120) {
+    res.status(429).json({ error: 'Too many requests. Please retry shortly.' });
+    return;
+  }
+  next();
+});
 
 // Health check for Google Cloud Run
 app.get('/api/health', (_req, res) => {
@@ -85,26 +114,11 @@ app.post('/api/validate-request', (req, res) => {
   res.json(validation);
 });
 
-// Server-boundary CMI Escrow payment intent preparation endpoint (ready for live CMI/Stripe credentials)
-app.post('/api/payments/cmi-intent', (req, res) => {
-  const bookingRef = String(req.body?.bookingRef ?? '').trim();
-  const amountMad = Math.round(Number(req.body?.amountMad ?? 0));
-  if (!bookingRef || bookingRef.length < 3 || bookingRef.length > 32) {
-    res.status(400).json({ error: 'Invalid bookingRef' });
-    return;
-  }
-  if (!Number.isFinite(amountMad) || amountMad < 50 || amountMad > 100000) {
-    res.status(400).json({ error: 'Amount must be between 50 and 100000 MAD' });
-    return;
-  }
-  const gatewayConfigured = Boolean(process.env.CMI_MERCHANT_ID && process.env.CMI_STORE_KEY);
-  res.json({
-    bookingRef,
-    amountMad,
-    currency: 'MAD',
-    paymentStatus: 'escrow_held',
-    mode: gatewayConfigured ? 'live_cmi' : 'sandbox_escrow',
-    escrowIntentId: `cmi_${bookingRef.toLowerCase()}_${Date.now()}`,
+// Live CMI payment gateway endpoint requires authenticated Firebase ID token verification & CMI HMAC signing
+app.post('/api/payments/cmi-intent', (_req, res) => {
+  res.status(501).json({
+    error:
+      'Live CMI gateway integration is not enabled on this endpoint. Authenticated server-side CMI signing and webhook verification are required before activating live charges.',
   });
 });
 
@@ -118,7 +132,8 @@ async function startServer() {
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(__dirname, 'dist');
+    const distPath =
+      path.basename(__dirname) === 'dist' ? __dirname : path.join(__dirname, 'dist');
     app.use(express.static(distPath));
 
     app.get('*', (req, res, next) => {

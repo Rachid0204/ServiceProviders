@@ -14,6 +14,9 @@ import {
   getNextPaymentStatus,
   calculateEscrowSplit,
   computeCancellationSettlement,
+  generateBookingIds,
+  getTodayIsoDate,
+  isSafeImageUrl,
 } from './marketplace';
 import { VETTED_PROVIDERS } from '../data/providers';
 
@@ -286,4 +289,38 @@ test('Phase 1 Cancellation Auto-Refund: computeCancellationSettlement automatica
   assert.equal(codCancel.status, 'cancelled');
   assert.equal(codCancel.paymentStatus, 'unpaid_cod');
   assert.equal(codCancel.refundedClientMad, 0);
+
+  // Respects autoRefundOnProviderCancel=false for provider cancellations
+  const manualReviewCancel = computeCancellationSettlement(
+    {
+      paymentMethod: 'cmi_escrow',
+      paymentStatus: 'escrow_held',
+      estimatedMad: 300,
+    },
+    'provider',
+    'Urgence familiale',
+    false
+  );
+  assert.equal(manualReviewCancel.status, 'cancelled');
+  assert.equal(manualReviewCancel.paymentStatus, 'escrow_held');
+  assert.equal(manualReviewCancel.refundedClientMad, 0);
 });
+
+test('Security & Utility Helpers: isSafeImageUrl, generateBookingIds, and getTodayIsoDate', () => {
+  assert.equal(isSafeImageUrl('https://firebasestorage.googleapis.com/v0/b/app/o/img.jpg'), true);
+  assert.equal(isSafeImageUrl('/src/assets/images/plumber.jpg'), true);
+  assert.equal(isSafeImageUrl('javascript:alert(1)'), false);
+  assert.equal(isSafeImageUrl('data:text/html,<script>alert(1)</script>'), false);
+  assert.equal(isSafeImageUrl('http://insecure.example.com/a.jpg'), false);
+  assert.equal(isSafeImageUrl(''), false);
+
+  const idsA = generateBookingIds();
+  const idsB = generateBookingIds();
+  assert.match(idsA.bookingId, /^booking-[0-9a-f]{16}$/);
+  assert.match(idsA.bookingRef, /^MK-[0-9A-F]{6}$/);
+  assert.notEqual(idsA.bookingId, idsB.bookingId);
+
+  const today = getTodayIsoDate();
+  assert.match(today, /^\d{4}-\d{2}-\d{2}$/);
+});
+
