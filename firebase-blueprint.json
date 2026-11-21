@@ -1,0 +1,730 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Represents a registered Client, Service Provider (Maâlem), or Dual-Role ('both') user on Moul L'Khedma.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "role": {
+          "type": "string",
+          "description": "Onboarding role: client, provider (Maâlem), or both (dual-role user)",
+          "enum": ["client", "provider", "both"]
+        },
+        "fullName": {
+          "type": "string",
+          "description": "Full display name of the user",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "phone": {
+          "type": "string",
+          "description": "Moroccan phone number in +212 format",
+          "minLength": 12,
+          "maxLength": 16,
+          "pattern": "^\\+212[5-7][0-9]{8}$"
+        },
+        "city": {
+          "type": "string",
+          "description": "Primary Moroccan city of operation or residence",
+          "enum": ["Casablanca", "Rabat", "Marrakech", "Tangier", "Fes", "Agadir"]
+        },
+        "neighborhood": {
+          "type": "string",
+          "description": "Local neighborhood / quartier (e.g., Maârif, Agdal, Guéliz)",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "languagePref": {
+          "type": "string",
+          "description": "Preferred UI language (fr for French LTR, ar for Arabic RTL)",
+          "enum": ["fr", "ar"]
+        },
+        "verifiedBadge": {
+          "type": "boolean",
+          "description": "Whether the user's identity/CIN and trade references have been verified"
+        },
+        "specialty": {
+          "type": "string",
+          "description": "Primary trade category for service providers, or none for clients",
+          "enum": ["Plomberie", "Électricité", "Peinture", "Soutien Scolaire", "Ménage", "Climatisation", "none"]
+        },
+        "hourlyRateMad": {
+          "type": "number",
+          "description": "Standard hourly rate in Moroccan Dirhams (MAD / DH)"
+        },
+        "bio": {
+          "type": "string",
+          "description": "Professional summary and trade experience",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was created"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the profile was last updated"
+        }
+      },
+      "required": [
+        "uid",
+        "role",
+        "fullName",
+        "phone",
+        "city",
+        "neighborhood",
+        "languagePref",
+        "verifiedBadge",
+        "createdAt"
+      ]
+    },
+    "ProviderProfile": {
+      "title": "ProviderProfile",
+      "description": "Public service provider profile in providers/{uid} linked to users/{uid}.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Provider UID matching users/{uid}",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fullNameFr": {
+          "type": "string",
+          "description": "Provider display name in French",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "fullNameAr": {
+          "type": "string",
+          "description": "Provider display name in Arabic",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "category": {
+          "type": "string",
+          "description": "Service category",
+          "enum": ["Plomberie", "Électricité", "Peinture", "Soutien Scolaire", "Ménage", "Climatisation"]
+        },
+        "bioFr": {
+          "type": "string",
+          "description": "French biography",
+          "minLength": 10,
+          "maxLength": 600
+        },
+        "bioAr": {
+          "type": "string",
+          "description": "Arabic biography",
+          "minLength": 10,
+          "maxLength": 600
+        },
+        "hourlyRateMAD": {
+          "type": "number",
+          "description": "Hourly rate in Moroccan Dirhams (MAD)"
+        },
+        "fixedVisitFeeMAD": {
+          "type": "number",
+          "description": "Fixed callout/visit fee in Moroccan Dirhams (MAD)"
+        },
+        "experienceYears": {
+          "type": "number",
+          "description": "Years of trade experience"
+        },
+        "skills": {
+          "type": "array",
+          "description": "Bounded list of trade skills (max 10)"
+        },
+        "portfolioImages": {
+          "type": "array",
+          "description": "Bounded list of portfolio image URLs (max 6)"
+        },
+        "ratingAvg": {
+          "type": "number",
+          "description": "Average review score (0 to 5)"
+        },
+        "reviewCount": {
+          "type": "number",
+          "description": "Total number of verified reviews"
+        },
+        "isAvailableNow": {
+          "type": "boolean",
+          "description": "Real-time availability toggle"
+        },
+        "verifiedBadge": {
+          "type": "boolean",
+          "description": "Verified CIN badge status"
+        },
+        "phone": {
+          "type": "string",
+          "description": "Provider Moroccan contact phone number in +212 format for WhatsApp and booking coordination",
+          "minLength": 12,
+          "maxLength": 16,
+          "pattern": "^\\+212[5-7][0-9]{8}$"
+        },
+        "completedJobs": {
+          "type": "number",
+          "description": "Count of completed missions on the platform"
+        },
+        "lastReviewBookingId": {
+          "type": "string",
+          "description": "Booking ID of the latest atomic review aggregation write",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "location": {
+          "type": "object",
+          "description": "Geolocation coordinates and city/quartier metadata (`lat`, `lng`, `city`, `quartier`)"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of provider profile creation"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last provider profile update"
+        }
+      },
+      "required": [
+        "uid",
+        "fullNameFr",
+        "fullNameAr",
+        "category",
+        "bioFr",
+        "bioAr",
+        "hourlyRateMAD",
+        "fixedVisitFeeMAD",
+        "experienceYears",
+        "skills",
+        "portfolioImages",
+        "ratingAvg",
+        "reviewCount",
+        "isAvailableNow",
+        "verifiedBadge",
+        "location",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Publicly readable client review in reviews/{reviewId} linked to a completed booking.",
+      "type": "object",
+      "properties": {
+        "bookingId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "quartier": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "rating": {
+          "type": "number"
+        },
+        "comment": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "bookingId",
+        "providerId",
+        "clientId",
+        "authorName",
+        "quartier",
+        "rating",
+        "comment",
+        "createdAt"
+      ]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Full service booking in bookings/{bookingId} with lifecycle status, escrow 90/10 split/fee tracking, cancellation/reschedule audit, and review.",
+      "type": "object",
+      "properties": {
+        "bookingRef": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 32
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "clientPhone": {
+          "type": "string",
+          "minLength": 12,
+          "maxLength": 16,
+          "pattern": "^\\+212[5-7][0-9]{8}$"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "providerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "providerPhone": {
+          "type": "string",
+          "minLength": 12,
+          "maxLength": 16,
+          "pattern": "^\\+212[5-7][0-9]{8}$"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["Plomberie", "Électricité", "Peinture", "Soutien Scolaire", "Ménage", "Climatisation"]
+        },
+        "serviceType": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 120
+        },
+        "city": {
+          "type": "string",
+          "enum": ["Casablanca", "Rabat", "Marrakech", "Tangier", "Fes", "Agadir"]
+        },
+        "neighborhood": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "addressPin": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 160
+        },
+        "description": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 600
+        },
+        "problemPhotoUrl": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "preferredDate": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 32
+        },
+        "preferredTimeSlot": {
+          "type": "string",
+          "enum": ["09:00 - 12:00", "14:00 - 17:00", "18:00 - 20:00"]
+        },
+        "paymentMethod": {
+          "type": "string",
+          "enum": ["cash_on_completion", "cmi_escrow"]
+        },
+        "paymentStatus": {
+          "type": "string",
+          "enum": ["unpaid_cod", "escrow_held", "paid", "refunded", "disputed_split"]
+        },
+        "estimatedMad": {
+          "type": "number"
+        },
+        "providerPayoutMad": {
+          "type": "number",
+          "description": "90% net payout to the Maâlem in MAD (or dispute split payout)"
+        },
+        "platformFeeMad": {
+          "type": "number",
+          "description": "10% platform commission fee in MAD"
+        },
+        "refundedClientMad": {
+          "type": "number",
+          "description": "Amount refunded to the client in MAD upon cancellation or dispute split"
+        },
+        "cancellationReason": {
+          "type": "string",
+          "maxLength": 400
+        },
+        "cancelledBy": {
+          "type": "string",
+          "enum": ["client", "provider", "admin"]
+        },
+        "rescheduleNote": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "accepted", "in_progress", "completed", "reviewed", "cancelled"]
+        },
+        "reviewRating": {
+          "type": "number"
+        },
+        "reviewComment": {
+          "type": "string",
+          "maxLength": 500
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "bookingRef",
+        "clientId",
+        "clientName",
+        "clientPhone",
+        "providerId",
+        "providerName",
+        "providerPhone",
+        "category",
+        "serviceType",
+        "city",
+        "neighborhood",
+        "addressPin",
+        "description",
+        "preferredDate",
+        "preferredTimeSlot",
+        "paymentMethod",
+        "paymentStatus",
+        "estimatedMad",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Real-time chat message in chats/{bookingId}/messages/{messageId}.",
+      "type": "object",
+      "properties": {
+        "bookingId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "senderRole": {
+          "type": "string",
+          "enum": ["client", "provider"]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "photoUrl": {
+          "type": "string",
+          "maxLength": 2048
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "bookingId",
+        "clientId",
+        "providerId",
+        "senderId",
+        "senderName",
+        "senderRole",
+        "text",
+        "createdAt"
+      ]
+    },
+    "AdminLog": {
+      "title": "AdminLog",
+      "description": "Append-only audit trail entry in adminLogs/{logId} recording administrative actions (CIN verification, CMI escrow release/refund/split, withdrawals, settings, review moderation).",
+      "type": "object",
+      "properties": {
+        "adminUid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the administrator who executed the action",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "adminEmail": {
+          "type": "string",
+          "description": "Verified email address of the administrator",
+          "minLength": 5,
+          "maxLength": 160
+        },
+        "actionType": {
+          "type": "string",
+          "description": "Categorized admin action type",
+          "enum": [
+            "cin_approved",
+            "cin_revoked",
+            "escrow_released",
+            "escrow_refunded",
+            "dispute_split",
+            "withdrawal_updated",
+            "settings_updated",
+            "booking_override",
+            "review_deleted",
+            "availability_toggled"
+          ]
+        },
+        "targetCollection": {
+          "type": "string",
+          "description": "Target Firestore collection affected by the admin action",
+          "enum": ["users", "providers", "bookings", "reviews", "withdrawals", "settings"]
+        },
+        "targetId": {
+          "type": "string",
+          "description": "Target document ID affected by the admin action",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "summary": {
+          "type": "string",
+          "description": "Human-readable audit summary describing before/after state",
+          "minLength": 4,
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Authoritative server timestamp of the audit event"
+        }
+      },
+      "required": [
+        "adminUid",
+        "adminEmail",
+        "actionType",
+        "targetCollection",
+        "targetId",
+        "summary",
+        "createdAt"
+      ]
+    },
+    "WithdrawalRequest": {
+      "title": "WithdrawalRequest",
+      "description": "Provider payout withdrawal request in withdrawals/{withdrawalId} managed by administrators (approve, freeze, reject).",
+      "type": "object",
+      "properties": {
+        "providerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "providerName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80
+        },
+        "city": {
+          "type": "string",
+          "enum": ["Casablanca", "Rabat", "Marrakech", "Tangier", "Fes", "Agadir"]
+        },
+        "bankName": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "ribMasked": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 40
+        },
+        "amountMad": {
+          "type": "number"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "frozen", "rejected"]
+        },
+        "adminNote": {
+          "type": "string",
+          "maxLength": 300
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "providerId",
+        "providerName",
+        "city",
+        "bankName",
+        "ribMasked",
+        "amountMad",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SystemSettings": {
+      "title": "SystemSettings",
+      "description": "Platform configuration stored in systemSettings/{configId} (commission rate, CMI escrow policies, auto-refund rules, KYC verification policy).",
+      "type": "object",
+      "properties": {
+        "platformFeePct": {
+          "type": "number"
+        },
+        "minWithdrawalMad": {
+          "type": "number"
+        },
+        "autoRefundOnProviderCancel": {
+          "type": "boolean"
+        },
+        "requireKycForEscrowPayout": {
+          "type": "boolean"
+        },
+        "supportWhatsAppPhone": {
+          "type": "string",
+          "minLength": 12,
+          "maxLength": 16,
+          "pattern": "^\\+212[5-7][0-9]{8}$"
+        },
+        "updatedByEmail": {
+          "type": "string",
+          "minLength": 5,
+          "maxLength": 160
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "platformFeePct",
+        "minWithdrawalMad",
+        "autoRefundOnProviderCancel",
+        "requireKycForEscrowPayout",
+        "supportWhatsAppPhone",
+        "updatedByEmail",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": {
+        "$ref": "#/entities/UserProfile"
+      },
+      "description": "Stores private user profiles (client, provider, or both). Users can only edit their own users/{uid} document; verified admins can read and manage CIN verification."
+    },
+    "/providers/{uid}": {
+      "schema": {
+        "$ref": "#/entities/ProviderProfile"
+      },
+      "description": "Stores publicly readable marketplace provider profiles linked to users/{uid}."
+    },
+    "/reviews/{reviewId}": {
+      "schema": {
+        "$ref": "#/entities/Review"
+      },
+      "description": "Stores publicly readable client reviews for providers."
+    },
+    "/bookings/{bookingId}": {
+      "schema": {
+        "$ref": "#/entities/Booking"
+      },
+      "description": "Stores service bookings with 90/10 escrow split, cancellation, and reschedule tracking."
+    },
+    "/chats/{bookingId}/messages/{messageId}": {
+      "schema": {
+        "$ref": "#/entities/ChatMessage"
+      },
+      "description": "Real-time in-app chat messages."
+    },
+    "/adminLogs/{logId}": {
+      "schema": {
+        "$ref": "#/entities/AdminLog"
+      },
+      "description": "Append-only administrative audit trail."
+    },
+    "/withdrawals/{withdrawalId}": {
+      "schema": {
+        "$ref": "#/entities/WithdrawalRequest"
+      },
+      "description": "Provider payout withdrawal requests managed by verified administrators."
+    },
+    "/systemSettings/{configId}": {
+      "schema": {
+        "$ref": "#/entities/SystemSettings"
+      },
+      "description": "Platform configuration and escrow/commission parameters readable by authenticated users and editable exclusively by verified administrators."
+    }
+  }
+}

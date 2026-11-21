@@ -1,0 +1,6 @@
+{
+  "name": "Moul L'Khedma (مول الخدمة)",
+  "description": "Bilingual French/Arabic Moroccan service marketplace connecting clients with vetted local Maâlems (plumbers, electricians, painters, tutors, cleaners, appliance repair).",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
