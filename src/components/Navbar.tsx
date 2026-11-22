@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Globe,
   Menu,
@@ -16,34 +17,8 @@ import {
   IdCard,
   Wallet,
 } from 'lucide-react';
-import type { User } from 'firebase/auth';
-import type { LanguageCode, UserProfileRecord, UserRole } from '../utils/marketplace';
-import type { Translations } from '../i18n/translations';
-import { canExploreMarketplace } from '../utils/authHelpers';
-import type { ProviderTab } from './dashboards/ProviderDashboard';
-
-export type AppView = 'marketplace' | 'dashboard' | 'provider' | 'profile' | 'admin';
-
-interface NavbarProps {
-  lang: LanguageCode;
-  t: Translations;
-  appView: AppView;
-  providerTab?: ProviderTab;
-  firebaseUser: User | null;
-  isVerified: boolean;
-  userProfile: UserProfileRecord | null;
-  signupRoleIntent: UserRole | null;
-  hasAdminAccess: boolean;
-  clientActiveCount: number;
-  providerPendingCount: number;
-  openJobsCount: number;
-  onNavigate: (view: AppView, anchor?: string) => void;
-  onSelectProviderTab?: (tab: ProviderTab) => void;
-  onOpenPostJob?: () => void;
-  onToggleLanguage: () => void;
-  onOpenAuth: (intent: UserRole) => void;
-  onSignOut: () => Promise<void>;
-}
+import { useMarketplace } from '../app/providers/MarketplaceContext';
+import { ROUTE_PATHS, getProviderTabFromPathname } from '../app/routePaths';
 
 function getInitials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -52,34 +27,35 @@ function getInitials(name: string): string {
   return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
-export const Navbar: React.FC<NavbarProps> = ({
-  lang,
-  t,
-  appView,
-  providerTab = 'jobs',
-  firebaseUser,
-  isVerified,
-  userProfile,
-  signupRoleIntent,
-  hasAdminAccess,
-  clientActiveCount,
-  providerPendingCount,
-  openJobsCount,
-  onNavigate,
-  onSelectProviderTab,
-  onOpenPostJob,
-  onToggleLanguage,
-  onOpenAuth,
-  onSignOut,
-}) => {
-  const isAr = lang === 'ar';
+export const Navbar: React.FC = () => {
+  const {
+    lang,
+    t,
+    isAr,
+    firebaseUser,
+    isVerified,
+    userProfile,
+    effectiveRole,
+    isPureProvider,
+    canExplore,
+    hasAdminAccess,
+    clientActiveCount,
+    providerPendingCount,
+    openJobsCount,
+    toggleLanguage,
+    setAuthModalIntent,
+    setIsPostJobModalOpen,
+    signOutUser,
+  } = useMarketplace();
+
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const effectiveRole: UserRole | null = userProfile?.role ?? signupRoleIntent ?? null;
-  const isPureProvider = Boolean(firebaseUser && effectiveRole === 'provider');
   const isDoubleAccount = Boolean(firebaseUser && effectiveRole === 'both');
   const isClientCapable = Boolean(
     firebaseUser && (!effectiveRole || effectiveRole === 'client' || effectiveRole === 'both')
@@ -87,7 +63,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   const isProviderCapable = Boolean(
     firebaseUser && (effectiveRole === 'provider' || effectiveRole === 'both')
   );
-  const canExplore = !firebaseUser || canExploreMarketplace(effectiveRole);
+
+  const activeProviderTab = getProviderTabFromPathname(location.pathname);
+  const isProviderRoute = location.pathname.startsWith(ROUTE_PATHS.PROVIDER_ROOT);
 
   const displayName =
     userProfile?.fullName ||
@@ -110,6 +88,12 @@ export const Navbar: React.FC<NavbarProps> = ({
       : isAr
       ? 'زبون'
       : 'Client';
+
+  // Close menus on route change
+  useEffect(() => {
+    setDropdownOpen(false);
+    setMobileMenuOpen(false);
+  }, [location.pathname, location.search]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -134,42 +118,33 @@ export const Navbar: React.FC<NavbarProps> = ({
   const handleSignOutClick = async () => {
     setIsSigningOut(true);
     try {
-      await onSignOut();
+      await signOutUser();
       setDropdownOpen(false);
       setMobileMenuOpen(false);
-      onNavigate('marketplace');
+      navigate(ROUTE_PATHS.HOME, { replace: true });
     } finally {
       setIsSigningOut(false);
     }
   };
 
-  const navTo = (view: AppView, anchor?: string) => {
-    setDropdownOpen(false);
-    setMobileMenuOpen(false);
-    onNavigate(view, anchor);
-  };
-
-  const goToProviderTab = (tab: ProviderTab) => {
-    setDropdownOpen(false);
-    setMobileMenuOpen(false);
-    onSelectProviderTab?.(tab);
-    onNavigate('provider');
-  };
+  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+    `inline-flex items-center gap-1.5 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 ${
+      isActive ? 'text-emerald-700 font-semibold' : ''
+    }`;
 
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-xs border-b border-slate-200">
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 sm:gap-5 px-4 sm:px-6 lg:px-8 h-16">
-        {/* Zone 1: Brand Wordmark (routes pure Maâlem to /provider, others to /) */}
-        <button
-          type="button"
-          onClick={() => navTo(isPureProvider ? 'provider' : 'marketplace')}
-          className="inline-flex items-center gap-2 text-base sm:text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0 cursor-pointer"
+        {/* Zone 1: Brand Wordmark (routes pure Maâlem to /provider/dashboard, others to /) */}
+        <Link
+          to={isPureProvider ? ROUTE_PATHS.PROVIDER_DASHBOARD : ROUTE_PATHS.HOME}
+          className="inline-flex items-center gap-2 text-base sm:text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0"
         >
           <span className="w-7 h-7 rounded-lg bg-emerald-700 text-white inline-flex items-center justify-center text-xs font-extrabold">
             M
           </span>
           <span>{t.brandName}</span>
-        </button>
+        </Link>
 
         {/* Zone 2: Strict Role-Aware Desktop Primary Navigation */}
         <nav
@@ -178,38 +153,35 @@ export const Navbar: React.FC<NavbarProps> = ({
         >
           {!firebaseUser ? (
             <>
-              <button
-                type="button"
-                onClick={() => navTo('marketplace', 'providers')}
-                className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  appView === 'marketplace' ? 'text-slate-900 font-semibold' : ''
-                }`}
-              >
+              <NavLink to={ROUTE_PATHS.SERVICES} className={navLinkClass}>
                 {t.navProviders}
-              </button>
-              <button
-                type="button"
-                onClick={() => navTo('marketplace', 'how-it-works')}
-                className="hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              </NavLink>
+              <Link
+                to={`${ROUTE_PATHS.HOME}#how-it-works`}
+                className="hover:text-slate-900 transition-colors whitespace-nowrap shrink-0"
               >
                 {isAr ? 'كيف تعمل المنصة' : 'Comment ça marche'}
-              </button>
+              </Link>
             </>
           ) : !isVerified ? (
-            <span className="text-xs font-medium text-amber-700">
+            <Link
+              to={ROUTE_PATHS.VERIFY_EMAIL}
+              className="text-xs font-medium text-amber-700 hover:underline"
+            >
               {isAr ? 'في انتظار تفعيل البريد الإلكتروني' : 'Vérification e-mail en attente'}
-            </span>
+            </Link>
           ) : isPureProvider ? (
             /* Pure Maâlem Navigation: ZERO "Explorer other Maâlems" link! */
             <>
-              <button
-                type="button"
-                onClick={() => goToProviderTab('jobs')}
-                className={`inline-flex items-center gap-1.5 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  appView === 'provider' && providerTab === 'jobs'
-                    ? 'text-emerald-700 font-semibold'
-                    : ''
-                }`}
+              <NavLink
+                to={ROUTE_PATHS.PROVIDER_DASHBOARD}
+                className={() =>
+                  `inline-flex items-center gap-1.5 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 ${
+                    isProviderRoute && activeProviderTab === 'jobs'
+                      ? 'text-emerald-700 font-semibold'
+                      : ''
+                  }`
+                }
               >
                 <span>{isAr ? 'طلبات الزبناء' : 'Offres Clients'}</span>
                 {openJobsCount > 0 && (
@@ -217,92 +189,53 @@ export const Navbar: React.FC<NavbarProps> = ({
                     {openJobsCount}
                   </span>
                 )}
-              </button>
-              <button
-                type="button"
-                onClick={() => goToProviderTab('missions')}
-                className={`inline-flex items-center gap-1.5 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  appView === 'provider' && providerTab === 'missions'
-                    ? 'text-emerald-700 font-semibold'
-                    : ''
-                }`}
-              >
+              </NavLink>
+              <NavLink to={ROUTE_PATHS.PROVIDER_MISSIONS} className={navLinkClass}>
                 <span>{isAr ? 'مهامي' : 'Mes Missions'}</span>
                 {providerPendingCount > 0 && (
                   <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-900 tabular-nums">
                     {providerPendingCount}
                   </span>
                 )}
-              </button>
-              <button
-                type="button"
-                onClick={() => goToProviderTab('card')}
-                className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  appView === 'provider' && providerTab === 'card'
-                    ? 'text-emerald-700 font-semibold'
-                    : ''
-                }`}
-              >
+              </NavLink>
+              <NavLink to={ROUTE_PATHS.PROVIDER_CARD} className={navLinkClass}>
                 {isAr ? 'بطاقتي المهنية' : 'Ma Fiche Maâlem'}
-              </button>
-              <button
-                type="button"
-                onClick={() => goToProviderTab('earnings')}
-                className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                  appView === 'provider' && providerTab === 'earnings'
-                    ? 'text-emerald-700 font-semibold'
-                    : ''
-                }`}
-              >
+              </NavLink>
+              <NavLink to={ROUTE_PATHS.PROVIDER_EARNINGS} className={navLinkClass}>
                 {isAr ? 'الأرباح' : 'Revenus'}
-              </button>
+              </NavLink>
               {hasAdminAccess && (
-                <button
-                  type="button"
-                  onClick={() => navTo('admin')}
-                  className="hover:text-emerald-700 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                >
+                <NavLink to={ROUTE_PATHS.ADMIN_DASHBOARD} className={navLinkClass}>
                   {t.navAdmin}
-                </button>
+                </NavLink>
               )}
             </>
           ) : (
             /* Client or Double Account ('both') Navigation */
             <>
               {canExplore && (
-                <button
-                  type="button"
-                  onClick={() => navTo('marketplace', 'providers')}
-                  className={`hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    appView === 'marketplace' ? 'text-emerald-700 font-semibold' : ''
-                  }`}
-                >
+                <NavLink to={ROUTE_PATHS.SERVICES} className={navLinkClass}>
                   {isAr ? 'استكشف المعلمين' : 'Explorer les Maâlems'}
-                </button>
+                </NavLink>
               )}
               {isClientCapable && (
-                <button
-                  type="button"
-                  onClick={() => navTo('dashboard')}
-                  className={`inline-flex items-center gap-1.5 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    appView === 'dashboard' ? 'text-emerald-700 font-semibold' : ''
-                  }`}
-                >
+                <NavLink to={ROUTE_PATHS.CUSTOMER_DASHBOARD} className={navLinkClass}>
                   <span>{isAr ? 'فضاء الزبون' : 'Espace Client'}</span>
                   {clientActiveCount > 0 && (
                     <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 tabular-nums">
                       {clientActiveCount}
                     </span>
                   )}
-                </button>
+                </NavLink>
               )}
               {isDoubleAccount && (
-                <button
-                  type="button"
-                  onClick={() => navTo('provider')}
-                  className={`inline-flex items-center gap-1.5 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    appView === 'provider' ? 'text-emerald-700 font-semibold' : ''
-                  }`}
+                <NavLink
+                  to={ROUTE_PATHS.PROVIDER_DASHBOARD}
+                  className={() =>
+                    `inline-flex items-center gap-1.5 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 ${
+                      isProviderRoute ? 'text-emerald-700 font-semibold' : ''
+                    }`
+                  }
                 >
                   <span>{t.providerDashboardTab}</span>
                   {providerPendingCount > 0 && (
@@ -310,18 +243,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                       {providerPendingCount}
                     </span>
                   )}
-                </button>
+                </NavLink>
               )}
               {hasAdminAccess && (
-                <button
-                  type="button"
-                  onClick={() => navTo('admin')}
-                  className={`hover:text-emerald-700 transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    appView === 'admin' ? 'text-emerald-700 font-semibold' : ''
-                  }`}
-                >
+                <NavLink to={ROUTE_PATHS.ADMIN_DASHBOARD} className={navLinkClass}>
                   {t.navAdmin}
-                </button>
+                </NavLink>
               )}
             </>
           )}
@@ -329,10 +256,10 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Zone 3: Quick Action (Post Job for Clients) + Language + Auth / Account Dropdown */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-          {firebaseUser && isVerified && isClientCapable && onOpenPostJob && (
+          {firebaseUser && isVerified && isClientCapable && (
             <button
               type="button"
-              onClick={onOpenPostJob}
+              onClick={() => setIsPostJobModalOpen(true)}
               className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -342,7 +269,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             type="button"
-            onClick={onToggleLanguage}
+            onClick={toggleLanguage}
             aria-label={`Switch language to ${t.langSwitchLabel}`}
             className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
@@ -352,21 +279,19 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {!firebaseUser ? (
             <>
-              <button
-                type="button"
-                onClick={() => onOpenAuth('client')}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              <Link
+                to={ROUTE_PATHS.LOGIN}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
               >
                 <LogIn className="w-3.5 h-3.5 text-emerald-700" />
                 <span>{isAr ? 'تسجيل الدخول' : 'Connexion'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => onOpenAuth('provider')}
-                className="px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              </Link>
+              <Link
+                to={`${ROUTE_PATHS.REGISTER}?role=provider`}
+                className="px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 transition-colors whitespace-nowrap shrink-0"
               >
                 {isAr ? 'انضم كمعلم' : 'Devenir Maâlem'}
-              </button>
+              </Link>
             </>
           ) : (
             <div ref={dropdownRef} className="relative">
@@ -420,11 +345,10 @@ export const Navbar: React.FC<NavbarProps> = ({
                   {isVerified && (
                     <div className="py-1.5">
                       {isClientCapable && (
-                        <button
-                          type="button"
+                        <Link
+                          to={ROUTE_PATHS.CUSTOMER_DASHBOARD}
                           role="menuitem"
-                          onClick={() => navTo('dashboard')}
-                          className="w-full px-4 py-2 text-start text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 flex items-center justify-between gap-2 cursor-pointer"
+                          className="w-full px-4 py-2 text-start text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 flex items-center justify-between gap-2"
                         >
                           <span className="inline-flex items-center gap-2.5">
                             <LayoutDashboard className="w-4 h-4 text-emerald-700" />
@@ -435,15 +359,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                               {clientActiveCount}
                             </span>
                           )}
-                        </button>
+                        </Link>
                       )}
 
                       {isProviderCapable && (
-                        <button
-                          type="button"
+                        <Link
+                          to={ROUTE_PATHS.PROVIDER_DASHBOARD}
                           role="menuitem"
-                          onClick={() => navTo('provider')}
-                          className="w-full px-4 py-2 text-start text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 flex items-center justify-between gap-2 cursor-pointer"
+                          className="w-full px-4 py-2 text-start text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 flex items-center justify-between gap-2"
                         >
                           <span className="inline-flex items-center gap-2.5">
                             <Wrench className="w-4 h-4 text-amber-700" />
@@ -454,14 +377,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                               {providerPendingCount}
                             </span>
                           )}
-                        </button>
+                        </Link>
                       )}
 
-                      <button
-                        type="button"
+                      <Link
+                        to={ROUTE_PATHS.CUSTOMER_PROFILE}
                         role="menuitem"
-                        onClick={() => navTo('profile')}
-                        className="w-full px-4 py-2 text-start text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 flex items-center gap-2.5 cursor-pointer"
+                        className="w-full px-4 py-2 text-start text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 flex items-center gap-2.5"
                       >
                         <UserIcon className="w-4 h-4 text-slate-500" />
                         <span>
@@ -473,18 +395,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                             ? 'ملفي الشخصي والأمان'
                             : 'Mon Profil & Sécurité'}
                         </span>
-                      </button>
+                      </Link>
 
                       {hasAdminAccess && (
-                        <button
-                          type="button"
+                        <Link
+                          to={ROUTE_PATHS.ADMIN_DASHBOARD}
                           role="menuitem"
-                          onClick={() => navTo('admin')}
-                          className="w-full px-4 py-2 text-start text-xs font-medium text-emerald-800 hover:bg-emerald-50 flex items-center gap-2.5 cursor-pointer"
+                          className="w-full px-4 py-2 text-start text-xs font-medium text-emerald-800 hover:bg-emerald-50 flex items-center gap-2.5"
                         >
                           <ShieldCheck className="w-4 h-4 text-emerald-700" />
                           <span>{t.navAdmin}</span>
-                        </button>
+                        </Link>
                       )}
                     </div>
                   )}
@@ -526,86 +447,75 @@ export const Navbar: React.FC<NavbarProps> = ({
         <div className="md:hidden border-t border-slate-200 bg-white px-4 py-4 space-y-2 shadow-md">
           {!firebaseUser ? (
             <>
-              <button
-                type="button"
-                onClick={() => navTo('marketplace', 'providers')}
-                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
+              <Link
+                to={ROUTE_PATHS.SERVICES}
+                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
               >
                 <Compass className="w-4 h-4 text-emerald-700" />
                 <span>{t.navProviders}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => navTo('marketplace', 'how-it-works')}
-                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+              </Link>
+              <Link
+                to={`${ROUTE_PATHS.HOME}#how-it-works`}
+                className="block w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
                 {isAr ? 'كيف تعمل المنصة' : 'Comment ça marche'}
-              </button>
+              </Link>
               <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => {
                     setMobileMenuOpen(false);
-                    onOpenAuth('client');
+                    setAuthModalIntent('client');
                   }}
                   className="px-3 py-2.5 text-xs font-semibold text-slate-800 bg-slate-100 rounded-lg hover:bg-slate-200 cursor-pointer"
                 >
                   {isAr ? 'تسجيل الدخول' : 'Connexion'}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    onOpenAuth('provider');
-                  }}
-                  className="px-3 py-2.5 text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 cursor-pointer"
+                <Link
+                  to={`${ROUTE_PATHS.REGISTER}?role=provider`}
+                  className="px-3 py-2.5 text-center text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800"
                 >
                   {isAr ? 'انضم كمعلم' : 'Devenir Maâlem'}
-                </button>
+                </Link>
               </div>
             </>
           ) : isPureProvider ? (
             <>
-              <button
-                type="button"
-                onClick={() => goToProviderTab('jobs')}
-                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
+              <Link
+                to={ROUTE_PATHS.PROVIDER_DASHBOARD}
+                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
               >
                 <Briefcase className="w-4 h-4 text-emerald-700" />
                 <span>{isAr ? 'طلبات الزبناء المنشورة' : 'Offres Clients'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => goToProviderTab('missions')}
-                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
+              </Link>
+              <Link
+                to={ROUTE_PATHS.PROVIDER_MISSIONS}
+                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
               >
                 <Wrench className="w-4 h-4 text-amber-700" />
                 <span>{isAr ? 'مهامي' : 'Mes Missions'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => goToProviderTab('card')}
-                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
+              </Link>
+              <Link
+                to={ROUTE_PATHS.PROVIDER_CARD}
+                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
               >
                 <IdCard className="w-4 h-4 text-emerald-700" />
                 <span>{isAr ? 'بطاقتي المهنية' : 'Ma Fiche Maâlem'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => goToProviderTab('earnings')}
-                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
+              </Link>
+              <Link
+                to={ROUTE_PATHS.PROVIDER_EARNINGS}
+                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
               >
                 <Wallet className="w-4 h-4 text-slate-600" />
                 <span>{isAr ? 'الأرباح والسحب' : 'Revenus & Retraits'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => navTo('profile')}
-                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
+              </Link>
+              <Link
+                to={ROUTE_PATHS.CUSTOMER_PROFILE}
+                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
               >
                 <UserIcon className="w-4 h-4 text-slate-500" />
                 <span>{isAr ? 'الإعدادات والحساب المزدوج' : 'Paramètres & Compte Double'}</span>
-              </button>
+              </Link>
               <div className="pt-2 border-t border-slate-100">
                 <button
                   type="button"
@@ -623,20 +533,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           ) : (
             <>
               {canExplore && (
-                <button
-                  type="button"
-                  onClick={() => navTo('marketplace', 'providers')}
-                  className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
+                <Link
+                  to={ROUTE_PATHS.SERVICES}
+                  className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
                 >
                   <Compass className="w-4 h-4 text-emerald-700" />
                   <span>{isAr ? 'استكشف المعلمين' : 'Explorer les Maâlems'}</span>
-                </button>
+                </Link>
               )}
               {isClientCapable && (
-                <button
-                  type="button"
-                  onClick={() => navTo('dashboard')}
-                  className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center justify-between cursor-pointer"
+                <Link
+                  to={ROUTE_PATHS.CUSTOMER_DASHBOARD}
+                  className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center justify-between"
                 >
                   <span className="inline-flex items-center gap-2.5">
                     <LayoutDashboard className="w-4 h-4 text-emerald-700" />
@@ -647,14 +555,14 @@ export const Navbar: React.FC<NavbarProps> = ({
                       {clientActiveCount}
                     </span>
                   )}
-                </button>
+                </Link>
               )}
-              {isClientCapable && onOpenPostJob && isVerified && (
+              {isClientCapable && isVerified && (
                 <button
                   type="button"
                   onClick={() => {
                     setMobileMenuOpen(false);
-                    onOpenPostJob();
+                    setIsPostJobModalOpen(true);
                   }}
                   className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 flex items-center gap-2.5 cursor-pointer"
                 >
@@ -663,32 +571,29 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </button>
               )}
               {isDoubleAccount && (
-                <button
-                  type="button"
-                  onClick={() => navTo('provider')}
-                  className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
+                <Link
+                  to={ROUTE_PATHS.PROVIDER_DASHBOARD}
+                  className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
                 >
                   <Wrench className="w-4 h-4 text-amber-700" />
                   <span>{t.providerDashboardTab}</span>
-                </button>
+                </Link>
               )}
-              <button
-                type="button"
-                onClick={() => navTo('profile')}
-                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5 cursor-pointer"
+              <Link
+                to={ROUTE_PATHS.CUSTOMER_PROFILE}
+                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
               >
                 <UserIcon className="w-4 h-4 text-slate-500" />
                 <span>{isAr ? 'ملفي الشخصي والأمان' : 'Mon Profil & Sécurité'}</span>
-              </button>
+              </Link>
               {hasAdminAccess && (
-                <button
-                  type="button"
-                  onClick={() => navTo('admin')}
-                  className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-emerald-800 hover:bg-emerald-50 flex items-center gap-2.5 cursor-pointer"
+                <Link
+                  to={ROUTE_PATHS.ADMIN_DASHBOARD}
+                  className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-emerald-800 hover:bg-emerald-50 flex items-center gap-2.5"
                 >
                   <ShieldCheck className="w-4 h-4 text-emerald-700" />
                   <span>{t.navAdmin}</span>
-                </button>
+                </Link>
               )}
               <div className="pt-2 border-t border-slate-100">
                 <button

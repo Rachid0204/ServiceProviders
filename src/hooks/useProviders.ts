@@ -11,6 +11,7 @@ import {
 import type { User } from 'firebase/auth';
 import { db, reportFirestoreError, OperationType } from '../firebase';
 import { VETTED_PROVIDERS } from '../data/providers';
+import { isDemoFixturesEnabled } from '../utils/featureFlags';
 import {
   CITY_COORDINATES,
   DEFAULT_CATEGORY_IMAGE,
@@ -38,7 +39,10 @@ export type ProviderOverride = Partial<
   removedReviewIds?: string[];
 };
 
-const SEEDED_BY_ID = new Map(VETTED_PROVIDERS.map((p) => [p.id, p]));
+const DEMO_FIXTURES_ACTIVE = isDemoFixturesEnabled();
+const SEEDED_BY_ID = DEMO_FIXTURES_ACTIVE
+  ? new Map(VETTED_PROVIDERS.map((p) => [p.id, p]))
+  : new Map<string, VettedProvider>();
 
 export function useProviders(
   firebaseUser: User | null,
@@ -142,10 +146,12 @@ export function useProviders(
     return () => unsubscribe();
   }, []);
 
-  // Merge seeded 8 providers + live Firestore providers + authenticated provider profile + overrides
+  // Merge live Firestore providers (+ optional dev-only fixtures when explicitly enabled) + authenticated provider profile + overrides
   const allProviders = useMemo(() => {
     const mergedMap = new Map<string, VettedProvider>();
-    VETTED_PROVIDERS.forEach((p) => mergedMap.set(p.id, p));
+    if (DEMO_FIXTURES_ACTIVE) {
+      VETTED_PROVIDERS.forEach((p) => mergedMap.set(p.id, p));
+    }
     firestoreProviders.forEach((p) => mergedMap.set(p.id, p));
 
     if (

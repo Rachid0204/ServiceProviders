@@ -156,6 +156,26 @@ export interface Translations {
   footerTagline: string;
   footerRights: string;
   closeBtn: string;
+  routeLoadingLabel: string;
+  notFoundBadge: string;
+  notFoundTitle: string;
+  notFoundDesc: string;
+  backHomeBtn: string;
+  browseServicesBtn: string;
+  unauthorizedBadge: string;
+  unauthorizedTitle: string;
+  unauthorizedDesc: string;
+  goToDashboardBtn: string;
+  servicesCatalogTitle: string;
+  servicesCatalogSubtitle: string;
+  allServicesTab: string;
+  providerNotFoundTitle: string;
+  providerNotFoundDesc: string;
+  backToServicesBtn: string;
+  loginPageTitle: string;
+  loginPageSubtitle: string;
+  registerPageTitle: string;
+  registerPageSubtitle: string;
   cities: Record<MoroccanCity, string>;
   categories: Record<ServiceCategory, string>;
 }
@@ -331,6 +351,32 @@ export const TRANSLATIONS: Record<LanguageCode, Translations> = {
       'Plateforme marocaine de mise en relation avec des artisans et prestataires de services vérifiés.',
     footerRights: '© 2026 Moul L’Khedma (مول الخدمة). Tous droits réservés — Maroc.',
     closeBtn: 'Fermer',
+    routeLoadingLabel: 'Chargement de la page...',
+    notFoundBadge: 'Erreur 404',
+    notFoundTitle: 'Page introuvable',
+    notFoundDesc:
+      'La page que vous recherchez n’existe pas ou a été déplacée. Revenez à l’accueil ou explorez nos métiers vérifiés.',
+    backHomeBtn: 'Retour à l’accueil',
+    browseServicesBtn: 'Explorer les services',
+    unauthorizedBadge: 'Accès restreint (403)',
+    unauthorizedTitle: 'Accès non autorisé',
+    unauthorizedDesc:
+      'Votre compte actuel ne dispose pas des autorisations nécessaires pour consulter cet espace.',
+    goToDashboardBtn: 'Aller vers mon espace',
+    servicesCatalogTitle: 'Annuaire des Services & Maâlems au Maroc',
+    servicesCatalogSubtitle:
+      'Filtrez par métier, ville, quartier ou disponibilité immédiate pour trouver le bon prestataire vérifié.',
+    allServicesTab: 'Tous les services',
+    providerNotFoundTitle: 'Fiche prestataire introuvable',
+    providerNotFoundDesc:
+      'Ce profil Maâlem n’existe pas ou n’est plus disponible dans l’annuaire public.',
+    backToServicesBtn: 'Retour à l’annuaire',
+    loginPageTitle: 'Connexion à Moul L’Khedma',
+    loginPageSubtitle:
+      'Accédez à votre espace Client, Maâlem ou Administration en toute sécurité.',
+    registerPageTitle: 'Créer un compte Moul L’Khedma',
+    registerPageSubtitle:
+      'Rejoignez gratuitement la plateforme en tant que Client, Maâlem vérifié ou compte double.',
     cities: {
       Casablanca: 'Casablanca',
       Rabat: 'Rabat',
@@ -515,6 +561,30 @@ export const TRANSLATIONS: Record<LanguageCode, Translations> = {
     footerTagline: 'المنصة المغربية الموثوقة لربط الزبناء بأمهر الحرفيين ومقدمي الخدمات المحلية.',
     footerRights: '© 2026 مول الخدمة (Moul L’Khedma). جميع الحقوق محفوظة — المملكة المغربية.',
     closeBtn: 'إغلاق',
+    routeLoadingLabel: 'جاري تحميل الصفحة...',
+    notFoundBadge: 'خطأ 404',
+    notFoundTitle: 'الصفحة غير موجودة',
+    notFoundDesc:
+      'الصفحة التي تبحث عنها غير متوفرة أو تم نقلها. يمكنك العودة إلى الصفحة الرئيسية أو تصفح الخدمات المتاحة.',
+    backHomeBtn: 'العودة إلى الرئيسية',
+    browseServicesBtn: 'تصفح الخدمات',
+    unauthorizedBadge: 'وصول مقيد (403)',
+    unauthorizedTitle: 'غير مصرح لك بالدخول',
+    unauthorizedDesc:
+      'حسابك الحالي لا يتوفر على الصلاحيات اللازمة للوصول إلى هذا الفضاء.',
+    goToDashboardBtn: 'الانتقال إلى فضائي',
+    servicesCatalogTitle: 'دليل الخدمات والمعلمين المعتمدين في المغرب',
+    servicesCatalogSubtitle:
+      'قم بالتصفية حسب المهنة، المدينة، الحي أو التوفر الفوري للعثور على المعلم المناسب.',
+    allServicesTab: 'جميع الخدمات',
+    providerNotFoundTitle: 'ملف المعلم غير موجود',
+    providerNotFoundDesc:
+      'هذا الملف المهني غير موجود حالياً أو لم يعد متاحاً في الدليل العام.',
+    backToServicesBtn: 'العودة إلى دليل الخدمات',
+    loginPageTitle: 'تسجيل الدخول إلى مول الخدمة',
+    loginPageSubtitle: 'ادخل بأمان إلى فضاء الزبون، فضاء المعلم أو لوحة الإدارة.',
+    registerPageTitle: 'إنشاء حساب جديد على مول الخدمة',
+    registerPageSubtitle: 'انضم مجاناً كزبون، معلم محترف أو حساب مزدوج.',
     cities: {
       Casablanca: 'الدار البيضاء',
       Rabat: 'الرباط',
