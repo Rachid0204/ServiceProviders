@@ -75,11 +75,31 @@ service firebase.storage {
       allow write: if isOwner(userId) && isBookingParticipant(bookingId) && isValidImageUpload();
     }
 
+    function isValidKycDocumentUpload() {
+      return request.resource != null &&
+        request.resource.size <= 8 * 1024 * 1024 && (
+          request.resource.contentType.matches('image/.*') ||
+          request.resource.contentType == 'application/pdf'
+        );
+    }
+
     // 7. Client Posted Job Problem Photos (/jobPosts/{jobId}/{userId}/{fileName})
     // Verified users (clients and Maâlems viewing open job posts) can read; only the verified uploader can write.
     match /jobPosts/{jobId}/{userId}/{fileName} {
       allow read: if isVerifiedUser() || isAdmin();
       allow write: if isOwner(userId) && isValidImageUpload();
+    }
+
+    // 8. Private Provider KYC Documents (/providerDocuments/{uid}/{docType}/{fileName})
+    // STRICTLY PRIVATE: Only the verified provider owner and verified admins can read; never publicly accessible.
+    match /providerDocuments/{uid}/{docType}/{fileName} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow write: if isOwner(uid) && (
+        docType == 'cin_front' ||
+        docType == 'cin_back' ||
+        docType == 'certificate' ||
+        docType == 'business_license'
+      ) && isValidKycDocumentUpload();
     }
   }
 }

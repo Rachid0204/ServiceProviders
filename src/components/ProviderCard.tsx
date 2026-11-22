@@ -9,6 +9,7 @@ import {
   Phone,
   Clock,
   Lock,
+  Heart,
 } from 'lucide-react';
 import {
   formatMadCurrency,
@@ -22,6 +23,8 @@ interface ProviderCardProps {
   provider: VettedProvider;
   lang: LanguageCode;
   t: Translations;
+  isFavorite?: boolean;
+  onToggleFavorite?: (providerId: string) => void;
   onViewDetails: (provider: VettedProvider) => void;
   onBookProvider: (provider: VettedProvider) => void;
 }
@@ -30,6 +33,8 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
   provider,
   lang,
   t,
+  isFavorite = false,
+  onToggleFavorite,
   onViewDetails,
   onBookProvider,
 }) => {
@@ -64,7 +69,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-black/25" />
 
-          {/* Top Trust & Response-Speed Strip */}
+          {/* Top Trust, Favorite & Response-Speed Strip */}
           <div className="absolute top-2.5 inset-x-3 flex items-center justify-between gap-2 text-[11px]">
             {provider.verifiedBadge ? (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-700/95 text-white font-semibold shadow-xs">
@@ -76,12 +81,29 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
                 <span>{isAr ? 'ملف قيد التوثيق' : 'Vérification en cours'}</span>
               </span>
             )}
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/95 text-slate-900 font-semibold tabular-nums shadow-xs">
-              <Clock className="w-3 h-3 text-amber-600 shrink-0" />
-              <span>
-                ~{provider.responseMinutes} {isAr ? 'د' : 'min'}
+            <div className="flex items-center gap-1.5">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/95 text-slate-900 font-semibold tabular-nums shadow-xs">
+                <Clock className="w-3 h-3 text-amber-600 shrink-0" />
+                <span>
+                  ~{provider.responseMinutes} {isAr ? 'د' : 'min'}
+                </span>
               </span>
-            </span>
+              {onToggleFavorite && (
+                <button
+                  type="button"
+                  onClick={() => onToggleFavorite(provider.id)}
+                  aria-pressed={isFavorite}
+                  aria-label={isFavorite ? t.removeFavoriteLabel : t.saveFavoriteLabel}
+                  className={`w-7 h-7 rounded-full inline-flex items-center justify-center shadow-xs transition-colors cursor-pointer ${
+                    isFavorite
+                      ? 'bg-rose-600 text-white'
+                      : 'bg-white/95 text-slate-600 hover:text-rose-600'
+                  }`}
+                >
+                  <Heart className={`w-3.5 h-3.5 ${isFavorite ? 'fill-white' : ''}`} />
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="absolute bottom-3 inset-x-4 flex items-center justify-between text-white text-xs">

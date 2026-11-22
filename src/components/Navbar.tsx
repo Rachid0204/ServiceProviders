@@ -201,6 +201,12 @@ export const Navbar: React.FC = () => {
               <NavLink to={ROUTE_PATHS.PROVIDER_CARD} className={navLinkClass}>
                 {isAr ? 'بطاقتي المهنية' : 'Ma Fiche Maâlem'}
               </NavLink>
+              <NavLink to={ROUTE_PATHS.PROVIDER_SERVICES} className={navLinkClass}>
+                {t.providerServicesTab}
+              </NavLink>
+              <NavLink to={ROUTE_PATHS.PROVIDER_VERIFICATION} className={navLinkClass}>
+                {t.providerVerificationTab}
+              </NavLink>
               <NavLink to={ROUTE_PATHS.PROVIDER_EARNINGS} className={navLinkClass}>
                 {isAr ? 'الأرباح' : 'Revenus'}
               </NavLink>

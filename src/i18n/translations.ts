@@ -176,6 +176,27 @@ export interface Translations {
   loginPageSubtitle: string;
   registerPageTitle: string;
   registerPageSubtitle: string;
+  sortByLabel: string;
+  sortRecommended: string;
+  sortRatingDesc: string;
+  sortPriceAsc: string;
+  sortPriceDesc: string;
+  sortExperienceDesc: string;
+  sortDistanceAsc: string;
+  favoritesOnlyLabel: string;
+  saveFavoriteLabel: string;
+  removeFavoriteLabel: string;
+  paginationPrev: string;
+  paginationNext: string;
+  paginationPageOf: string;
+  categoriesExplorerTitle: string;
+  categoriesExplorerSubtitle: string;
+  termsPageTitle: string;
+  privacyPageTitle: string;
+  termsConsentLabel: string;
+  termsConsentRequiredError: string;
+  providerServicesTab: string;
+  providerVerificationTab: string;
   cities: Record<MoroccanCity, string>;
   categories: Record<ServiceCategory, string>;
 }
@@ -377,6 +398,30 @@ export const TRANSLATIONS: Record<LanguageCode, Translations> = {
     registerPageTitle: 'Créer un compte Moul L’Khedma',
     registerPageSubtitle:
       'Rejoignez gratuitement la plateforme en tant que Client, Maâlem vérifié ou compte double.',
+    sortByLabel: 'Trier par',
+    sortRecommended: 'Recommandés',
+    sortRatingDesc: 'Meilleure note',
+    sortPriceAsc: 'Tarif croissant',
+    sortPriceDesc: 'Tarif décroissant',
+    sortExperienceDesc: 'Plus expérimentés',
+    sortDistanceAsc: 'Plus proches',
+    favoritesOnlyLabel: 'Mes favoris',
+    saveFavoriteLabel: 'Ajouter aux favoris',
+    removeFavoriteLabel: 'Retirer des favoris',
+    paginationPrev: 'Précédent',
+    paginationNext: 'Suivant',
+    paginationPageOf: 'Page',
+    categoriesExplorerTitle: '12 Métiers & Services Vérifiés au Maroc',
+    categoriesExplorerSubtitle:
+      'Choisissez une spécialité pour découvrir les Maâlems qualifiés dans votre ville.',
+    termsPageTitle: 'Conditions Générales d’Utilisation (CGU)',
+    privacyPageTitle: 'Politique de Confidentialité & Protection des Données (Loi 09-08)',
+    termsConsentLabel:
+      'J’accepte les Conditions Générales d’Utilisation et la Politique de Confidentialité (Loi 09-08 / CNDP).',
+    termsConsentRequiredError:
+      'Veuillez accepter les Conditions d’Utilisation et la Politique de Confidentialité avant de créer votre compte.',
+    providerServicesTab: 'Mes Services',
+    providerVerificationTab: 'Vérification CIN',
     cities: {
       Casablanca: 'Casablanca',
       Rabat: 'Rabat',
@@ -392,6 +437,12 @@ export const TRANSLATIONS: Record<LanguageCode, Translations> = {
       'Soutien Scolaire': 'Soutien Scolaire',
       Ménage: 'Ménage',
       Climatisation: 'Climatisation',
+      Menuiserie: 'Menuiserie & Aluminium',
+      Serrurerie: 'Serrurerie & Ferronnerie',
+      Électroménager: 'Réparation Électroménager',
+      Jardinage: 'Jardinage & Espaces Verts',
+      Déménagement: 'Déménagement & Transport',
+      Maçonnerie: 'Maçonnerie, Carrelage & Plâtre',
     },
   },
   ar: {
@@ -585,6 +636,30 @@ export const TRANSLATIONS: Record<LanguageCode, Translations> = {
     loginPageSubtitle: 'ادخل بأمان إلى فضاء الزبون، فضاء المعلم أو لوحة الإدارة.',
     registerPageTitle: 'إنشاء حساب جديد على مول الخدمة',
     registerPageSubtitle: 'انضم مجاناً كزبون، معلم محترف أو حساب مزدوج.',
+    sortByLabel: 'الترتيب حسب',
+    sortRecommended: 'الموصى بهم',
+    sortRatingDesc: 'الأعلى تقييماً',
+    sortPriceAsc: 'الأقل سعراً',
+    sortPriceDesc: 'الأعلى سعراً',
+    sortExperienceDesc: 'الأكثر خبرة',
+    sortDistanceAsc: 'الأقرب مسافة',
+    favoritesOnlyLabel: 'المفضلة',
+    saveFavoriteLabel: 'حفظ في المفضلة',
+    removeFavoriteLabel: 'إزالة من المفضلة',
+    paginationPrev: 'السابق',
+    paginationNext: 'التالي',
+    paginationPageOf: 'صفحة',
+    categoriesExplorerTitle: '12 تخصصاً ومهنة معتمدة في المغرب',
+    categoriesExplorerSubtitle:
+      'اختر التخصص المطلوب لاكتشاف المعلمين والحرفيين المؤهلين في مدينتك.',
+    termsPageTitle: 'شروط الاستخدام العامة',
+    privacyPageTitle: 'سياسة الخصوصية وحماية المعطيات الشخصية (القانون 09-08)',
+    termsConsentLabel:
+      'أوافق على شروط الاستخدام العامة وسياسة الخصوصية وحماية المعطيات الشخصية (القانون 09-08 / CNDP).',
+    termsConsentRequiredError:
+      'يرجى الموافقة على شروط الاستخدام وسياسة الخصوصية قبل إنشاء الحساب.',
+    providerServicesTab: 'خدماتي',
+    providerVerificationTab: 'توثيق البطاقة الوطنية',
     cities: {
       Casablanca: 'الدار البيضاء',
       Rabat: 'الرباط',
@@ -600,6 +675,12 @@ export const TRANSLATIONS: Record<LanguageCode, Translations> = {
       'Soutien Scolaire': 'الدعم المدرسي (Soutien Scolaire)',
       Ménage: 'التنظيف الشامل (Ménage)',
       Climatisation: 'التكييف والتبريد (Climatisation)',
+      Menuiserie: 'النجارة والألمنيوم (Menuiserie)',
+      Serrurerie: 'فتح الأقفال والحدادة (Serrurerie)',
+      Électroménager: 'إصلاح الأجهزة المنزلية (Électroménager)',
+      Jardinage: 'البستنة وتنسيق الحدائق (Jardinage)',
+      Déménagement: 'النقل والرحيل (Déménagement)',
+      Maçonnerie: 'البناء والزليج والجبص (Maçonnerie)',
     },
   },
 };

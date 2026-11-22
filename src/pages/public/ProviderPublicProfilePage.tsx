@@ -7,12 +7,14 @@ import {
   Briefcase,
   CheckCircle2,
   Clock,
+  Heart,
   MapPin,
   MessageCircle,
   Phone,
   ShieldAlert,
   ShieldCheck,
   Star,
+  Tag,
 } from 'lucide-react';
 import {
   collection,
@@ -30,6 +32,8 @@ import {
 } from '../../utils/marketplace';
 import { useMarketplace } from '../../app/providers/MarketplaceContext';
 import { ROUTE_PATHS, buildServiceCategoryPath } from '../../app/routePaths';
+import { useProviderServices } from '../../hooks/useProviderServices';
+import { getPricingModelLabel } from '../../components/dashboards/ProviderServicesManager';
 
 function formatReviewDate(ts: unknown): string {
   if (ts && typeof ts === 'object' && 'toDate' in ts) {
@@ -44,7 +48,15 @@ function formatReviewDate(ts: unknown): string {
 
 export const ProviderPublicProfilePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { lang, t, isAr, allProviders, setBookingProvider } = useMarketplace();
+  const {
+    lang,
+    t,
+    isAr,
+    allProviders,
+    favoriteProviderIds,
+    toggleFavoriteProvider,
+    setBookingProvider,
+  } = useMarketplace();
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [liveReviews, setLiveReviews] = useState<ProviderReview[]>([]);
 
@@ -52,6 +64,13 @@ export const ProviderPublicProfilePage: React.FC = () => {
     () => (id ? allProviders.find((p) => p.id === id || p.uid === id) ?? null : null),
     [allProviders, id]
   );
+
+  const { services: providerServices } = useProviderServices(provider?.id, lang);
+  const activeServices = useMemo(
+    () => providerServices.filter((s) => s.isActive),
+    [providerServices]
+  );
+  const isFavorite = Boolean(provider && favoriteProviderIds.includes(provider.id));
 
   useEffect(() => {
     setActiveImageIndex(0);
@@ -288,6 +307,21 @@ export const ProviderPublicProfilePage: React.FC = () => {
               >
                 {t.bookProviderBtn}
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  void toggleFavoriteProvider(provider.id);
+                }}
+                aria-pressed={isFavorite}
+                aria-label={isFavorite ? t.removeFavoriteLabel : t.saveFavoriteLabel}
+                className={`inline-flex items-center justify-center gap-1.5 px-4 py-3 text-sm font-semibold rounded-xl border transition-colors cursor-pointer ${
+                  isFavorite
+                    ? 'bg-rose-50 text-rose-700 border-rose-200'
+                    : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
+                }`}
+              >
+                <Heart className={`w-4 h-4 ${isFavorite ? 'fill-rose-600 text-rose-600' : ''}`} />
+              </button>
               <a
                 href={providerWhatsappUrl}
                 target="_blank"
@@ -308,6 +342,55 @@ export const ProviderPublicProfilePage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Published Services Catalog (when provider has added structured services) */}
+      {activeServices.length > 0 && (
+        <section className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
+          <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <Tag className="w-5 h-5 text-emerald-700" />
+            <span>
+              {isAr ? 'قائمة الخدمات والأسعار' : 'Catalogue des Prestations & Tarifs'} (
+              {activeServices.length})
+            </span>
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {activeServices.map((srv) => (
+              <div
+                key={srv.id}
+                className="p-4 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between gap-3"
+              >
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-2 text-xs">
+                    <span className="font-bold text-slate-900 text-sm">
+                      {isAr ? srv.titleAr : srv.titleFr}
+                    </span>
+                    <span className="text-[11px] text-slate-500 tabular-nums shrink-0">
+                      ~{srv.estimatedDurationMinutes} {t.minutesUnit}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    {isAr ? srv.descriptionAr : srv.descriptionFr}
+                  </p>
+                </div>
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/70">
+                  <span className="text-xs font-bold text-emerald-800">
+                    {srv.pricingModel === 'quote_required'
+                      ? getPricingModelLabel('quote_required', isAr)
+                      : `${getPricingModelLabel(srv.pricingModel, isAr)} · ${formatMadCurrency(srv.priceMad, lang)}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setBookingProvider(provider)}
+                    className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg cursor-pointer"
+                  >
+                    {t.bookProviderBtn}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Credentials & Reviews Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

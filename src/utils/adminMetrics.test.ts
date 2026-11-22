@@ -186,7 +186,7 @@ test('computeAdminAnalytics handles empty datasets without NaN or division by ze
   assert.equal(stats.refundedTotalMad, 0);
   assert.equal(stats.completionRatePct, 0);
   assert.equal(stats.averageRating, 0);
-  assert.equal(stats.categoryBreakdown.length, 6);
+  assert.equal(stats.categoryBreakdown.length, 12);
   assert.equal(stats.cityBreakdown.length, 6);
 });
 

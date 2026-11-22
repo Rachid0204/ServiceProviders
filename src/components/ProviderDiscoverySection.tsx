@@ -10,6 +10,8 @@ import {
   Map as MapIcon,
   LayoutGrid,
   Columns,
+  Heart,
+  ArrowUpDown,
 } from 'lucide-react';
 import {
   MOROCCAN_CITIES,
@@ -18,6 +20,7 @@ import {
   formatMadCurrency,
   filterProviders,
   type MoroccanCity,
+  type ProviderSortOption,
   type ServiceCategory,
   type VettedProvider,
 } from '../utils/marketplace';
@@ -32,6 +35,16 @@ import { ProviderCard } from './ProviderCard';
 const ProviderMap = lazy(() =>
   import('./ProviderMap').then((m) => ({ default: m.ProviderMap }))
 );
+
+const PAGE_SIZE = 9;
+const VALID_SORT_OPTIONS: ProviderSortOption[] = [
+  'recommended',
+  'rating_desc',
+  'price_asc',
+  'price_desc',
+  'experience_desc',
+  'distance_asc',
+];
 
 interface ProviderDiscoverySectionProps {
   /** Controlled category from `/services/:category` route param, or undefined for local/query state. */
@@ -55,7 +68,16 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
   onToggleNearMe: externalToggleNearMe,
   onUpdateUserCoords: externalUpdateCoords,
 }) => {
-  const { lang, t, isAr, allProviders, userProfile, setBookingProvider } = useMarketplace();
+  const {
+    lang,
+    t,
+    isAr,
+    allProviders,
+    userProfile,
+    favoriteProviderIds,
+    toggleFavoriteProvider,
+    setBookingProvider,
+  } = useMarketplace();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -70,6 +92,12 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
       ? (initialCityParam as MoroccanCity)
       : 'ALL';
 
+  const initialSortParam = searchParams.get('sort') as ProviderSortOption | null;
+  const validInitialSort: ProviderSortOption =
+    initialSortParam && VALID_SORT_OPTIONS.includes(initialSortParam)
+      ? initialSortParam
+      : 'recommended';
+
   const [selectedCity, setSelectedCity] = useState<MoroccanCity | 'ALL'>(validInitialCity);
   const [localCategory, setLocalCategory] = useState<ServiceCategory | 'ALL'>(
     routeCategory ?? 'ALL'
@@ -83,6 +111,14 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
   const [availableNowOnly, setAvailableNowOnly] = useState<boolean>(
     searchParams.get('available') === '1'
   );
+  const [favoritesOnly, setFavoritesOnly] = useState<boolean>(
+    searchParams.get('favorites') === '1'
+  );
+  const [sortBy, setSortBy] = useState<ProviderSortOption>(validInitialSort);
+  const [currentPage, setCurrentPage] = useState<number>(() => {
+    const parsed = Number(searchParams.get('page') || 1);
+    return Number.isFinite(parsed) && parsed >= 1 ? Math.floor(parsed) : 1;
+  });
   const [viewMode, setViewMode] = useState<'grid' | 'split' | 'map'>('grid');
 
   // Local fallback geolocation state when not controlled by HomePage
@@ -189,6 +225,9 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
         searchQuery,
         verifiedOnly,
         availableNowOnly,
+        favoritesOnly,
+        favoriteIds: favoriteProviderIds,
+        sortBy,
         userCoords,
         nearMeActive,
       }),
@@ -202,10 +241,26 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
       searchQuery,
       verifiedOnly,
       availableNowOnly,
+      favoritesOnly,
+      favoriteProviderIds,
+      sortBy,
       userCoords,
       nearMeActive,
     ]
   );
+
+  const totalPages = Math.max(1, Math.ceil(filteredProviders.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedProviders = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filteredProviders.slice(start, start + PAGE_SIZE);
+  }, [filteredProviders, safePage]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(1);
+    }
+  }, [currentPage, totalPages]);
 
   const resetAllFilters = () => {
     setSelectedCity('ALL');
@@ -215,6 +270,9 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
     setSearchQuery('');
     setVerifiedOnly(false);
     setAvailableNowOnly(false);
+    setFavoritesOnly(false);
+    setSortBy('recommended');
+    setCurrentPage(1);
     setInternalNearMe(false);
     setUserCoords(null);
     if (syncUrl) {
@@ -403,6 +461,24 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                 <span>{t.filterAvailableNow}</span>
               </label>
 
+              <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={favoritesOnly}
+                  onChange={(e) => {
+                    setFavoritesOnly(e.target.checked);
+                    setCurrentPage(1);
+                    updateQueryParam('favorites', e.target.checked ? '1' : null);
+                  }}
+                  className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-600"
+                />
+                <Heart className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>
+                  {t.favoritesOnlyLabel}
+                  {favoriteProviderIds.length > 0 ? ` (${favoriteProviderIds.length})` : ''}
+                </span>
+              </label>
+
               <button
                 type="button"
                 onClick={handleToggleNearMe}
@@ -424,47 +500,71 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
               )}
             </div>
 
-            <div
-              role="group"
-              aria-label="View Mode"
-              className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg"
-            >
-              <button
-                type="button"
-                onClick={() => setViewMode('grid')}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
-                  viewMode === 'grid'
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="inline-flex items-center gap-1.5 text-xs text-slate-600">
+                <ArrowUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                <select
+                  aria-label={t.sortByLabel}
+                  value={sortBy}
+                  onChange={(e) => {
+                    const nextSort = e.target.value as ProviderSortOption;
+                    setSortBy(nextSort);
+                    setCurrentPage(1);
+                    updateQueryParam('sort', nextSort === 'recommended' ? null : nextSort);
+                  }}
+                  className="px-2.5 py-1.5 text-xs font-medium bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                >
+                  <option value="recommended">{t.sortRecommended}</option>
+                  <option value="rating_desc">{t.sortRatingDesc}</option>
+                  <option value="price_asc">{t.sortPriceAsc}</option>
+                  <option value="price_desc">{t.sortPriceDesc}</option>
+                  <option value="experience_desc">{t.sortExperienceDesc}</option>
+                  {userCoords && <option value="distance_asc">{t.sortDistanceAsc}</option>}
+                </select>
+              </div>
+
+              <div
+                role="group"
+                aria-label="View Mode"
+                className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-lg"
               >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>{t.viewModeGrid}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('split')}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
-                  viewMode === 'split'
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Columns className="w-3.5 h-3.5" />
-                <span>{t.viewModeSplit}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('map')}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
-                  viewMode === 'map'
-                    ? 'bg-white text-slate-900 shadow-2xs'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <MapIcon className="w-3.5 h-3.5" />
-                <span>{t.viewModeMap}</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                    viewMode === 'grid'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <LayoutGrid className="w-3.5 h-3.5" />
+                  <span>{t.viewModeGrid}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('split')}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                    viewMode === 'split'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Columns className="w-3.5 h-3.5" />
+                  <span>{t.viewModeSplit}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('map')}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                    viewMode === 'map'
+                      ? 'bg-white text-slate-900 shadow-2xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <MapIcon className="w-3.5 h-3.5" />
+                  <span>{t.viewModeMap}</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -483,6 +583,8 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
             searchQuery.trim() !== '' ||
             verifiedOnly ||
             availableNowOnly ||
+            favoritesOnly ||
+            sortBy !== 'recommended' ||
             nearMeActive) && (
             <button
               type="button"
@@ -508,57 +610,98 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
             </button>
           </div>
         ) : (
-          <div
-            className={
-              viewMode === 'split' ? 'grid grid-cols-1 lg:grid-cols-12 gap-6 items-start' : 'block'
-            }
-          >
-            {viewMode !== 'map' && (
-              <div
-                className={
-                  viewMode === 'split'
-                    ? 'lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-5'
-                    : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'
-                }
-              >
-                {filteredProviders.map((provider) => (
-                  <ProviderCard
-                    key={provider.id}
-                    provider={provider}
-                    lang={lang}
-                    t={t}
-                    onViewDetails={handleViewProviderDetails}
-                    onBookProvider={setBookingProvider}
-                  />
-                ))}
-              </div>
-            )}
-
-            {viewMode !== 'grid' && (
-              <div
-                className={
-                  viewMode === 'split'
-                    ? 'lg:col-span-5 lg:sticky lg:top-20 h-[calc(100vh-6rem)] min-h-[480px] max-h-[680px]'
-                    : 'w-full h-[580px]'
-                }
-              >
-                <Suspense
-                  fallback={
-                    <div className="w-full h-full rounded-xl border border-slate-200 bg-slate-100 animate-pulse flex items-center justify-center text-xs text-slate-500">
-                      {isAr ? 'جاري تحميل الخريطة...' : 'Chargement de la carte...'}
-                    </div>
+          <div className="space-y-6">
+            <div
+              className={
+                viewMode === 'split' ? 'grid grid-cols-1 lg:grid-cols-12 gap-6 items-start' : 'block'
+              }
+            >
+              {viewMode !== 'map' && (
+                <div
+                  className={
+                    viewMode === 'split'
+                      ? 'lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-5'
+                      : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6'
                   }
                 >
-                  <ProviderMap
-                    providers={filteredProviders}
-                    lang={lang}
-                    t={t}
-                    userCoords={userCoords}
-                    onSelectProvider={handleViewProviderDetails}
-                    onBookProvider={setBookingProvider}
-                  />
-                </Suspense>
-              </div>
+                  {paginatedProviders.map((provider) => (
+                    <ProviderCard
+                      key={provider.id}
+                      provider={provider}
+                      lang={lang}
+                      t={t}
+                      isFavorite={favoriteProviderIds.includes(provider.id)}
+                      onToggleFavorite={(pid) => {
+                        void toggleFavoriteProvider(pid);
+                      }}
+                      onViewDetails={handleViewProviderDetails}
+                      onBookProvider={setBookingProvider}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {viewMode !== 'grid' && (
+                <div
+                  className={
+                    viewMode === 'split'
+                      ? 'lg:col-span-5 lg:sticky lg:top-20 h-[calc(100vh-6rem)] min-h-[480px] max-h-[680px]'
+                      : 'w-full h-[580px]'
+                  }
+                >
+                  <Suspense
+                    fallback={
+                      <div className="w-full h-full rounded-xl border border-slate-200 bg-slate-100 animate-pulse flex items-center justify-center text-xs text-slate-500">
+                        {isAr ? 'جاري تحميل الخريطة...' : 'Chargement de la carte...'}
+                      </div>
+                    }
+                  >
+                    <ProviderMap
+                      providers={filteredProviders}
+                      lang={lang}
+                      t={t}
+                      userCoords={userCoords}
+                      onSelectProvider={handleViewProviderDetails}
+                      onBookProvider={setBookingProvider}
+                    />
+                  </Suspense>
+                </div>
+              )}
+            </div>
+
+            {viewMode !== 'map' && totalPages > 1 && (
+              <nav
+                aria-label="Pagination"
+                className="flex items-center justify-center gap-3 pt-2"
+              >
+                <button
+                  type="button"
+                  disabled={safePage <= 1}
+                  onClick={() => {
+                    const nextPage = Math.max(1, safePage - 1);
+                    setCurrentPage(nextPage);
+                    updateQueryParam('page', nextPage <= 1 ? null : String(nextPage));
+                  }}
+                  className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+                >
+                  {t.paginationPrev}
+                </button>
+                <span className="text-xs font-semibold text-slate-700 tabular-nums">
+                  {t.paginationPageOf} {safePage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  disabled={safePage >= totalPages}
+                  onClick={() => {
+                    const nextPage = Math.min(totalPages, safePage + 1);
+                    setCurrentPage(nextPage);
+                    updateQueryParam('page', String(nextPage));
+                  }}
+                  className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+                >
+                  {t.paginationNext}
+                </button>
+              </nav>
             )}
           </div>
         )}

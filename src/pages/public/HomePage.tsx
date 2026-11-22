@@ -10,9 +10,9 @@ import {
   CheckCircle2,
   Plus,
 } from 'lucide-react';
-import { CITY_COORDINATES, type MoroccanCity } from '../../utils/marketplace';
+import { CITY_COORDINATES, SERVICE_CATEGORIES, type MoroccanCity } from '../../utils/marketplace';
 import { useMarketplace } from '../../app/providers/MarketplaceContext';
-import { ROUTE_PATHS } from '../../app/routePaths';
+import { ROUTE_PATHS, buildServiceCategoryPath } from '../../app/routePaths';
 import { ProviderDiscoverySection } from '../../components/ProviderDiscoverySection';
 
 export const HomePage: React.FC = () => {
@@ -190,6 +190,38 @@ export const HomePage: React.FC = () => {
               </div>
               <div className="text-xs text-slate-600 mt-1">{t.trustMetric4Label}</div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Section 1.5: 12-Category Quick Explorer */}
+      <section className="py-8 bg-slate-50 border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+            <div>
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900">
+                {t.categoriesExplorerTitle}
+              </h2>
+              <p className="text-xs text-slate-600 mt-0.5">{t.categoriesExplorerSubtitle}</p>
+            </div>
+            <Link
+              to={ROUTE_PATHS.SERVICES}
+              className="text-xs font-semibold text-emerald-700 hover:underline whitespace-nowrap"
+            >
+              {t.allServicesTab} →
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
+            {SERVICE_CATEGORIES.map((category) => (
+              <Link
+                key={category}
+                to={buildServiceCategoryPath(category)}
+                className="p-3 bg-white border border-slate-200 rounded-xl hover:border-emerald-500 hover:bg-emerald-50/40 transition-colors flex items-center gap-2 text-xs font-semibold text-slate-800"
+              >
+                <Wrench className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                <span className="truncate">{t.categories[category]}</span>
+              </Link>
+            ))}
           </div>
         </div>
       </section>

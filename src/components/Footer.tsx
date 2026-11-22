@@ -132,7 +132,15 @@ export const Footer: React.FC = () => {
         )}
 
         <div className="pt-6 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
-          <span>{t.footerRights}</span>
+          <div className="flex flex-wrap items-center gap-4">
+            <span>{t.footerRights}</span>
+            <Link to={ROUTE_PATHS.TERMS} className="hover:text-emerald-700 hover:underline">
+              {isAr ? 'شروط الاستخدام' : 'CGU'}
+            </Link>
+            <Link to={ROUTE_PATHS.PRIVACY} className="hover:text-emerald-700 hover:underline">
+              {isAr ? 'الخصوصية (قانون 09-08)' : 'Confidentialité (Loi 09-08)'}
+            </Link>
+          </div>
           <span className="inline-flex items-center gap-1.5 text-emerald-700 font-medium">
             <ShieldCheck className="w-4 h-4" />
             <span>

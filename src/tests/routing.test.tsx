@@ -135,6 +135,8 @@ function createMockContext(
     allProviders: VETTED_PROVIDERS,
     firestoreProviders: VETTED_PROVIDERS,
     ownProvider: null,
+    favoriteProviderIds: [],
+    toggleFavoriteProvider: vi.fn().mockResolvedValue(undefined),
     toggleProviderAvailability: vi.fn().mockResolvedValue(undefined),
     applyAdminProviderOverride: vi.fn(),
     removeProviderReview: vi.fn(),
@@ -441,6 +443,60 @@ describe('Phase 1 Routing Acceptance Tests (Spec §2B)', () => {
 
   it('keeps demo fixtures disabled by default unless explicitly opted in', () => {
     expect(isDemoFixturesEnabled()).toBe(false);
+  });
+
+  it('supports all 12 bilingual service categories including new Phase 2 slugs (/services/carpentry, /services/locksmith)', async () => {
+    expect(resolveCategoryFromSlug('carpentry')).toBe('Menuiserie');
+    expect(resolveCategoryFromSlug('locksmith')).toBe('Serrurerie');
+    expect(resolveCategoryFromSlug('appliance-repair')).toBe('Électroménager');
+    expect(resolveCategoryFromSlug('gardening')).toBe('Jardinage');
+    expect(resolveCategoryFromSlug('moving')).toBe('Déménagement');
+    expect(resolveCategoryFromSlug('masonry')).toBe('Maçonnerie');
+
+    renderAtRoute(['/services/carpentry']);
+    expect(
+      await screen.findByRole('heading', { level: 1, name: TRANSLATIONS.fr.categories.Menuiserie })
+    ).toBeInTheDocument();
+  });
+
+  it('renders /terms and /privacy Law 09-08 legal pages and enforces consent checkbox on /register', async () => {
+    const user = userEvent.setup();
+    const { unmount: unmountTerms } = renderAtRoute(['/terms']);
+    expect(
+      await screen.findByRole('heading', { name: TRANSLATIONS.fr.termsPageTitle })
+    ).toBeInTheDocument();
+    unmountTerms();
+
+    const { unmount: unmountPrivacy } = renderAtRoute(['/privacy']);
+    expect(
+      await screen.findByRole('heading', { name: TRANSLATIONS.fr.privacyPageTitle })
+    ).toBeInTheDocument();
+    unmountPrivacy();
+
+    renderAtRoute(['/register']);
+    expect(
+      await screen.findByRole('heading', { name: TRANSLATIONS.fr.registerPageTitle })
+    ).toBeInTheDocument();
+
+    // Attempting Google signup without accepting Law 09-08 terms shows consent error
+    await user.click(screen.getByRole('button', { name: TRANSLATIONS.fr.googleSignInBtn }));
+    expect(screen.getByRole('alert')).toHaveTextContent(TRANSLATIONS.fr.termsConsentRequiredError);
+  });
+
+  it('allows authenticated providers to directly open /provider/services and /provider/verification', async () => {
+    const providerUser = createMockUser('prov-p2', 'maalem-p2@example.ma', true);
+    const providerProfile = createMockProfile('prov-p2', 'provider');
+
+    for (const p of ['/provider/services', '/provider/verification']) {
+      const { unmount } = renderAtRoute([p], {
+        firebaseUser: providerUser,
+        userProfile: providerProfile,
+        isVerified: true,
+      });
+      expect(await screen.findByTestId('provider-dashboard-page')).toBeInTheDocument();
+      expect(screen.getByTestId('current-location')).toHaveTextContent(p);
+      unmount();
+    }
   });
 
   it('enforces single <BrowserRouter> mount in src/main.tsx and zero manual window.history.pushState in src/', () => {

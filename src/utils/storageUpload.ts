@@ -95,3 +95,70 @@ export function revokePreviewObjectUrl(url: string | undefined): void {
     }
   }
 }
+
+export const MAX_KYC_UPLOAD_BYTES = 8 * 1024 * 1024; // 8 MB (matches storage.rules)
+
+export type KycDocumentKind = 'cin_front' | 'cin_back' | 'certificate' | 'business_license';
+
+/**
+ * Validates private KYC verification uploads (CIN front/back, diplomas, licenses).
+ * Accepts image/* or application/pdf up to 8 MB.
+ */
+export function validateKycDocumentFile(
+  file: { type: string; size: number },
+  lang: 'fr' | 'ar'
+): { valid: boolean; error?: string } {
+  const isImage = Boolean(file.type && file.type.startsWith('image/'));
+  const isPdf = file.type === 'application/pdf';
+  if (!isImage && !isPdf) {
+    return {
+      valid: false,
+      error:
+        lang === 'ar'
+          ? 'يرجى اختيار صورة (JPG/PNG/WebP) أو ملف PDF صالح.'
+          : 'Veuillez sélectionner une image (JPG, PNG, WebP) ou un document PDF.',
+    };
+  }
+  if (file.size > MAX_KYC_UPLOAD_BYTES) {
+    return {
+      valid: false,
+      error:
+        lang === 'ar'
+          ? 'حجم الوثيقة يتجاوز الحد الأقصى المسموح به (8 ميغابايت).'
+          : 'La taille du document dépasse la limite autorisée (8 Mo).',
+    };
+  }
+  return { valid: true };
+}
+
+/**
+ * Uploads a private KYC document strictly to `/providerDocuments/{uid}/{docType}/{fileName}`
+ * (protected by storage.rules so only the owner and verified admins can ever access it).
+ */
+export async function uploadPrivateKycDocument(params: {
+  file: File;
+  userId: string;
+  docType: KycDocumentKind;
+  lang: 'fr' | 'ar';
+}): Promise<{ url: string; storagePath: string }> {
+  const check = validateKycDocumentFile(params.file, params.lang);
+  if (!check.valid) {
+    throw new Error(check.error);
+  }
+  if (!params.userId) {
+    throw new Error(
+      params.lang === 'ar'
+        ? 'يجب تسجيل الدخول لرفع وثائق التحقق.'
+        : 'Vous devez être connecté pour téléverser des justificatifs.'
+    );
+  }
+
+  const safeName = `${Date.now()}_${sanitizeFileName(params.file.name)}`;
+  const storagePath = `providerDocuments/${params.userId}/${params.docType}/${safeName}`;
+  const fileRef = ref(storage, storagePath);
+  const snapshot = await uploadBytes(fileRef, params.file, {
+    contentType: params.file.type,
+  });
+  const url = await getDownloadURL(snapshot.ref);
+  return { url, storagePath };
+}
