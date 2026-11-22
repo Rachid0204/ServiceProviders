@@ -7,6 +7,7 @@ import {
   onSnapshot,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   updateDoc,
   writeBatch,
@@ -17,7 +18,7 @@ import {
 import type { User } from 'firebase/auth';
 import { db, reportFirestoreError, OperationType } from '../firebase';
 import {
-  BOOTSTRAP_ADMIN_EMAIL,
+  DEFAULT_ADMIN_EMAIL_PLACEHOLDER,
   computeAdminAnalytics,
   flattenProviderReviews,
   recalculateRatingAfterReviewRemoval,
@@ -29,6 +30,7 @@ import {
   type WithdrawalRecord,
   type WithdrawalStatus,
 } from '../utils/adminMetrics';
+import { hasAdminCustomClaim, isVerifiedAuthUser } from '../utils/authHelpers';
 import {
   calculateEscrowSplit,
   getNextPaymentStatus,
@@ -229,7 +231,8 @@ export function useAdminData(params: {
     onApplyBookingPatch,
   } = params;
 
-  const [hasAdminDoc, setHasAdminDoc] = useState<boolean>(false);
+  const [isLiveAdmin, setIsLiveAdmin] = useState<boolean>(false);
+  const [isCheckingAdmin, setIsCheckingAdmin] = useState<boolean>(true);
   const [liveUsers, setLiveUsers] = useState<UserProfileRecord[]>([]);
   const [liveBookings, setLiveBookings] = useState<BookingRecord[]>([]);
   const [liveLogs, setLiveLogs] = useState<AdminAuditLog[]>([]);
@@ -245,29 +248,72 @@ export function useAdminData(params: {
     };
   }, []);
 
-  const isBootstrappedAdmin = Boolean(
-    firebaseUser?.emailVerified && firebaseUser.email === BOOTSTRAP_ADMIN_EMAIL
-  );
-  const isLiveAdmin = isBootstrappedAdmin || hasAdminDoc;
-
-  // Check /admins/{uid} doc if signed in with a non-bootstrap verified email
+  // Resolve verified Admin privileges without hardcoding personal admin email in client JS:
+  // 1) Signed Firebase ID token custom claim (`admin: true`) — zero Firestore reads
+  // 2) `/admins/{uid}` document lookup — allowed by rules for any verified user (zero Denies)
+  // 3) When actively visiting `/admin`, probe `adminLogs` (limit 1) so server-side bootstrapped admin succeeds
   useEffect(() => {
-    if (!authReady || !firebaseUser?.emailVerified || isBootstrappedAdmin) {
-      setHasAdminDoc(false);
+    if (!authReady) {
+      setIsCheckingAdmin(true);
       return;
     }
+    if (!firebaseUser || !isVerifiedAuthUser(firebaseUser)) {
+      setIsLiveAdmin(false);
+      setIsCheckingAdmin(false);
+      return;
+    }
+
     let cancelled = false;
-    getDoc(doc(db, 'admins', firebaseUser.uid))
-      .then((snap) => {
-        if (!cancelled) setHasAdminDoc(snap.exists());
-      })
-      .catch(() => {
-        if (!cancelled) setHasAdminDoc(false);
-      });
+    setIsCheckingAdmin(true);
+
+    (async () => {
+      try {
+        const tokenResult = await firebaseUser.getIdTokenResult();
+        if (cancelled) return;
+        if (hasAdminCustomClaim(tokenResult.claims)) {
+          setIsLiveAdmin(true);
+          setIsCheckingAdmin(false);
+          return;
+        }
+      } catch {
+        // Continue to Firestore /admins/{uid} lookup
+      }
+
+      try {
+        const adminSnap = await getDoc(doc(db, 'admins', firebaseUser.uid));
+        if (cancelled) return;
+        if (adminSnap.exists()) {
+          setIsLiveAdmin(true);
+          setIsCheckingAdmin(false);
+          return;
+        }
+      } catch {
+        // Continue
+      }
+
+      if (enabled) {
+        try {
+          await getDocs(query(collection(db, 'adminLogs'), limit(1)));
+          if (!cancelled) {
+            setIsLiveAdmin(true);
+            setIsCheckingAdmin(false);
+          }
+          return;
+        } catch {
+          // Not authorized as admin
+        }
+      }
+
+      if (!cancelled) {
+        setIsLiveAdmin(false);
+        setIsCheckingAdmin(false);
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
-  }, [authReady, firebaseUser, isBootstrappedAdmin]);
+  }, [authReady, firebaseUser, enabled]);
 
   // Attach real-time Firestore listeners ONLY when on the Admin view AND authenticated as a verified admin
   useEffect(() => {
@@ -436,7 +482,7 @@ export function useAdminData(params: {
     try {
       await setDoc(doc(db, 'adminLogs', logId), {
         adminUid: firebaseUser.uid,
-        adminEmail: firebaseUser.email || BOOTSTRAP_ADMIN_EMAIL,
+        adminEmail: firebaseUser.email || DEFAULT_ADMIN_EMAIL_PLACEHOLDER,
         actionType,
         targetCollection,
         targetId,
@@ -933,7 +979,7 @@ export function useAdminData(params: {
       platformFeePct: Math.max(0, Math.min(50, Math.round(patch.platformFeePct ?? systemSettings.platformFeePct))),
       minWithdrawalMad: Math.max(50, Math.min(20000, Math.round(patch.minWithdrawalMad ?? systemSettings.minWithdrawalMad))),
       supportWhatsAppPhone: normalizedPhone,
-      updatedByEmail: firebaseUser.email || BOOTSTRAP_ADMIN_EMAIL,
+      updatedByEmail: firebaseUser.email || DEFAULT_ADMIN_EMAIL_PLACEHOLDER,
       updatedAtIso,
     };
 
@@ -973,6 +1019,7 @@ export function useAdminData(params: {
 
   return {
     isLiveAdmin,
+    isCheckingAdmin,
     isLoadingAdmin,
     adminToast,
     adminProviders,

@@ -9,7 +9,7 @@ import {
   type VettedProvider,
 } from './marketplace';
 
-export const BOOTSTRAP_ADMIN_EMAIL = 'wahbi.rachid@gmail.com';
+export const DEFAULT_ADMIN_EMAIL_PLACEHOLDER = 'admin@moul-lkhedma.ma';
 
 export type AdminActionType =
   | 'cin_approved'
@@ -73,7 +73,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettingsRecord = {
   autoRefundOnProviderCancel: true,
   requireKycForEscrowPayout: true,
   supportWhatsAppPhone: '+212661428910',
-  updatedByEmail: BOOTSTRAP_ADMIN_EMAIL,
+  updatedByEmail: DEFAULT_ADMIN_EMAIL_PLACEHOLDER,
   updatedAtIso: '2026-11-18 09:00',
 };
 

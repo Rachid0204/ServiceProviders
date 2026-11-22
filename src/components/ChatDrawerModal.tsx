@@ -23,6 +23,7 @@ import {
 } from '../utils/marketplace';
 import type { Translations } from '../i18n/translations';
 import { uploadMarketplacePhoto, revokePreviewObjectUrl } from '../utils/storageUpload';
+import { isVerifiedAuthUser } from '../utils/authHelpers';
 
 interface ChatDrawerModalProps {
   booking: BookingRecord;
@@ -76,7 +77,9 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
   // Deduplication guard against rapid double-submit / Enter key spam
   const lastSentRef = useRef<{ bookingId: string; text: string; timestamp: number } | null>(null);
 
-  const isLiveChat = Boolean(firebaseUser && !booking.id.startsWith('booking-demo-'));
+  const isLiveChat = Boolean(
+    isVerifiedAuthUser(firebaseUser) && !booking.id.startsWith('booking-demo-')
+  );
 
   useEffect(() => {
     return () => {

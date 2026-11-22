@@ -8,14 +8,21 @@ import {
   validateUserProfileInput,
   validateServiceRequestInput,
 } from './src/utils/marketplace.ts';
+import {
+  createRequireFirebaseAuth,
+  type AuthenticatedRequest,
+} from './serverAuth.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT || 8080);
+const FIREBASE_PROJECT_ID = process.env.VITE_FIREBASE_PROJECT_ID || 'serviceproviders-530c4';
 
 app.disable('x-powered-by');
+// Honor X-Forwarded-For on Cloud Run / reverse proxies so rate limiting isolates per client IP
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '64kb' }));
 
 // Baseline HTTP security headers
@@ -27,10 +34,21 @@ app.use((_req, res, next) => {
   next();
 });
 
-// Lightweight in-memory sliding-window rate limiter for /api/* routes (120 req/min per IP)
+// Bounded in-memory sliding-window rate limiter for /api/* routes (120 req/min per IP)
 const apiRateBuckets = new Map<string, { count: number; resetAt: number }>();
+const MAX_RATE_BUCKETS = 10_000;
 app.use('/api', (req, res, next) => {
   const now = Date.now();
+  if (apiRateBuckets.size >= MAX_RATE_BUCKETS) {
+    for (const [bucketKey, bucket] of apiRateBuckets) {
+      if (bucket.resetAt <= now) {
+        apiRateBuckets.delete(bucketKey);
+      }
+    }
+    if (apiRateBuckets.size >= MAX_RATE_BUCKETS) {
+      apiRateBuckets.clear();
+    }
+  }
   const key = req.ip || 'unknown';
   const entry = apiRateBuckets.get(key);
   if (!entry || entry.resetAt <= now) {
@@ -46,15 +64,26 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
+const requireFirebaseAuth = createRequireFirebaseAuth({ projectId: FIREBASE_PROJECT_ID });
+
 // Health check for Google Cloud Run
 app.get('/api/health', (_req, res) => {
   res.json({
     status: 'ok',
     service: "Moul L'Khedma API",
-    projectId: process.env.VITE_FIREBASE_PROJECT_ID || 'serviceproviders-530c4',
+    projectId: FIREBASE_PROJECT_ID,
     port: PORT,
     cities: MOROCCAN_CITIES,
     categories: SERVICE_CATEGORIES,
+  });
+});
+
+// Authenticated identity inspection endpoint (verifies Firebase RS256 ID token on the server)
+app.get('/api/auth/whoami', requireFirebaseAuth, (req: AuthenticatedRequest, res) => {
+  res.json({
+    uid: req.authUser?.uid,
+    emailVerified: req.authUser?.emailVerified ?? false,
+    isAdmin: req.authUser?.isAdmin ?? false,
   });
 });
 
@@ -115,7 +144,7 @@ app.post('/api/validate-request', (req, res) => {
 });
 
 // Live CMI payment gateway endpoint requires authenticated Firebase ID token verification & CMI HMAC signing
-app.post('/api/payments/cmi-intent', (_req, res) => {
+app.post('/api/payments/cmi-intent', requireFirebaseAuth, (_req, res) => {
   res.status(501).json({
     error:
       'Live CMI gateway integration is not enabled on this endpoint. Authenticated server-side CMI signing and webhook verification are required before activating live charges.',

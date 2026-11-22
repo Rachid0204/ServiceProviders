@@ -1,13 +1,23 @@
 import { initializeApp } from 'firebase/app';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import {
   getAuth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  sendEmailVerification,
+  reauthenticateWithPopup,
+  deleteUser,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import firebaseAppletConfig from '../firebase-applet-config.json';
+import { shouldFallbackToRedirect } from './utils/authHelpers';
 
 export interface ResolvedFirebaseConfig {
   apiKey: string;
@@ -18,6 +28,7 @@ export interface ResolvedFirebaseConfig {
   appId: string;
   measurementId: string;
   firestoreDatabaseId: string;
+  recaptchaSiteKey?: string;
 }
 
 export const DEFAULT_FIREBASE_CONFIG: ResolvedFirebaseConfig = {
@@ -29,6 +40,7 @@ export const DEFAULT_FIREBASE_CONFIG: ResolvedFirebaseConfig = {
   appId: '1:63222145541:web:6e910b8942d1641661f26c',
   measurementId: '',
   firestoreDatabaseId: 'ai-studio-721fde67-a110-4e25-bcc2-2f011a526460',
+  recaptchaSiteKey: '',
 };
 
 /**
@@ -127,16 +139,33 @@ export function resolveFirebaseConfig(
       appletConfig.firestoreDatabaseId,
       DEFAULT_FIREBASE_CONFIG.firestoreDatabaseId
     ),
+    recaptchaSiteKey: pick(
+      env.VITE_FIREBASE_RECAPTCHA_SITE_KEY,
+      appletConfig.recaptchaSiteKey,
+      ''
+    ),
   };
 }
 
 export const firebaseConfig = resolveFirebaseConfig();
 
 const app = initializeApp(firebaseConfig);
+// Activate Firebase App Check automatically in browsers when a reCAPTCHA v3 site key is provisioned
+if (typeof window !== 'undefined' && firebaseConfig.recaptchaSiteKey) {
+  try {
+    initializeAppCheck(app, {
+      provider: new ReCaptchaV3Provider(firebaseConfig.recaptchaSiteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } catch (err) {
+    console.warn('Firebase App Check initialization skipped:', err);
+  }
+}
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 export enum OperationType {
   CREATE = 'create',
@@ -153,14 +182,10 @@ export interface FirestoreErrorInfo {
   path: string | null;
   authInfo: {
     userId?: string | null;
-    email?: string | null;
     emailVerified?: boolean | null;
     isAnonymous?: boolean | null;
     tenantId?: string | null;
-    providerInfo?: {
-      providerId?: string | null;
-      email?: string | null;
-    }[];
+    providerIds: string[];
   };
 }
 
@@ -173,15 +198,11 @@ export function buildFirestoreErrorInfo(
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
       userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
       emailVerified: auth.currentUser?.emailVerified,
       isAnonymous: auth.currentUser?.isAnonymous,
       tenantId: auth.currentUser?.tenantId,
-      providerInfo:
-        auth.currentUser?.providerData?.map((provider) => ({
-          providerId: provider.providerId,
-          email: provider.email,
-        })) || [],
+      providerIds:
+        auth.currentUser?.providerData?.map((provider) => provider.providerId) || [],
     },
     operationType,
     path,
@@ -212,7 +233,70 @@ export function handleFirestoreError(
 }
 
 export async function signInWithGoogle() {
-  return signInWithPopup(auth, googleProvider);
+  try {
+    return await signInWithPopup(auth, googleProvider);
+  } catch (err) {
+    if (shouldFallbackToRedirect(err)) {
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function resolvePendingAuthRedirect() {
+  return getRedirectResult(auth);
+}
+
+export async function resendVerificationEmail() {
+  if (!auth.currentUser) {
+    throw new Error('auth/user-not-found');
+  }
+  await sendEmailVerification(auth.currentUser);
+}
+
+export async function reloadCurrentUser() {
+  if (!auth.currentUser) return null;
+  await auth.currentUser.reload();
+  await auth.currentUser.getIdToken(true);
+  return auth.currentUser;
+}
+
+export async function signInWithEmail(email: string, password: string) {
+  return signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
+}
+
+export async function signUpWithEmail(email: string, password: string) {
+  const credential = await createUserWithEmailAndPassword(
+    auth,
+    email.trim().toLowerCase(),
+    password
+  );
+  // Immediately dispatch verification email so the new account can unlock verified Firestore/Storage rules
+  await sendEmailVerification(credential.user);
+  return credential;
+}
+
+export async function requestPasswordReset(email: string) {
+  await sendPasswordResetEmail(auth, email.trim().toLowerCase());
+}
+
+export async function deleteCurrentAuthUser() {
+  const user = auth.currentUser;
+  if (!user) throw new Error('auth/user-not-found');
+  try {
+    await deleteUser(user);
+  } catch (err) {
+    const code =
+      err && typeof err === 'object' && 'code' in err ? String((err as { code?: unknown }).code) : '';
+    const hasGoogleProvider = user.providerData.some((p) => p.providerId === 'google.com');
+    if (code === 'auth/requires-recent-login' && hasGoogleProvider) {
+      await reauthenticateWithPopup(user, googleProvider);
+      await deleteUser(user);
+      return;
+    }
+    throw err;
+  }
 }
 
 export async function signOutUser() {
