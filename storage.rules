@@ -74,5 +74,12 @@ service firebase.storage {
       allow read: if isOwner(userId) || isBookingParticipant(bookingId) || isAdmin();
       allow write: if isOwner(userId) && isBookingParticipant(bookingId) && isValidImageUpload();
     }
+
+    // 7. Client Posted Job Problem Photos (/jobPosts/{jobId}/{userId}/{fileName})
+    // Verified users (clients and Maâlems viewing open job posts) can read; only the verified uploader can write.
+    match /jobPosts/{jobId}/{userId}/{fileName} {
+      allow read: if isVerifiedUser() || isAdmin();
+      allow write: if isOwner(userId) && isValidImageUpload();
+    }
   }
 }

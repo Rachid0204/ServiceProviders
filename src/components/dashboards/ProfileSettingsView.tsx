@@ -16,6 +16,7 @@ interface ProfileSettingsViewProps {
   t: Translations;
   firebaseUser: User | null;
   currentProfile: UserProfileRecord | null;
+  isPureProvider: boolean;
   onGoogleSignIn: () => Promise<void>;
   onSignOut: () => Promise<void>;
   onDeleteAccount: () => Promise<void>;
@@ -31,7 +32,7 @@ interface ProfileSettingsViewProps {
     bio: string;
   }) => Promise<void>;
   onOpenAuth: () => void;
-  onBackToMarketplace: () => void;
+  onBack: () => void;
 }
 
 export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
@@ -39,12 +40,13 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
   t,
   firebaseUser,
   currentProfile,
+  isPureProvider,
   onGoogleSignIn,
   onSignOut,
   onDeleteAccount,
   onSaveProfile,
   onOpenAuth,
-  onBackToMarketplace,
+  onBack,
 }) => {
   const isAr = lang === 'ar';
   const BackIcon = isAr ? ArrowRight : ArrowLeft;
@@ -75,7 +77,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
             </button>
             <button
               type="button"
-              onClick={onBackToMarketplace}
+              onClick={onBack}
               className="px-5 py-2.5 text-sm font-semibold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
             >
               {isAr ? 'العودة للرئيسية' : 'Retour à l’accueil'}
@@ -91,11 +93,19 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
       <div className="flex items-center justify-between gap-4">
         <button
           type="button"
-          onClick={onBackToMarketplace}
+          onClick={onBack}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 cursor-pointer"
         >
           <BackIcon className="w-4 h-4" />
-          <span>{isAr ? 'العودة إلى قائمة المعلمين' : 'Retour au catalogue des Maâlems'}</span>
+          <span>
+            {isPureProvider
+              ? isAr
+                ? 'العودة إلى فضاء المعلم'
+                : 'Retour à mon Espace Maâlem'
+              : isAr
+              ? 'العودة إلى لوحة التحكم'
+              : 'Retour à mon tableau de bord'}
+          </span>
         </button>
       </div>
 

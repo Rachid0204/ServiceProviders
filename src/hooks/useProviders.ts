@@ -103,11 +103,13 @@ export function useProviders(
               ? seeded?.cinNumberMasked || 'CIN Vérifiée'
               : 'En attente',
             diplomaFr:
+              (typeof data.diplomaFr === 'string' && data.diplomaFr) ||
               seeded?.diplomaFr ||
               (isVerified
                 ? 'Qualification Professionnelle Vérifiée — Maroc'
                 : 'Profil prestataire inscrit sur Moul L’Khedma'),
             diplomaAr:
+              (typeof data.diplomaAr === 'string' && data.diplomaAr) ||
               seeded?.diplomaAr ||
               (isVerified
                 ? 'تأهيل مهني موثق — المغرب'

@@ -147,6 +147,8 @@ test('Built dist/index.html does not modulepreload lazy routes, dashboards, Leaf
     'ClientDashboard',
     'ProviderDashboard',
     'ProfileSettingsView',
+    'VerifyEmailView',
+    'PostJobModal',
     'AuthModal',
     'ProviderMap',
     'vendor-leaflet',

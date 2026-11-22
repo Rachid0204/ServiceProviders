@@ -17,6 +17,11 @@ import {
   generateBookingIds,
   getTodayIsoDate,
   isSafeImageUrl,
+  generateJobPostIds,
+  validateJobPostInput,
+  validateJobProposalInput,
+  filterJobPosts,
+  type JobPostRecord,
 } from './marketplace';
 import { VETTED_PROVIDERS } from '../data/providers';
 
@@ -322,5 +327,120 @@ test('Security & Utility Helpers: isSafeImageUrl, generateBookingIds, and getTod
 
   const today = getTodayIsoDate();
   assert.match(today, /^\d{4}-\d{2}-\d{2}$/);
+});
+
+test('Job Board Helpers: generateJobPostIds, validateJobPostInput, validateJobProposalInput, and filterJobPosts', () => {
+  const jIds = generateJobPostIds();
+  assert.match(jIds.jobId, /^job-[0-9a-f]{16}$/);
+  assert.match(jIds.jobRef, /^JOB-[0-9A-F]{6}$/);
+
+  const validPost = validateJobPostInput(
+    {
+      clientName: 'Amina Tazi',
+      clientPhone: '0661998877',
+      title: 'Réparation fuite sous évier cuisine',
+      category: 'Plomberie',
+      city: 'Casablanca',
+      neighborhood: 'Maârif',
+      description: 'Le siphon sous l’évier fuit depuis ce matin et doit être remplacé.',
+      budgetMad: 350,
+      preferredDate: '2026-11-25',
+      preferredTimeSlot: '09:00 - 12:00',
+    },
+    'fr'
+  );
+  assert.equal(validPost.valid, true);
+  assert.equal(validPost.normalizedPhone, '+212661998877');
+
+  const invalidPost = validateJobPostInput(
+    {
+      clientName: 'A',
+      clientPhone: '123',
+      title: 'Fix',
+      category: 'Invalid',
+      city: 'Paris',
+      neighborhood: '',
+      description: 'Court',
+      budgetMad: 10,
+      preferredDate: '',
+      preferredTimeSlot: 'bad',
+    },
+    'ar'
+  );
+  assert.equal(invalidPost.valid, false);
+  assert.ok(invalidPost.errors.title);
+  assert.ok(invalidPost.errors.budgetMad);
+
+  const validProposal = validateJobProposalInput(
+    {
+      proposedPriceMad: 300,
+      estimatedDuration: 'Demain matin · 2h',
+      message: 'Je peux intervenir demain matin avec un siphon neuf de qualité.',
+    },
+    'fr'
+  );
+  assert.equal(validProposal.valid, true);
+
+  const sampleJobs: JobPostRecord[] = [
+    {
+      id: 'job-1',
+      jobRef: 'JOB-111111',
+      clientId: 'c1',
+      clientName: 'Amina',
+      clientPhone: '+212661111111',
+      title: 'Fuite eau cuisine',
+      category: 'Plomberie',
+      city: 'Casablanca',
+      neighborhood: 'Maârif',
+      description: 'Remplacement siphon cuisine urgent.',
+      budgetMad: 350,
+      urgency: 'flexible',
+      preferredDate: '2026-11-28',
+      preferredTimeSlot: '09:00 - 12:00',
+      status: 'open',
+      proposalCount: 0,
+      createdAtIso: '2026-11-20',
+    },
+    {
+      id: 'job-2',
+      jobRef: 'JOB-222222',
+      clientId: 'c2',
+      clientName: 'Omar',
+      clientPhone: '+212662222222',
+      title: 'Panne disjoncteur urgent',
+      category: 'Électricité',
+      city: 'Rabat',
+      neighborhood: 'Agdal',
+      description: 'Coupure totale tableau électrique salon.',
+      budgetMad: 500,
+      urgency: 'urgent',
+      preferredDate: '2026-11-22',
+      preferredTimeSlot: '14:00 - 17:00',
+      status: 'open',
+      proposalCount: 2,
+      createdAtIso: '2026-11-21',
+    },
+  ];
+
+  // Urgent jobs always sort first
+  const allSorted = filterJobPosts(sampleJobs, {
+    category: 'ALL',
+    city: 'ALL',
+    urgency: 'ALL',
+    searchQuery: '',
+  });
+  assert.equal(allSorted[0].id, 'job-2');
+
+  // Filter by category, city, and budget
+  const casaPlumbing = filterJobPosts(sampleJobs, {
+    category: 'Plomberie',
+    city: 'Casablanca',
+    quartier: 'maârif',
+    urgency: 'ALL',
+    minBudgetMad: 300,
+    searchQuery: 'cuisine',
+  });
+  assert.equal(casaPlumbing.length, 1);
+  assert.equal(casaPlumbing[0].id, 'job-1');
 });
 

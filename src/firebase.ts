@@ -248,11 +248,30 @@ export async function resolvePendingAuthRedirect() {
   return getRedirectResult(auth);
 }
 
-export async function resendVerificationEmail() {
+async function dispatchVerificationEmail(
+  user: NonNullable<typeof auth.currentUser>,
+  roleIntent?: 'client' | 'provider' | 'both'
+) {
+  if (typeof window !== 'undefined' && window.location?.origin?.startsWith('http')) {
+    const roleParam = roleIntent ? `&role=${roleIntent}` : '';
+    try {
+      await sendEmailVerification(user, {
+        url: `${window.location.origin}/?verified=1${roleParam}`,
+        handleCodeInApp: false,
+      });
+      return;
+    } catch {
+      // Fallback to default Firebase verification link if continue URI is not yet whitelisted
+    }
+  }
+  await sendEmailVerification(user);
+}
+
+export async function resendVerificationEmail(roleIntent?: 'client' | 'provider' | 'both') {
   if (!auth.currentUser) {
     throw new Error('auth/user-not-found');
   }
-  await sendEmailVerification(auth.currentUser);
+  await dispatchVerificationEmail(auth.currentUser, roleIntent);
 }
 
 export async function reloadCurrentUser() {
@@ -266,14 +285,18 @@ export async function signInWithEmail(email: string, password: string) {
   return signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
 }
 
-export async function signUpWithEmail(email: string, password: string) {
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+  roleIntent?: 'client' | 'provider' | 'both'
+) {
   const credential = await createUserWithEmailAndPassword(
     auth,
     email.trim().toLowerCase(),
     password
   );
-  // Immediately dispatch verification email so the new account can unlock verified Firestore/Storage rules
-  await sendEmailVerification(credential.user);
+  // Immediately dispatch verification email with return URL so the user lands back in their dashboard
+  await dispatchVerificationEmail(credential.user, roleIntent);
   return credential;
 }
 
