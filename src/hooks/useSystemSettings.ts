@@ -5,7 +5,7 @@ import { db, reportFirestoreError, OperationType } from '../firebase';
 import {
   DEFAULT_SYSTEM_SETTINGS,
   type SystemSettingsRecord,
-} from '../utils/adminMetrics';
+} from '../utils/systemSettings';
 
 const SETTINGS_STORAGE_KEY = 'moul_lkhedma_system_settings';
 
