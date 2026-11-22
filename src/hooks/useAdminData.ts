@@ -48,6 +48,7 @@ import {
 } from '../utils/marketplace';
 import type { ProviderOverride } from './useProviders';
 import type { AdminBookingPatch } from './useBookings';
+import { isDemoFixturesEnabled } from '../utils/featureFlags';
 
 // Preview-only pending-CIN applicants (never mixed into live authenticated Admin views)
 const SEEDED_PENDING_APPLICANTS: VettedProvider[] = [
@@ -497,7 +498,7 @@ export function useAdminData(params: {
   // Live Admin strictly sees Firestore collections (no hardcoded demo fixtures polluting KPIs/CSV)
   const adminProviders = useMemo(() => {
     if (isLiveAdmin) return firestoreProviders;
-    return SEEDED_PENDING_APPLICANTS;
+    return isDemoFixturesEnabled() ? SEEDED_PENDING_APPLICANTS : [];
   }, [isLiveAdmin, firestoreProviders]);
 
   const adminBookings = useMemo(() => {
