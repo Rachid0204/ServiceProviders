@@ -103,8 +103,8 @@ export const VETTED_PROVIDERS: VettedProvider[] = [
       'صيانة وتعقيم المكيفات',
     ],
     portfolioImages: [
+      '/src/assets/images/service_ac_hvac.jpg',
       '/src/assets/images/service_electrical_smart_1794980478001.jpg',
-      '/src/assets/images/hero_moroccan_craftsman_1794980476857.jpg',
     ],
     ratingAvg: 4.8,
     reviewCount: 47,
@@ -164,8 +164,7 @@ export const VETTED_PROVIDERS: VettedProvider[] = [
       'مواكبة بيداغوجية فردية',
     ],
     portfolioImages: [
-      '/src/assets/images/hero_moroccan_craftsman_1794980476857.jpg',
-      '/src/assets/images/service_home_painting_1794980476260.jpg',
+      '/src/assets/images/service_tutoring.jpg',
     ],
     ratingAvg: 5.0,
     reviewCount: 82,
@@ -408,8 +407,7 @@ export const VETTED_PROVIDERS: VettedProvider[] = [
       'تنظيف الواجهات الزجاجية',
     ],
     portfolioImages: [
-      '/src/assets/images/service_home_painting_1794980476260.jpg',
-      '/src/assets/images/hero_moroccan_craftsman_1794980476857.jpg',
+      '/src/assets/images/service_home_cleaning.jpg',
     ],
     ratingAvg: 4.9,
     reviewCount: 71,
@@ -432,7 +430,7 @@ export const VETTED_PROVIDERS: VettedProvider[] = [
     reviews: [
       {
         id: 'rev-701',
-        authorName: 'HoudaBakkali',
+        authorName: 'Houda Bakkali',
         quartier: 'Malabata, Tanger',
         rating: 5,
         date: '2026-11-10',
