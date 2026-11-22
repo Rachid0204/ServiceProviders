@@ -10,6 +10,9 @@ import {
   CheckCircle2,
   Briefcase,
   Navigation,
+  Phone,
+  MessageCircle,
+  Lock,
 } from 'lucide-react';
 import {
   collection,
@@ -21,6 +24,7 @@ import {
 } from 'firebase/firestore';
 import { db, reportFirestoreError, OperationType } from '../firebase';
 import {
+  buildWhatsAppUrl,
   formatMadCurrency,
   type LanguageCode,
   type ProviderReview,
@@ -96,25 +100,32 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
     return [...liveReviews, ...provider.reviews.filter((r) => !seen.has(r.id))];
   }, [liveReviews, provider.reviews]);
 
-  const displayName = lang === 'ar' ? provider.fullNameAr : provider.fullNameFr;
-  const displayBio = lang === 'ar' ? provider.bioAr : provider.bioFr;
-  const displaySkills = lang === 'ar' ? provider.skillsAr : provider.skills;
-  const displayDiploma = lang === 'ar' ? provider.diplomaAr : provider.diplomaFr;
-  const displayQuartier =
-    lang === 'ar'
-      ? provider.location.quartierAr || provider.location.quartier
-      : provider.location.quartier;
+  const isAr = lang === 'ar';
+  const displayName = isAr ? provider.fullNameAr : provider.fullNameFr;
+  const displayBio = isAr ? provider.bioAr : provider.bioFr;
+  const displaySkills = isAr ? provider.skillsAr : provider.skills;
+  const displayDiploma = isAr ? provider.diplomaAr : provider.diplomaFr;
+  const displayQuartier = isAr
+    ? provider.location.quartierAr || provider.location.quartier
+    : provider.location.quartier;
+  const providerWhatsappUrl = buildWhatsAppUrl({
+    phone: provider.phone,
+    lang,
+    providerName: displayName,
+    category: t.categories[provider.category],
+  });
+  const telHref = `tel:${provider.phone.replace(/[^\d+]/g, '')}`;
 
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-labelledby="provider-detail-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-slate-900/60 p-0 sm:p-4 overflow-y-auto"
     >
-      <div className="bg-white border border-slate-200 rounded-xl max-w-3xl w-full shadow-lg my-8 overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-t-2xl sm:rounded-xl max-w-3xl w-full shadow-lg sm:my-8 overflow-hidden max-h-[94vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 p-6 border-b border-slate-200 bg-slate-50">
+        <div className="flex items-start justify-between gap-4 p-5 sm:p-6 border-b border-slate-200 bg-slate-50 shrink-0">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600">
               <span className="font-semibold text-amber-800">
@@ -129,7 +140,7 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
               ) : (
                 <span className="inline-flex items-center gap-1 text-amber-700 font-semibold">
                   <ShieldAlert className="w-4 h-4 shrink-0" />
-                  <span>{lang === 'ar' ? 'التحقق من CIN قيد المراجعة' : 'CIN en cours de vérification'}</span>
+                  <span>{isAr ? 'التحقق من CIN قيد المراجعة' : 'CIN en cours de vérification'}</span>
                 </span>
               )}
               <span aria-hidden="true">·</span>
@@ -165,6 +176,11 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
                 <Star className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
                 {provider.ratingAvg.toFixed(1)} ({provider.reviewCount} {t.reviewsLabel})
               </span>
+              <span aria-hidden="true">·</span>
+              <span className="inline-flex items-center gap-1 text-emerald-700 font-medium tabular-nums">
+                <Clock className="w-3.5 h-3.5" />
+                ~{provider.responseMinutes} {isAr ? 'د للرد' : 'min de réponse'}
+              </span>
             </div>
           </div>
 
@@ -179,7 +195,7 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+        <div className="p-5 sm:p-6 space-y-6 overflow-y-auto flex-1">
           {/* KPI Summary Strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 bg-slate-50 border border-slate-200 rounded-xl">
             <div>
@@ -219,7 +235,7 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
             <p className="text-sm text-slate-700 leading-relaxed">{displayBio}</p>
             <div className="text-xs text-slate-600">
               <span className="font-semibold text-slate-900">
-                {lang === 'ar' ? 'المهارات والتخصصات:' : 'Compétences clés :'}{' '}
+                {isAr ? 'المهارات والتخصصات:' : 'Compétences clés :'}{' '}
               </span>
               {displaySkills.join(' · ')}
             </div>
@@ -263,7 +279,7 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
                     <>
                       <ShieldAlert className="w-3.5 h-3.5 text-amber-600 shrink-0" />
                       <span className="text-amber-800">
-                        {lang === 'ar' ? 'قيد التحقق من الهوية' : 'Vérification en attente'}
+                        {isAr ? 'قيد التحقق من الهوية' : 'Vérification en attente'}
                       </span>
                     </>
                   )}
@@ -280,6 +296,49 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
             </div>
           </div>
 
+          {/* 3-Point Stranger-Trust Guarantee Strip */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 flex items-start gap-2">
+              <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold text-slate-900">
+                  {isAr ? 'هوية موثقة' : 'Identité contrôlée'}
+                </div>
+                <div className="text-[11px] text-slate-600">
+                  {isAr
+                    ? 'التحقق من البطاقة الوطنية والدبلوم'
+                    : 'CIN marocaine & qualification vérifiées'}
+                </div>
+              </div>
+            </div>
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 flex items-start gap-2">
+              <Lock className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold text-slate-900">
+                  {isAr ? 'دفع آمن بلا مفاجآت' : 'Paiement protégé'}
+                </div>
+                <div className="text-[11px] text-slate-600">
+                  {isAr
+                    ? 'نقداً بعد الإنجاز أو ضمان CMI مسترد'
+                    : 'Espèces après travail ou séquestre CMI remboursé'}
+                </div>
+              </div>
+            </div>
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 flex items-start gap-2">
+              <Phone className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+              <div>
+                <div className="font-semibold text-slate-900">
+                  {isAr ? 'تواصل مباشر وسريع' : 'Contact direct'}
+                </div>
+                <div className="text-[11px] text-slate-600">
+                  {isAr
+                    ? `متوسط الرد ~${provider.responseMinutes} دقيقة عبر الهاتف أو واتساب`
+                    : `Réponse moyenne ~${provider.responseMinutes} min par appel ou WhatsApp`}
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Portfolio Gallery */}
           <div className="space-y-3">
             <h3 className="text-sm font-bold text-slate-900">{t.detailModalPortfolioTitle}</h3>
@@ -288,6 +347,7 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
                 <img
                   src={provider.portfolioImages[activeImageIndex] || provider.portfolioImages[0]}
                   alt={`${displayName} portfolio`}
+                  decoding="async"
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
                 />
@@ -307,6 +367,8 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
                     <img
                       src={imgUrl}
                       alt={`${displayName} miniature ${idx + 1}`}
+                      loading="lazy"
+                      decoding="async"
                       referrerPolicy="no-referrer"
                       className="w-full h-full object-cover"
                     />
@@ -323,7 +385,7 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
             </h3>
             {displayedReviews.length === 0 ? (
               <p className="text-xs text-slate-500">
-                {lang === 'ar'
+                {isAr
                   ? 'لا توجد تقييمات مكتوبة بعد لهذا المعلم.'
                   : 'Aucun avis écrit pour ce Maâlem pour le moment.'}
               </p>
@@ -347,7 +409,7 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
                       </div>
                     </div>
                     <p className="text-xs text-slate-700 leading-relaxed">
-                      {lang === 'ar' ? rev.commentAr : rev.commentFr}
+                      {isAr ? rev.commentAr : rev.commentFr}
                     </p>
                   </div>
                 ))}
@@ -356,32 +418,43 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
           </div>
         </div>
 
-        {/* Footer CTA */}
-        <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-4">
-          <div className="text-xs text-slate-600">
-            <span className="font-semibold text-slate-900">
-              {formatMadCurrency(provider.hourlyRateMAD, lang)}/h
-            </span>{' '}
-            · {t.calloutFeeLabel}:{' '}
-            {provider.fixedVisitFeeMAD > 0
-              ? formatMadCurrency(provider.fixedVisitFeeMAD, lang)
-              : t.freeCallout}
+        {/* Sticky Effortless Contact & Booking Footer */}
+        <div className="px-4 sm:px-6 py-3.5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shrink-0">
+          <div className="text-xs text-slate-600 flex items-center justify-between sm:block">
+            <span>
+              <span className="font-semibold text-slate-900">
+                {formatMadCurrency(provider.hourlyRateMAD, lang)}/h
+              </span>{' '}
+              · {t.calloutFeeLabel}:{' '}
+              {provider.fixedVisitFeeMAD > 0
+                ? formatMadCurrency(provider.fixedVisitFeeMAD, lang)
+                : t.freeCallout}
+            </span>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+          <div className="grid grid-cols-3 sm:flex items-center gap-2">
+            <a
+              href={telHref}
+              className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[42px] text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap"
             >
-              {t.closeBtn}
-            </button>
+              <Phone className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+              <span>{isAr ? 'اتصال' : 'Appeler'}</span>
+            </a>
+            <a
+              href={providerWhatsappUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[42px] text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors whitespace-nowrap"
+            >
+              <MessageCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>WhatsApp</span>
+            </a>
             <button
               type="button"
               onClick={() => {
                 onClose();
                 onBookProvider(provider);
               }}
-              className="px-5 py-2.5 text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 transition-colors whitespace-nowrap cursor-pointer"
+              className="inline-flex items-center justify-center px-4 min-h-[42px] text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 transition-colors whitespace-nowrap cursor-pointer"
             >
               {t.bookProviderBtn}
             </button>

@@ -18,12 +18,14 @@ import {
   Map as MapIcon,
   LayoutGrid,
   Columns,
+  MessageCircle,
 } from 'lucide-react';
 import { TRANSLATIONS } from './i18n/translations';
 import {
   MOROCCAN_CITIES,
   SERVICE_CATEGORIES,
   CITY_COORDINATES,
+  buildWhatsAppUrl,
   formatMadCurrency,
   filterProviders,
   type LanguageCode,
@@ -34,22 +36,30 @@ import {
 } from './utils/marketplace';
 import { useMarketplaceAuth } from './hooks/useMarketplaceAuth';
 import { useSystemSettings } from './hooks/useSystemSettings';
+import { useAdminAccess } from './hooks/useAdminAccess';
 import { useProviders } from './hooks/useProviders';
 import { useBookings } from './hooks/useBookings';
-import { useAdminData } from './hooks/useAdminData';
-import { OnboardingForm } from './components/OnboardingModal';
-import { BookingModal } from './components/BookingModal';
-import { ProviderDetailModal } from './components/ProviderDetailModal';
 import { ProviderCard } from './components/ProviderCard';
-import { BookingsDashboard } from './components/BookingsDashboard';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
-// Lazy-loaded chunks matching vite.config.ts manualChunks
+// Lazy-loaded heavy routes, map, and modals (never preloaded upfront on mobile)
 const ProviderMap = lazy(() =>
   import('./components/ProviderMap').then((m) => ({ default: m.ProviderMap }))
 );
-const AdminDashboard = lazy(() =>
-  import('./components/admin/AdminDashboard').then((m) => ({ default: m.AdminDashboard }))
+const AdminRoute = lazy(() =>
+  import('./components/admin/AdminRoute').then((m) => ({ default: m.AdminRoute }))
+);
+const OnboardingForm = lazy(() =>
+  import('./components/OnboardingModal').then((m) => ({ default: m.OnboardingForm }))
+);
+const BookingModal = lazy(() =>
+  import('./components/BookingModal').then((m) => ({ default: m.BookingModal }))
+);
+const ProviderDetailModal = lazy(() =>
+  import('./components/ProviderDetailModal').then((m) => ({ default: m.ProviderDetailModal }))
+);
+const BookingsDashboard = lazy(() =>
+  import('./components/BookingsDashboard').then((m) => ({ default: m.BookingsDashboard }))
 );
 const ChatDrawerModal = lazy(() =>
   import('./components/ChatDrawerModal').then((m) => ({ default: m.ChatDrawerModal }))
@@ -81,6 +91,13 @@ function detectInitialView(): 'marketplace' | 'admin' {
   return 'marketplace';
 }
 
+function detectInitialViewMode(): 'split' | 'grid' {
+  if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+    return 'grid';
+  }
+  return 'split';
+}
+
 export function MarketplaceApp() {
   const [lang, setLang] = useState<LanguageCode>('fr');
   const t = TRANSLATIONS[lang];
@@ -109,6 +126,7 @@ export function MarketplaceApp() {
   } = useMarketplaceAuth(handleLanguageSync);
 
   const { systemSettings, updateLocalSettings } = useSystemSettings(firebaseUser, authReady);
+  const hasAdminAccess = useAdminAccess(firebaseUser, authReady);
 
   const [appView, setAppView] = useState<'marketplace' | 'admin'>(detectInitialView);
 
@@ -162,42 +180,6 @@ export function MarketplaceApp() {
     onApplyReviewOverride: applyLocalReviewOverride,
   });
 
-  const {
-    isLiveAdmin,
-    isCheckingAdmin,
-    isLoadingAdmin,
-    adminToast,
-    adminProviders,
-    adminBookings,
-    adminUsers,
-    adminReviews,
-    auditLogs,
-    withdrawals,
-    analytics,
-    toggleProviderCinVerification,
-    adminToggleProviderAvailability,
-    toggleUserVerifiedBadge,
-    releaseCmiEscrow,
-    refundCmiEscrow,
-    disputeSplitEscrow,
-    overrideBookingStatus,
-    deleteModeratedReview,
-    updateWithdrawalStatus,
-    saveSystemSettings,
-  } = useAdminData({
-    enabled: appView === 'admin',
-    firebaseUser,
-    authReady,
-    allProviders,
-    firestoreProviders,
-    bookings,
-    systemSettings,
-    onUpdateLocalSettings: updateLocalSettings,
-    onApplyProviderOverride: applyAdminProviderOverride,
-    onRemoveProviderReview: removeProviderReview,
-    onApplyBookingPatch: applyAdminBookingPatch,
-  });
-
   // Dynamic price slider ceiling so higher-priced Firestore providers are never hidden
   const sliderMaxHourlyRate = useMemo(() => {
     const highest = allProviders.reduce((max, p) => Math.max(max, p.hourlyRateMAD), 300);
@@ -218,7 +200,7 @@ export function MarketplaceApp() {
     setMaxHourlyRateMAD((prev) => (prev < sliderMaxHourlyRate && prev === 300 ? sliderMaxHourlyRate : prev));
   }, [sliderMaxHourlyRate]);
 
-  // Geolocation ("Near Me / قريب مني") & Map/List View Mode
+  // Geolocation ("Near Me / قريب مني") & Map/List View Mode (grid default on mobile to skip Leaflet load)
   const [nearMeActive, setNearMeActive] = useState<boolean>(false);
   const [isLocating, setIsLocating] = useState<boolean>(false);
   const [userCoords, setUserCoords] = useState<{
@@ -226,7 +208,7 @@ export function MarketplaceApp() {
     lng: number;
     label: string;
   } | null>(null);
-  const [viewMode, setViewMode] = useState<'split' | 'grid' | 'map'>('split');
+  const [viewMode, setViewMode] = useState<'split' | 'grid' | 'map'>(detectInitialViewMode);
 
   // Dashboard Mode: 'client' ("Mes Demandes / طلباتي") vs 'provider' ("Espace Maâlem / لوحة المعلم")
   const [dashboardTab, setDashboardTab] = useState<'client' | 'provider'>('client');
@@ -380,78 +362,44 @@ export function MarketplaceApp() {
           </div>
         }
       >
-        <AdminDashboard
+        <AdminRoute
           lang={lang}
           t={t}
           onToggleLanguage={toggleLanguage}
           onExitAdmin={() => navigateView('marketplace')}
+          onBookFromAdmin={(p) => {
+            navigateView('marketplace');
+            setBookingProvider(p);
+          }}
           firebaseUser={firebaseUser}
           authReady={authReady}
-          isLiveAdmin={isLiveAdmin}
-          isCheckingAdmin={isCheckingAdmin}
-          isLoadingAdmin={isLoadingAdmin}
-          adminToast={adminToast}
           onGoogleSignIn={async () => {
             await signInWithGoogle();
           }}
           onSignOut={async () => {
             await signOutUser();
           }}
-          analytics={analytics}
-          providers={adminProviders}
-          bookings={adminBookings}
-          users={adminUsers}
-          reviews={adminReviews}
-          withdrawals={withdrawals}
+          allProviders={allProviders}
+          firestoreProviders={firestoreProviders}
+          bookings={bookings}
+          chatThreads={chatThreads}
           systemSettings={systemSettings}
-          auditLogs={auditLogs}
-          onToggleCinVerification={toggleProviderCinVerification}
-          onToggleAvailability={adminToggleProviderAvailability}
-          onInspectProvider={setDetailProvider}
-          onToggleUserVerified={toggleUserVerifiedBadge}
-          onReleaseEscrow={releaseCmiEscrow}
-          onRefundEscrow={refundCmiEscrow}
-          onDisputeSplitEscrow={disputeSplitEscrow}
-          onOverrideBookingStatus={overrideBookingStatus}
-          onOpenChat={setActiveChatBooking}
-          onDeleteReview={deleteModeratedReview}
-          onUpdateWithdrawalStatus={updateWithdrawalStatus}
-          onSaveSystemSettings={saveSystemSettings}
+          onUpdateLocalSettings={updateLocalSettings}
+          onApplyProviderOverride={applyAdminProviderOverride}
+          onRemoveProviderReview={removeProviderReview}
+          onApplyBookingPatch={applyAdminBookingPatch}
+          onSendLocalChatMessage={sendLocalChatMessage}
         />
-
-        {syncedDetailProvider && (
-          <ProviderDetailModal
-            provider={syncedDetailProvider}
-            lang={lang}
-            t={t}
-            onClose={() => setDetailProvider(null)}
-            onBookProvider={(p) => {
-              setDetailProvider(null);
-              navigateView('marketplace');
-              setBookingProvider(p);
-            }}
-          />
-        )}
-
-        {activeChatBooking && (
-          <ChatDrawerModal
-            booking={activeChatBooking}
-            relatedBookings={adminBookings}
-            onSwitchBooking={setActiveChatBooking}
-            lang={lang}
-            t={t}
-            firebaseUser={firebaseUser}
-            activeRole="provider"
-            activeUserName={firebaseUser?.displayName || 'Admin Moul L’Khedma'}
-            readOnly={true}
-            localMessages={chatThreads[activeChatBooking.id] || []}
-            onSendLocalMessage={sendLocalChatMessage}
-            onClose={() => setActiveChatBooking(null)}
-          />
-        )}
       </Suspense>
     );
   }
+
+  const supportWhatsAppUrl = buildWhatsAppUrl({
+    phone: systemSettings.supportWhatsAppPhone || '+212661428910',
+    lang,
+    providerName: lang === 'ar' ? 'مول الخدمة' : "Moul L'Khedma",
+    category: lang === 'ar' ? 'خدمة منزلية' : 'Service à domicile',
+  });
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 overflow-x-hidden">
@@ -489,7 +437,7 @@ export function MarketplaceApp() {
             >
               {t.navMyRequests} ({bookings.length})
             </a>
-            {isLiveAdmin && (
+            {hasAdminAccess && (
               <button
                 type="button"
                 onClick={() => navigateView('admin')}
@@ -619,6 +567,10 @@ export function MarketplaceApp() {
                   <img
                     src="/src/assets/images/hero_moroccan_craftsman_1794980476857.jpg"
                     alt={t.heroTitle}
+                    width={1200}
+                    height={670}
+                    fetchPriority="high"
+                    decoding="async"
                     referrerPolicy="no-referrer"
                     className="w-full h-full object-cover"
                   />
@@ -970,51 +922,63 @@ export function MarketplaceApp() {
         {/* Section 3: Dual-Role Onboarding & Firestore Profile Studio */}
         <section id="onboarding" className="py-12 bg-slate-100/70 border-y border-slate-200">
           <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-            <OnboardingForm
-              lang={lang}
-              t={t}
-              firebaseUser={firebaseUser}
-              currentProfile={userProfile}
-              onGoogleSignIn={async () => {
-                await signInWithGoogle();
-              }}
-              onSignOut={async () => {
-                await signOutUser();
-              }}
-              onDeleteAccount={deleteAccount}
-              onSaveProfile={handleSaveProfile}
-            />
+            <Suspense
+              fallback={
+                <div className="h-48 rounded-xl bg-white border border-slate-200 animate-pulse" />
+              }
+            >
+              <OnboardingForm
+                lang={lang}
+                t={t}
+                firebaseUser={firebaseUser}
+                currentProfile={userProfile}
+                onGoogleSignIn={async () => {
+                  await signInWithGoogle();
+                }}
+                onSignOut={async () => {
+                  await signOutUser();
+                }}
+                onDeleteAccount={deleteAccount}
+                onSaveProfile={handleSaveProfile}
+              />
+            </Suspense>
           </div>
         </section>
 
         {/* Section 4: Client & Provider Bookings Dashboard + Guarantees */}
         <section id="requests" className="py-12 lg:py-16">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-            <BookingsDashboard
-              lang={lang}
-              t={t}
-              firebaseUser={firebaseUser}
-              platformFeePct={systemSettings.platformFeePct}
-              bookingActionError={bookingActionError}
-              onDismissError={clearBookingActionError}
-              dashboardTab={dashboardTab}
-              onChangeDashboardTab={setDashboardTab}
-              allProviders={allProviders}
-              activeMaalemProvider={activeMaalemProvider}
-              onSelectActiveMaalemId={setActiveMaalemId}
-              onToggleProviderAvailability={toggleProviderAvailability}
-              bookings={bookings}
-              chatThreads={chatThreads}
-              onOpenChat={setActiveChatBooking}
-              onOpenBookingDetail={setDetailBooking}
-              onOpenReschedule={setReschedulingBooking}
-              onOpenCancel={setCancellingBooking}
-              onConfirmAndReleaseEscrow={(id) => {
-                void clientConfirmAndReleaseEscrow(id);
-              }}
-              onUpdateBookingStatus={updateBookingStatus}
-              onOpenReview={setReviewingBooking}
-            />
+            <Suspense
+              fallback={
+                <div className="h-44 rounded-xl bg-white border border-slate-200 animate-pulse" />
+              }
+            >
+              <BookingsDashboard
+                lang={lang}
+                t={t}
+                firebaseUser={firebaseUser}
+                platformFeePct={systemSettings.platformFeePct}
+                bookingActionError={bookingActionError}
+                onDismissError={clearBookingActionError}
+                dashboardTab={dashboardTab}
+                onChangeDashboardTab={setDashboardTab}
+                allProviders={allProviders}
+                activeMaalemProvider={activeMaalemProvider}
+                onSelectActiveMaalemId={setActiveMaalemId}
+                onToggleProviderAvailability={toggleProviderAvailability}
+                bookings={bookings}
+                chatThreads={chatThreads}
+                onOpenChat={setActiveChatBooking}
+                onOpenBookingDetail={setDetailBooking}
+                onOpenReschedule={setReschedulingBooking}
+                onOpenCancel={setCancellingBooking}
+                onConfirmAndReleaseEscrow={(id) => {
+                  void clientConfirmAndReleaseEscrow(id);
+                }}
+                onUpdateBookingStatus={updateBookingStatus}
+                onOpenReview={setReviewingBooking}
+              />
+            </Suspense>
 
             {/* Editorial Guarantees Section */}
             <div id="how-it-works" className="pt-8 border-t border-slate-200 space-y-6">
@@ -1038,8 +1002,8 @@ export function MarketplaceApp() {
         </section>
       </main>
 
-      {/* Clean Footer */}
-      <footer className="bg-white border-t border-slate-200 py-8">
+      {/* Clean Footer (extra bottom padding on mobile for sticky contact bar) */}
+      <footer className="bg-white border-t border-slate-200 pt-8 pb-24 md:pb-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <div>
             <span className="font-bold text-slate-900">
@@ -1060,63 +1024,98 @@ export function MarketplaceApp() {
         </div>
       </footer>
 
-      {/* Onboarding Modal */}
-      {isOnboardingModalOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label={t.onboardingTitle}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto"
-        >
-          <div className="max-w-3xl w-full my-8">
-            <OnboardingForm
-              lang={lang}
-              t={t}
-              firebaseUser={firebaseUser}
-              currentProfile={userProfile}
-              onGoogleSignIn={async () => {
-                await signInWithGoogle();
-              }}
-              onSignOut={async () => {
-                await signOutUser();
-              }}
-              onDeleteAccount={deleteAccount}
-              onSaveProfile={async (data) => {
-                await handleSaveProfile(data);
-              }}
-              onClose={() => setIsOnboardingModalOpen(false)}
-              isModal={true}
-            />
-          </div>
+      {/* Mobile Sticky First-Contact & Near-Me Action Bar */}
+      <div
+        role="region"
+        aria-label={lang === 'ar' ? 'إجراءات سريعة للهاتف' : 'Actions rapides mobile'}
+        className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-sm border-t border-slate-200 px-3 py-2.5 shadow-lg"
+      >
+        <div className="grid grid-cols-2 gap-2.5 max-w-md mx-auto">
+          <button
+            type="button"
+            onClick={() => {
+              if (!nearMeActive) handleToggleNearMe();
+              document.getElementById('providers')?.scrollIntoView({ behavior: 'smooth' });
+            }}
+            className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[44px] text-xs font-semibold text-slate-900 bg-amber-50 border border-amber-300 rounded-lg active:bg-amber-100 cursor-pointer"
+          >
+            <Navigation className="w-4 h-4 text-amber-700 shrink-0" />
+            <span className="truncate">{t.nearMeToggle}</span>
+          </button>
+          <a
+            href={supportWhatsAppUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[44px] text-xs font-semibold text-white bg-emerald-700 rounded-lg active:bg-emerald-800"
+          >
+            <MessageCircle className="w-4 h-4 shrink-0" />
+            <span className="truncate">
+              {lang === 'ar' ? 'واتساب سريع' : 'WhatsApp Rapide'}
+            </span>
+          </a>
         </div>
-      )}
+      </div>
 
-      {/* Provider Detail Modal */}
-      {syncedDetailProvider && (
-        <ProviderDetailModal
-          provider={syncedDetailProvider}
-          lang={lang}
-          t={t}
-          onClose={() => setDetailProvider(null)}
-          onBookProvider={setBookingProvider}
-        />
-      )}
+      {/* Lazy-Loaded Modals & Drawers */}
+      <Suspense fallback={null}>
+        {/* Onboarding Modal */}
+        {isOnboardingModalOpen && (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={t.onboardingTitle}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto"
+          >
+            <div className="max-w-3xl w-full my-8">
+              <OnboardingForm
+                lang={lang}
+                t={t}
+                firebaseUser={firebaseUser}
+                currentProfile={userProfile}
+                onGoogleSignIn={async () => {
+                  await signInWithGoogle();
+                }}
+                onSignOut={async () => {
+                  await signOutUser();
+                }}
+                onDeleteAccount={deleteAccount}
+                onSaveProfile={async (data) => {
+                  await handleSaveProfile(data);
+                }}
+                onClose={() => setIsOnboardingModalOpen(false)}
+                isModal={true}
+              />
+            </div>
+          </div>
+        )}
 
-      {/* Booking Modal */}
-      {bookingProvider && (
-        <BookingModal
-          provider={bookingProvider}
-          lang={lang}
-          t={t}
-          firebaseUser={firebaseUser}
-          currentProfile={userProfile}
-          onGoogleSignIn={async () => {
-            await signInWithGoogle();
-          }}
-          onClose={() => setBookingProvider(null)}
-          onSubmitBooking={submitBooking}
-        />
-      )}
+        {/* Provider Detail Modal */}
+        {syncedDetailProvider && (
+          <ProviderDetailModal
+            provider={syncedDetailProvider}
+            lang={lang}
+            t={t}
+            onClose={() => setDetailProvider(null)}
+            onBookProvider={setBookingProvider}
+          />
+        )}
+
+        {/* Booking Modal */}
+        {bookingProvider && (
+          <BookingModal
+            provider={bookingProvider}
+            lang={lang}
+            t={t}
+            firebaseUser={firebaseUser}
+            currentProfile={userProfile}
+            onGoogleSignIn={async () => {
+              await signInWithGoogle();
+            }}
+            onClose={() => setBookingProvider(null)}
+            onSubmitBooking={submitBooking}
+          />
+        )}
+      </Suspense>
 
       {/* Lazy-Loaded Booking Lifecycle, Chat & Review Modals */}
       <Suspense fallback={null}>
