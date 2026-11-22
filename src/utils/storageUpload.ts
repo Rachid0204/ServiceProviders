@@ -48,7 +48,7 @@ function sanitizeFileName(name: string): string {
  */
 export async function uploadMarketplacePhoto(params: {
   file: File;
-  scope: 'bookings' | 'chats' | 'providers';
+  scope: 'bookings' | 'chats' | 'providers' | 'jobPosts';
   entityId: string;
   userId: string | null;
   lang: 'fr' | 'ar';

@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { X, ShieldCheck, LogIn, Mail, AlertCircle, CheckCircle2, Wrench } from 'lucide-react';
-import type { LanguageCode } from '../utils/marketplace';
+import {
+  X,
+  ShieldCheck,
+  LogIn,
+  Mail,
+  AlertCircle,
+  CheckCircle2,
+  Wrench,
+  UserCheck,
+  Layers,
+} from 'lucide-react';
+import type { LanguageCode, UserRole } from '../utils/marketplace';
 import type { Translations } from '../i18n/translations';
 import {
   mapFirebaseAuthError,
@@ -15,9 +25,10 @@ import {
 interface AuthModalProps {
   lang: LanguageCode;
   t: Translations;
-  intent: 'client' | 'provider';
+  intent: UserRole;
+  onSelectRoleIntent: (role: UserRole) => void;
   onGoogleSignIn: () => Promise<void>;
-  onAuthSuccess: (intent: 'client' | 'provider') => void;
+  onAuthSuccess: (role: UserRole, isNewEmailSignup?: boolean) => void;
   onClose: () => void;
 }
 
@@ -25,6 +36,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   lang,
   t,
   intent,
+  onSelectRoleIntent,
   onGoogleSignIn,
   onAuthSuccess,
   onClose,
@@ -33,6 +45,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [mode, setMode] = useState<'signin' | 'signup' | 'reset'>(
     intent === 'provider' ? 'signup' : 'signin'
   );
+  const [selectedRole, setSelectedRole] = useState<UserRole>(intent);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -50,10 +63,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleGoogle = async () => {
     setError(null);
     setNotice(null);
+    onSelectRoleIntent(selectedRole);
     setIsSubmitting(true);
     try {
       await onGoogleSignIn();
-      onAuthSuccess(intent);
+      onAuthSuccess(selectedRole, false);
       onClose();
     } catch (err) {
       setError(mapFirebaseAuthError(err, lang));
@@ -83,17 +97,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       if (mode === 'signin') {
         await signInWithEmail(check.normalizedEmail, password);
         setPassword('');
-        onAuthSuccess(intent);
+        onAuthSuccess(selectedRole, false);
         onClose();
       } else if (mode === 'signup') {
-        await signUpWithEmail(check.normalizedEmail, password);
+        onSelectRoleIntent(selectedRole);
+        await signUpWithEmail(check.normalizedEmail, password, selectedRole);
         setPassword('');
-        setNotice(
-          isAr
-            ? 'تم إنشاء حسابك! أرسلنا رابط التحقق إلى بريدك الإلكتروني. يرجى تأكيده ثم إكمال ملفك الشخصي.'
-            : 'Compte créé ! Un lien de vérification vient d’être envoyé à votre adresse e-mail.'
-        );
-        onAuthSuccess(intent);
+        onAuthSuccess(selectedRole, true);
+        onClose();
       } else {
         await requestPasswordReset(check.normalizedEmail);
         setNotice(
@@ -116,18 +127,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       aria-labelledby="auth-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4 overflow-y-auto"
     >
-      <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 sm:p-7 shadow-xl space-y-5">
+      <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 sm:p-7 shadow-xl space-y-5 my-8">
         {/* Header */}
         <div className="flex items-start justify-between gap-4">
           <div className="space-y-1">
             <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
-              {intent === 'provider' ? (
+              {selectedRole === 'provider' ? (
                 <Wrench className="w-3.5 h-3.5" />
               ) : (
                 <ShieldCheck className="w-3.5 h-3.5" />
               )}
               <span>
-                {intent === 'provider'
+                {selectedRole === 'provider'
                   ? isAr
                     ? 'فضاء المعلمين المعتمدين'
                     : 'Espace Maâlem & Artisans'
@@ -140,25 +151,29 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   ? 'تسجيل الدخول إلى حسابك'
                   : 'Connexion à votre espace'
                 : mode === 'signup'
-                ? intent === 'provider'
+                ? selectedRole === 'provider'
                   ? isAr
                     ? 'إنشاء حساب معلم / مقدم خدمة'
-                    : 'Devenir Maâlem sur Moul L’Khedma'
+                    : 'Créer mon compte Maâlem'
+                  : selectedRole === 'both'
+                  ? isAr
+                    ? 'إنشاء حساب مزدوج (زبون ومعلم)'
+                    : 'Créer un double compte'
                   : isAr
-                  ? 'إنشاء حساب جديد'
-                  : 'Créer un compte'
+                  ? 'إنشاء حساب زبون جديد'
+                  : 'Créer mon compte Client'
                 : isAr
                 ? 'استعادة كلمة المرور'
                 : 'Réinitialiser le mot de passe'}
             </h2>
             <p className="text-xs text-slate-600">
-              {intent === 'provider'
+              {selectedRole === 'provider'
                 ? isAr
-                  ? 'انشر ملفك المهني، استقبل طلبات الزبناء في حيك، وتابع أرباحك.'
-                  : 'Publiez votre profil, recevez des demandes dans votre quartier et gérez vos revenus.'
+                  ? 'تصفح طلبات الزبناء المنشورة، قدّم عروضك، وأدر بطاقتك المهنية وأرباحك.'
+                  : 'Consultez les offres postées par les clients, envoyez vos devis et gérez votre fiche Maâlem.'
                 : isAr
-                ? 'احجز معلمين موثوقين وتابع طلباتك ومحادثاتك بأمان.'
-                : 'Réservez des Maâlems vérifiés, suivez vos interventions et échangez en direct.'}
+                ? 'انشر طلباتك لتلقي عروض المعلمين أو احجز مباشرة مع معلمين موثوقين.'
+                : 'Publiez vos besoins pour recevoir des devis ou réservez un Maâlem vérifié.'}
             </p>
           </div>
           <button
@@ -169,28 +184,6 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           >
             <X className="w-5 h-5" />
           </button>
-        </div>
-
-        {/* Google One-Click Auth */}
-        <button
-          type="button"
-          disabled={isSubmitting}
-          onClick={() => {
-            void handleGoogle();
-          }}
-          className="w-full inline-flex items-center justify-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-900 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 disabled:opacity-60 transition-colors shadow-2xs cursor-pointer"
-        >
-          <LogIn className="w-4 h-4 text-emerald-700" />
-          <span>{t.googleSignInBtn}</span>
-        </button>
-
-        {/* Divider */}
-        <div className="relative flex items-center justify-center">
-          <div className="border-t border-slate-200 w-full" />
-          <span className="bg-white px-3 text-[11px] font-medium text-slate-500 whitespace-nowrap">
-            {isAr ? 'أو بالبريد الإلكتروني' : 'ou par e-mail'}
-          </span>
-          <div className="border-t border-slate-200 w-full" />
         </div>
 
         {/* Mode Switcher */}
@@ -226,6 +219,96 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             {isAr ? 'حساب جديد' : 'Créer un compte'}
           </button>
         </div>
+
+        {/* Role Selector (Shown on Sign Up so new accounts land straight in their tailored workspace) */}
+        {mode === 'signup' && (
+          <div className="space-y-2">
+            <span className="block text-xs font-semibold text-slate-700">
+              {isAr ? 'اختر نوع حسابك :' : 'Je m’inscris en tant que :'}
+            </span>
+            <div className="grid grid-cols-3 gap-2">
+              {(
+                [
+                  {
+                    id: 'client' as const,
+                    icon: UserCheck,
+                    fr: 'Client',
+                    ar: 'زبون',
+                    subFr: 'Je cherche un pro',
+                    subAr: 'أبحث عن خدمة',
+                  },
+                  {
+                    id: 'provider' as const,
+                    icon: Wrench,
+                    fr: 'Maâlem',
+                    ar: 'معلم',
+                    subFr: 'Je propose mes services',
+                    subAr: 'أقدم خدماتي',
+                  },
+                  {
+                    id: 'both' as const,
+                    icon: Layers,
+                    fr: 'Double',
+                    ar: 'حساب مزدوج',
+                    subFr: 'Client & Maâlem',
+                    subAr: 'زبون ومعلم',
+                  },
+                ] as const
+              ).map((opt) => {
+                const Icon = opt.icon;
+                const active = selectedRole === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setSelectedRole(opt.id)}
+                    aria-pressed={active}
+                    className={`p-2.5 rounded-xl border text-center transition-all cursor-pointer space-y-1 ${
+                      active
+                        ? 'border-emerald-600 bg-emerald-50 text-emerald-950 ring-1 ring-emerald-600'
+                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <Icon
+                      className={`w-4 h-4 mx-auto ${
+                        active ? 'text-emerald-700' : 'text-slate-400'
+                      }`}
+                    />
+                    <div className="text-xs font-bold">{isAr ? opt.ar : opt.fr}</div>
+                    <div className="text-[10px] text-slate-500 leading-tight">
+                      {isAr ? opt.subAr : opt.subFr}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Google One-Click Auth */}
+        {mode !== 'reset' && (
+          <>
+            <button
+              type="button"
+              disabled={isSubmitting}
+              onClick={() => {
+                void handleGoogle();
+              }}
+              className="w-full inline-flex items-center justify-center gap-2.5 px-4 py-2.5 text-sm font-semibold text-slate-900 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 disabled:opacity-60 transition-colors shadow-2xs cursor-pointer"
+            >
+              <LogIn className="w-4 h-4 text-emerald-700" />
+              <span>{t.googleSignInBtn}</span>
+            </button>
+
+            <div className="relative flex items-center justify-center">
+              <div className="border-t border-slate-200 w-full" />
+              <span className="bg-white px-3 text-[11px] font-medium text-slate-500 whitespace-nowrap">
+                {isAr ? 'أو بالبريد الإلكتروني' : 'ou par e-mail'}
+              </span>
+              <div className="border-t border-slate-200 w-full" />
+            </div>
+          </>
+        )}
 
         {error && (
           <div
@@ -300,7 +383,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 dir="ltr"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={isAr ? '8 أحرف على الأقل' : '8 caractères minimum'}
+                placeholder={
+                  isAr ? '8 أحرف على الأقل (حروف وأرقام)' : '8 caractères min. (lettres + chiffres)'
+                }
                 autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                 className="w-full px-3.5 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
               />
@@ -322,7 +407,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 : 'Se connecter'
               : mode === 'signup'
               ? isAr
-                ? 'إنشاء الحساب'
+                ? 'إنشاء الحساب وإرسال رابط التفعيل'
                 : 'Créer mon compte'
               : isAr
               ? 'إرسال رابط الاستعادة'

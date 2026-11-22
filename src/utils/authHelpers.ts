@@ -287,3 +287,132 @@ export function validateEmailPasswordInput(params: {
 
   return { valid: true, normalizedEmail };
 }
+
+const SIGNUP_INTENT_KEY = 'moul_lkhedma_signup_intent';
+
+export function persistSignupRoleIntent(role: UserProfileRecord['role']): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(SIGNUP_INTENT_KEY, role);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function readSignupRoleIntent(): UserProfileRecord['role'] | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const val = window.sessionStorage.getItem(SIGNUP_INTENT_KEY);
+    if (val === 'client' || val === 'provider' || val === 'both') return val;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+export function clearSignupRoleIntent(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem(SIGNUP_INTENT_KEY);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+/**
+ * Pure Maâlem accounts ('provider') stay strictly inside their Maâlem workspace
+ * and do not browse competing Maâlems. Clients, signed-out visitors, and Double Accounts ('both')
+ * can explore the public Maâlem directory.
+ */
+export function canExploreMarketplace(
+  role: UserProfileRecord['role'] | null | undefined
+): boolean {
+  return role !== 'provider';
+}
+
+/**
+ * Resolves the post-login / post-verification landing dashboard route based on user role or signup intent.
+ */
+export function getDefaultDashboardForRole(
+  role: UserProfileRecord['role'] | null | undefined,
+  signupIntent?: UserProfileRecord['role'] | null
+): 'provider' | 'dashboard' {
+  const effective = role ?? signupIntent ?? 'client';
+  if (effective === 'provider') return 'provider';
+  if (effective === 'both' && signupIntent === 'provider') return 'provider';
+  return 'dashboard';
+}
+
+export interface ProviderCompletenessResult {
+  percent: number;
+  checks: {
+    hasIdentity: boolean;
+    hasLocation: boolean;
+    hasExperienceAndBio: boolean;
+    hasCustomPhoto: boolean;
+    hasSkills: boolean;
+  };
+}
+
+/**
+ * Evaluates a Maâlem's public card readiness (0-100%) to guide profile setup in ProviderDashboard.
+ */
+export function computeProviderProfileCompleteness(
+  provider: {
+    fullNameFr?: string;
+    phone?: string;
+    location?: { city?: string; quartier?: string };
+    experienceYears?: number;
+    bioFr?: string;
+    skills?: string[];
+    portfolioImages?: string[];
+  } | null
+): ProviderCompletenessResult {
+  if (!provider) {
+    return {
+      percent: 0,
+      checks: {
+        hasIdentity: false,
+        hasLocation: false,
+        hasExperienceAndBio: false,
+        hasCustomPhoto: false,
+        hasSkills: false,
+      },
+    };
+  }
+
+  const hasIdentity =
+    Boolean(provider.fullNameFr && provider.fullNameFr.trim().length >= 2) &&
+    Boolean(provider.phone && provider.phone.trim().length >= 12);
+  const hasLocation =
+    Boolean(provider.location?.city) &&
+    Boolean(provider.location?.quartier && provider.location.quartier.trim().length >= 2);
+  const hasExperienceAndBio =
+    typeof provider.experienceYears === 'number' &&
+    provider.experienceYears > 0 &&
+    Boolean(provider.bioFr && provider.bioFr.trim().length >= 25);
+  const hasCustomPhoto = Boolean(
+    Array.isArray(provider.portfolioImages) &&
+      provider.portfolioImages.some((url) => url.startsWith('https://'))
+  );
+  const hasSkills = Boolean(Array.isArray(provider.skills) && provider.skills.length >= 2);
+
+  const passedCount = [
+    hasIdentity,
+    hasLocation,
+    hasExperienceAndBio,
+    hasCustomPhoto,
+    hasSkills,
+  ].filter(Boolean).length;
+
+  return {
+    percent: Math.round((passedCount / 5) * 100),
+    checks: {
+      hasIdentity,
+      hasLocation,
+      hasExperienceAndBio,
+      hasCustomPhoto,
+      hasSkills,
+    },
+  };
+}

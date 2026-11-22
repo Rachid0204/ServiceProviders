@@ -11,6 +11,9 @@ import {
   hasAdminCustomClaim,
   getBookingSubmissionMode,
   validateEmailPasswordInput,
+  canExploreMarketplace,
+  getDefaultDashboardForRole,
+  computeProviderProfileCompleteness,
 } from './authHelpers';
 
 test('extractFirebaseAuthErrorCode extracts auth/* codes from Firebase errors and messages', () => {
@@ -150,4 +153,51 @@ test('validateEmailPasswordInput validates email format, password length, signup
     lang: 'fr',
   });
   assert.equal(okReset.valid, true);
+});
+
+test('canExploreMarketplace blocks pure provider accounts and allows visitors, clients, and double accounts', () => {
+  assert.equal(canExploreMarketplace('provider'), false);
+  assert.equal(canExploreMarketplace('both'), true);
+  assert.equal(canExploreMarketplace('client'), true);
+  assert.equal(canExploreMarketplace(null), true);
+  assert.equal(canExploreMarketplace(undefined), true);
+});
+
+test('getDefaultDashboardForRole routes verified users directly to their role dashboard', () => {
+  assert.equal(getDefaultDashboardForRole('provider', null), 'provider');
+  assert.equal(getDefaultDashboardForRole(null, 'provider'), 'provider');
+  assert.equal(getDefaultDashboardForRole('client', null), 'dashboard');
+  assert.equal(getDefaultDashboardForRole(null, 'client'), 'dashboard');
+  assert.equal(getDefaultDashboardForRole('both', 'provider'), 'provider');
+  assert.equal(getDefaultDashboardForRole('both', 'client'), 'dashboard');
+});
+
+test('computeProviderProfileCompleteness accurately scores a Maâlem card from 0% to 100%', () => {
+  assert.equal(computeProviderProfileCompleteness(null).percent, 0);
+
+  const partial = computeProviderProfileCompleteness({
+    fullNameFr: 'Maâlem Karim',
+    phone: '+212661234567',
+    location: { city: 'Casablanca', quartier: 'Maârif' },
+    experienceYears: 8,
+    bioFr: 'Plombier certifié avec 8 ans d’expérience à Casablanca.',
+    skills: ['Plomberie'],
+    portfolioImages: ['/src/assets/images/service_plumbing_repair_1794980477189.jpg'],
+  });
+  assert.equal(partial.percent, 60);
+  assert.equal(partial.checks.hasCustomPhoto, false);
+  assert.equal(partial.checks.hasSkills, false);
+
+  const full = computeProviderProfileCompleteness({
+    fullNameFr: 'Maâlem Karim',
+    phone: '+212661234567',
+    location: { city: 'Casablanca', quartier: 'Maârif' },
+    experienceYears: 8,
+    bioFr: 'Plombier certifié avec 8 ans d’expérience à Casablanca.',
+    skills: ['Détection de fuite', 'Chauffe-eau'],
+    portfolioImages: ['https://firebasestorage.googleapis.com/v0/b/app/o/photo.jpg'],
+  });
+  assert.equal(full.percent, 100);
+  assert.equal(full.checks.hasCustomPhoto, true);
+  assert.equal(full.checks.hasSkills, true);
 });

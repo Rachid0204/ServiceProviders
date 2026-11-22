@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
 import { doc, getDoc, updateDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import {
@@ -6,6 +6,7 @@ import {
   db,
   signInWithGoogle,
   resolvePendingAuthRedirect,
+  reloadCurrentUser,
   deleteCurrentAuthUser,
   signOutUser,
   handleFirestoreError,
@@ -22,7 +23,12 @@ import {
   type UserProfileRecord,
   type UserRole,
 } from '../utils/marketplace';
-import { isVerifiedAuthUser } from '../utils/authHelpers';
+import {
+  isVerifiedAuthUser,
+  persistSignupRoleIntent,
+  readSignupRoleIntent,
+  clearSignupRoleIntent,
+} from '../utils/authHelpers';
 
 const PROFILE_STORAGE_KEY = 'moul_lkhedma_profile';
 
@@ -44,9 +50,43 @@ export interface UpdateProviderDetailsInput {
   hourlyRateMAD?: number;
   fixedVisitFeeMAD?: number;
   experienceYears?: number;
+  diplomaFr?: string;
+  diplomaAr?: string;
   skills?: string[];
   portfolioImages?: string[];
   isAvailableNow?: boolean;
+}
+
+export interface SaveFullProviderCardInput {
+  role: 'provider' | 'both';
+  fullName: string;
+  phone: string;
+  city: MoroccanCity;
+  neighborhood: string;
+  lat?: number;
+  lng?: number;
+  category: ServiceCategory;
+  experienceYears: number;
+  diploma: string;
+  hourlyRateMAD: number;
+  fixedVisitFeeMAD: number;
+  isAvailableNow: boolean;
+  bio: string;
+  skills: string[];
+  portfolioImages: string[];
+  languagePref: LanguageCode;
+}
+
+function readInitialRoleIntent(): UserRole | null {
+  if (typeof window !== 'undefined') {
+    const params = new URLSearchParams(window.location.search);
+    const paramRole = params.get('role');
+    if (paramRole === 'client' || paramRole === 'provider' || paramRole === 'both') {
+      persistSignupRoleIntent(paramRole);
+      return paramRole;
+    }
+  }
+  return readSignupRoleIntent();
 }
 
 export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void) {
@@ -56,6 +96,19 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
   const authSeqRef = useRef<number>(0);
   const [userProfile, setUserProfile] = useState<UserProfileRecord | null>(null);
   const [profileLoaded, setProfileLoaded] = useState<boolean>(false);
+  const [verifiedOverride, setVerifiedOverride] = useState<boolean>(false);
+  const [signupRoleIntent, setSignupRoleIntentState] = useState<UserRole | null>(
+    readInitialRoleIntent
+  );
+
+  const setSignupRoleIntent = useCallback((role: UserRole | null) => {
+    setSignupRoleIntentState(role);
+    if (role) {
+      persistSignupRoleIntent(role);
+    } else {
+      clearSignupRoleIntent();
+    }
+  }, []);
 
   // Resolve any pending OAuth redirect result (Safari / iOS WebView / mobile fallback)
   useEffect(() => {
@@ -74,6 +127,7 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
       if (!active) return;
       const seq = ++authSeqRef.current;
       setFirebaseUser(user);
+      setVerifiedOverride(isVerifiedAuthUser(user));
       setAuthReady(true);
       if (user) setAuthRedirectError(null);
 
@@ -81,6 +135,7 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
         // Strictly clear all user state & cached profile on sign-out (zero fake local preview)
         setUserProfile(null);
         setProfileLoaded(true);
+        setVerifiedOverride(false);
         try {
           localStorage.removeItem(PROFILE_STORAGE_KEY);
         } catch {
@@ -129,9 +184,25 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
     };
   }, [onLanguageSync]);
 
+  /**
+   * Reloads Firebase Auth user & refreshes ID token so email verification is detected reactively
+   * (since user.reload() mutates auth.currentUser in place without re-firing onAuthStateChanged).
+   */
+  const refreshVerificationStatus = useCallback(async (): Promise<boolean> => {
+    const refreshed = await reloadCurrentUser();
+    const verified = isVerifiedAuthUser(refreshed);
+    if (refreshed) {
+      setFirebaseUser(refreshed);
+      setVerifiedOverride(verified);
+    }
+    return verified;
+  }, []);
+
   const handleSignOut = async () => {
     setUserProfile(null);
     setProfileLoaded(true);
+    setVerifiedOverride(false);
+    setSignupRoleIntent(null);
     try {
       localStorage.removeItem(PROFILE_STORAGE_KEY);
     } catch {
@@ -148,7 +219,7 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
           : 'Veuillez vous connecter avant d’enregistrer votre profil.'
       );
     }
-    if (!isVerifiedAuthUser(firebaseUser)) {
+    if (!isVerifiedAuthUser(firebaseUser) && !verifiedOverride) {
       throw new Error(
         profileInput.languagePref === 'ar'
           ? 'يرجى تأكيد بريدك الإلكتروني أولاً لحفظ ملفك الشخصي.'
@@ -297,6 +368,12 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
           updatedAt: serverTimestamp(),
         };
 
+        if (typeof existingProvider?.diplomaFr === 'string' && existingProvider.diplomaFr) {
+          providerPayload.diplomaFr = existingProvider.diplomaFr;
+        }
+        if (typeof existingProvider?.diplomaAr === 'string' && existingProvider.diplomaAr) {
+          providerPayload.diplomaAr = existingProvider.diplomaAr;
+        }
         if (typeof existingProvider?.lastCompletedBookingId === 'string') {
           providerPayload.lastCompletedBookingId = existingProvider.lastCompletedBookingId;
         }
@@ -319,6 +396,7 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
     }
 
     setUserProfile(record);
+    setSignupRoleIntent(null);
     try {
       localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(record));
     } catch {
@@ -328,11 +406,186 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
   };
 
   /**
+   * Atomically creates or updates the complete Maâlem public card (`providers/{uid}`)
+   * together with `users/{uid}` directly from the Maâlem Card Studio in ProviderDashboard.
+   */
+  const saveFullProviderCard = async (input: SaveFullProviderCardInput) => {
+    if (!firebaseUser || (!isVerifiedAuthUser(firebaseUser) && !verifiedOverride)) {
+      throw new Error(
+        input.languagePref === 'ar'
+          ? 'يرجى تأكيد بريدك الإلكتروني أولاً.'
+          : 'Veuillez vérifier votre adresse e-mail avant de publier votre fiche Maâlem.'
+      );
+    }
+
+    const uid = firebaseUser.uid;
+    const userRef = doc(db, 'users', uid);
+    const providerRef = doc(db, 'providers', uid);
+    const userPath = `providers/${uid}`;
+
+    try {
+      const [existingUserSnap, existingProviderSnap] = await Promise.all([
+        getDoc(userRef),
+        getDoc(providerRef),
+      ]);
+      const existingUser = existingUserSnap.exists() ? existingUserSnap.data() : null;
+      const existingProvider = existingProviderSnap.exists() ? existingProviderSnap.data() : null;
+
+      const verifiedBadgeVal = Boolean(
+        existingProvider?.verifiedBadge ?? existingUser?.verifiedBadge ?? false
+      );
+      const cityCoords = CITY_COORDINATES[input.city] || CITY_COORDINATES.Casablanca;
+      const safeLat =
+        typeof input.lat === 'number' && input.lat >= 20 && input.lat <= 37
+          ? input.lat
+          : existingProvider?.location?.city === input.city &&
+            typeof existingProvider?.location?.lat === 'number'
+          ? existingProvider.location.lat
+          : cityCoords.lat;
+      const safeLng =
+        typeof input.lng === 'number' && input.lng >= -18 && input.lng <= -1
+          ? input.lng
+          : existingProvider?.location?.city === input.city &&
+            typeof existingProvider?.location?.lng === 'number'
+          ? existingProvider.location.lng
+          : cityCoords.lng;
+
+      const cleanedSkills = input.skills
+        .map((s) => s.trim().slice(0, 64))
+        .filter((s) => s.length >= 1)
+        .slice(0, 10);
+      const finalSkills = cleanedSkills.length > 0 ? cleanedSkills : [input.category];
+
+      const safeImages = input.portfolioImages
+        .filter((u) => isSafeImageUrl(u))
+        .slice(0, 6);
+      const finalImages =
+        safeImages.length > 0 ? safeImages : [DEFAULT_CATEGORY_IMAGE[input.category]];
+
+      const trimmedName = input.fullName.trim().slice(0, 80);
+      const trimmedBio =
+        input.bio.trim().length >= 10
+          ? input.bio.trim().slice(0, 600)
+          : 'Artisan Maâlem inscrit sur Moul L’Khedma — Intervention rapide et soignée.';
+      const trimmedDiploma = input.diploma.trim().slice(0, 160);
+
+      const userRecord: UserProfileRecord = {
+        uid,
+        role: input.role,
+        fullName: trimmedName,
+        phone: input.phone,
+        city: input.city,
+        neighborhood: input.neighborhood.trim().slice(0, 80),
+        languagePref: input.languagePref,
+        verifiedBadge: verifiedBadgeVal,
+        specialty: input.category,
+        hourlyRateMad: Math.max(50, Math.min(50000, Math.round(input.hourlyRateMAD))),
+        bio: trimmedBio.slice(0, 500),
+      };
+
+      const fullNameFr =
+        input.languagePref === 'ar' && typeof existingProvider?.fullNameFr === 'string'
+          ? existingProvider.fullNameFr
+          : trimmedName;
+      const fullNameAr =
+        input.languagePref === 'fr' && typeof existingProvider?.fullNameAr === 'string'
+          ? existingProvider.fullNameAr
+          : trimmedName;
+      const bioFr =
+        input.languagePref === 'ar' &&
+        typeof existingProvider?.bioFr === 'string' &&
+        existingProvider.bioFr.length >= 10
+          ? existingProvider.bioFr
+          : trimmedBio;
+      const bioAr =
+        input.languagePref === 'fr' &&
+        typeof existingProvider?.bioAr === 'string' &&
+        existingProvider.bioAr.length >= 10
+          ? existingProvider.bioAr
+          : trimmedBio;
+
+      const providerPayload: Record<string, unknown> = {
+        uid,
+        fullNameFr,
+        fullNameAr,
+        category: input.category,
+        bioFr,
+        bioAr,
+        hourlyRateMAD: Math.max(50, Math.min(50000, Math.round(input.hourlyRateMAD))),
+        fixedVisitFeeMAD: Math.max(0, Math.min(10000, Math.round(input.fixedVisitFeeMAD))),
+        experienceYears: Math.max(0, Math.min(60, Math.round(input.experienceYears))),
+        skills: finalSkills,
+        portfolioImages: finalImages,
+        ratingAvg: existingProvider ? Number(existingProvider.ratingAvg ?? 5.0) : 5.0,
+        reviewCount: existingProvider ? Math.round(Number(existingProvider.reviewCount ?? 0)) : 0,
+        isAvailableNow: Boolean(input.isAvailableNow),
+        verifiedBadge: verifiedBadgeVal,
+        phone: input.phone,
+        completedJobs:
+          typeof existingProvider?.completedJobs === 'number'
+            ? Math.round(existingProvider.completedJobs)
+            : 0,
+        location: {
+          lat: safeLat,
+          lng: safeLng,
+          city: input.city,
+          quartier: input.neighborhood.trim().slice(0, 80),
+        },
+        createdAt: existingProvider ? existingProvider.createdAt : serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
+      if (trimmedDiploma) {
+        if (input.languagePref === 'ar') {
+          providerPayload.diplomaAr = trimmedDiploma;
+          if (typeof existingProvider?.diplomaFr === 'string' && existingProvider.diplomaFr) {
+            providerPayload.diplomaFr = existingProvider.diplomaFr;
+          }
+        } else {
+          providerPayload.diplomaFr = trimmedDiploma;
+          if (typeof existingProvider?.diplomaAr === 'string' && existingProvider.diplomaAr) {
+            providerPayload.diplomaAr = existingProvider.diplomaAr;
+          }
+        }
+      }
+      if (typeof existingProvider?.lastCompletedBookingId === 'string') {
+        providerPayload.lastCompletedBookingId = existingProvider.lastCompletedBookingId;
+      }
+      if (typeof existingProvider?.lastReviewBookingId === 'string') {
+        providerPayload.lastReviewBookingId = existingProvider.lastReviewBookingId;
+      }
+
+      const batch = writeBatch(db);
+      batch.set(
+        userRef,
+        {
+          ...userRecord,
+          createdAt: existingUser ? existingUser.createdAt : serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: false }
+      );
+      batch.set(providerRef, providerPayload, { merge: false });
+      await batch.commit();
+
+      setUserProfile(userRecord);
+      setSignupRoleIntent(null);
+      try {
+        localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(userRecord));
+      } catch {
+        // ignore quota errors
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, userPath);
+    }
+  };
+
+  /**
    * Updates strictly the authenticated provider's own `providers/{uid}` profile fields
-   * (bio, rates, experience, skills, portfolio photos) in compliance with firestore.rules.
+   * (bio, rates, experience, diploma, skills, portfolio photos) in compliance with firestore.rules.
    */
   const updateOwnProviderDetails = async (patch: UpdateProviderDetailsInput) => {
-    if (!firebaseUser || !isVerifiedAuthUser(firebaseUser)) {
+    if (!firebaseUser || (!isVerifiedAuthUser(firebaseUser) && !verifiedOverride)) {
       throw new Error('Authentication required');
     }
     const providerPath = `providers/${firebaseUser.uid}`;
@@ -346,6 +599,12 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
     }
     if (typeof patch.bioAr === 'string' && patch.bioAr.trim().length >= 10) {
       updatePayload.bioAr = patch.bioAr.trim().slice(0, 600);
+    }
+    if (typeof patch.diplomaFr === 'string') {
+      updatePayload.diplomaFr = patch.diplomaFr.trim().slice(0, 160);
+    }
+    if (typeof patch.diplomaAr === 'string') {
+      updatePayload.diplomaAr = patch.diplomaAr.trim().slice(0, 160);
     }
     if (typeof patch.hourlyRateMAD === 'number' && !Number.isNaN(patch.hourlyRateMAD)) {
       updatePayload.hourlyRateMAD = Math.max(50, Math.min(50000, Math.round(patch.hourlyRateMAD)));
@@ -409,6 +668,8 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
     }
     await deleteCurrentAuthUser();
     setUserProfile(null);
+    setVerifiedOverride(false);
+    setSignupRoleIntent(null);
     try {
       localStorage.removeItem(PROFILE_STORAGE_KEY);
     } catch {
@@ -417,15 +678,19 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
   };
 
   const isAuthenticated = Boolean(firebaseUser);
-  const isVerified = isVerifiedAuthUser(firebaseUser);
-  const needsOnboarding = Boolean(authReady && firebaseUser && profileLoaded && !userProfile);
+  const isVerified = Boolean(firebaseUser && (verifiedOverride || isVerifiedAuthUser(firebaseUser)));
+  const needsOnboarding = Boolean(authReady && firebaseUser && isVerified && profileLoaded && !userProfile);
 
   return {
     firebaseUser,
     authReady,
+    profileLoaded,
     isAuthenticated,
     isVerified,
     needsOnboarding,
+    signupRoleIntent,
+    setSignupRoleIntent,
+    refreshVerificationStatus,
     authRedirectError,
     userProfile,
     hydrateUserProfile,
@@ -433,6 +698,7 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
     signOutUser: handleSignOut,
     deleteAccount: handleDeleteAccount,
     handleSaveProfile,
+    saveFullProviderCard,
     updateOwnProviderDetails,
   };
 }

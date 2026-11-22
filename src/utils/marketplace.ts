@@ -813,3 +813,289 @@ export function filterProviders(
 
   return filtered;
 }
+
+// --- Client Open Job Board & Maâlem Proposal Contracts ---
+
+export type JobUrgency = 'urgent' | 'this_week' | 'flexible';
+export type JobPostStatus = 'open' | 'assigned' | 'closed' | 'cancelled';
+export type ProposalStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn';
+
+export interface JobPostRecord {
+  id: string;
+  jobRef: string;
+  clientId: string;
+  clientName: string;
+  clientPhone: string;
+  title: string;
+  category: ServiceCategory;
+  city: MoroccanCity;
+  neighborhood: string;
+  description: string;
+  budgetMad: number;
+  urgency: JobUrgency;
+  preferredDate: string;
+  preferredTimeSlot: TimeSlot;
+  problemPhotoUrl?: string;
+  status: JobPostStatus;
+  proposalCount: number;
+  assignedProviderId?: string;
+  assignedProviderName?: string;
+  assignedBookingId?: string;
+  createdAtIso: string;
+}
+
+export interface JobProposalRecord {
+  id: string;
+  jobId: string;
+  clientId: string;
+  providerId: string;
+  providerName: string;
+  providerPhone: string;
+  providerCategory: ServiceCategory;
+  providerCity: MoroccanCity;
+  providerRating: number;
+  providerVerified: boolean;
+  proposedPriceMad: number;
+  estimatedDuration: string;
+  message: string;
+  status: ProposalStatus;
+  createdAtIso: string;
+}
+
+export const CATEGORY_SUGGESTED_SKILLS: Record<ServiceCategory, string[]> = {
+  Plomberie: [
+    'Détection de fuite sans casse',
+    'Chauffe-eau gaz & électrique',
+    'Robinetterie & sanitaires',
+    'Débouchage canalisations',
+    'Surpresseurs & pompes',
+  ],
+  Électricité: [
+    'Tableaux électriques Schneider',
+    'Dépannage court-circuit',
+    'Éclairage LED & spots',
+    'Interphonie & domotique',
+    'Câblage réseau RJ45',
+  ],
+  Peinture: [
+    'Peinture acrylique sans odeur',
+    'Enduit lisse & ponçage',
+    'Traitement anti-humidité',
+    'Stucco & Khayal moderne',
+    'Façades & boiseries',
+  ],
+  'Soutien Scolaire': [
+    'Mathématiques BIOF & Mission',
+    'Physique-Chimie Lycée',
+    'Préparation Baccalauréat',
+    'Français & Anglais',
+    'Aide aux devoirs Primaire/Collège',
+  ],
+  Ménage: [
+    'Ménage résidentiel complet',
+    'Nettoyage vapeur salons marocains',
+    'Fin de chantier',
+    'Nettoyage tapis & canapés',
+    'Lavage vitres & terrasses',
+  ],
+  Climatisation: [
+    'Installation Split Inverter',
+    'Recharge gaz R32 / R410A',
+    'Nettoyage & désinfection clim',
+    'Climatisation gainable',
+    'Dépannage carte électronique',
+  ],
+};
+
+export function generateJobPostIds(): { jobId: string; jobRef: string } {
+  const randomHex =
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID().replace(/-/g, '')
+      : `${Date.now().toString(16)}${Math.random().toString(16).slice(2, 14)}`;
+  return {
+    jobId: `job-${randomHex.slice(0, 16)}`,
+    jobRef: `JOB-${randomHex.slice(0, 6).toUpperCase()}`,
+  };
+}
+
+export interface JobPostValidationResult {
+  valid: boolean;
+  errors: Partial<
+    Record<
+      | 'clientName'
+      | 'clientPhone'
+      | 'title'
+      | 'category'
+      | 'city'
+      | 'neighborhood'
+      | 'description'
+      | 'budgetMad'
+      | 'preferredDate'
+      | 'preferredTimeSlot',
+      string
+    >
+  >;
+  normalizedPhone: string;
+}
+
+export function validateJobPostInput(
+  input: {
+    clientName: string;
+    clientPhone: string;
+    title: string;
+    category: string;
+    city: string;
+    neighborhood: string;
+    description: string;
+    budgetMad: number;
+    preferredDate: string;
+    preferredTimeSlot: string;
+  },
+  lang: LanguageCode
+): JobPostValidationResult {
+  const isAr = lang === 'ar';
+  const errors: JobPostValidationResult['errors'] = {};
+  const normalizedPhone = normalizeMoroccanPhone(input.clientPhone.trim());
+
+  if (input.clientName.trim().length < MIN_NAME_LEN || input.clientName.trim().length > MAX_NAME_LEN) {
+    errors.clientName = isAr
+      ? 'يرجى إدخال اسمك الكامل (حرفين على الأقل).'
+      : 'Veuillez saisir votre nom complet (2 à 80 caractères).';
+  }
+  if (!PHONE_REGEX.test(normalizedPhone)) {
+    errors.clientPhone = isAr
+      ? 'رقم الهاتف المغربي غير صالح (مثال: +212661234567).'
+      : 'Numéro marocain invalide (ex: +212661234567 ou 0661234567).';
+  }
+  if (input.title.trim().length < 5 || input.title.trim().length > 120) {
+    errors.title = isAr
+      ? 'عنوان الطلب يجب أن يتكون من 5 إلى 120 حرفاً.'
+      : 'Le titre de l’annonce doit contenir entre 5 et 120 caractères.';
+  }
+  if (!SERVICE_CATEGORIES.includes(input.category as ServiceCategory)) {
+    errors.category = isAr ? 'يرجى اختيار التخصص المطلوب.' : 'Veuillez choisir une catégorie métier.';
+  }
+  if (!MOROCCAN_CITIES.includes(input.city as MoroccanCity)) {
+    errors.city = isAr ? 'يرجى اختيار المدينة.' : 'Veuillez sélectionner une ville.';
+  }
+  if (
+    input.neighborhood.trim().length < MIN_NEIGHBORHOOD_LEN ||
+    input.neighborhood.trim().length > MAX_NEIGHBORHOOD_LEN
+  ) {
+    errors.neighborhood = isAr
+      ? 'يرجى تحديد الحي السكني.'
+      : 'Veuillez indiquer votre quartier (2 à 80 caractères).';
+  }
+  if (input.description.trim().length < 15 || input.description.trim().length > 800) {
+    errors.description = isAr
+      ? 'يرجى وصف تفاصيل الخدمة المطلوبة (15 حرفاً على الأقل).'
+      : 'Décrivez votre besoin en détail (15 à 800 caractères).';
+  }
+  const roundedBudget = Math.round(Number(input.budgetMad));
+  if (Number.isNaN(roundedBudget) || roundedBudget < 50 || roundedBudget > 100000) {
+    errors.budgetMad = isAr
+      ? 'الميزانية التقديرية يجب أن تكون بين 50 و 100000 د.م.'
+      : 'Le budget estimé doit être compris entre 50 DH et 100 000 DH.';
+  }
+  if (!input.preferredDate || input.preferredDate.trim().length < 8) {
+    errors.preferredDate = isAr ? 'يرجى اختيار التاريخ المفضل.' : 'Veuillez choisir une date souhaitée.';
+  }
+  if (!TIME_SLOTS.includes(input.preferredTimeSlot as TimeSlot)) {
+    errors.preferredTimeSlot = isAr ? 'يرجى اختيار الفترة الزمنية.' : 'Veuillez choisir un créneau horaire.';
+  }
+
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+    normalizedPhone,
+  };
+}
+
+export function validateJobProposalInput(
+  input: {
+    proposedPriceMad: number;
+    estimatedDuration: string;
+    message: string;
+  },
+  lang: LanguageCode
+): {
+  valid: boolean;
+  errors: Partial<Record<'proposedPriceMad' | 'estimatedDuration' | 'message', string>>;
+} {
+  const isAr = lang === 'ar';
+  const errors: Partial<Record<'proposedPriceMad' | 'estimatedDuration' | 'message', string>> = {};
+  const roundedPrice = Math.round(Number(input.proposedPriceMad));
+  if (Number.isNaN(roundedPrice) || roundedPrice < 50 || roundedPrice > 100000) {
+    errors.proposedPriceMad = isAr
+      ? 'السعر المقترح يجب أن يكون بين 50 و 100000 د.م.'
+      : 'Le tarif proposé doit être compris entre 50 DH et 100 000 DH.';
+  }
+  if (input.estimatedDuration.trim().length < 2 || input.estimatedDuration.trim().length > 64) {
+    errors.estimatedDuration = isAr
+      ? 'يرجى تحديد مدة الإنجاز أو موعد التدخل.'
+      : 'Indiquez la durée estimée ou votre disponibilité (2 à 64 caractères).';
+  }
+  if (input.message.trim().length < 10 || input.message.trim().length > 500) {
+    errors.message = isAr
+      ? 'يرجى كتابة رسالة واضحة للزبون (10 أحرف على الأقل).'
+      : 'Écrivez un message clair pour le client (10 à 500 caractères).';
+  }
+  return {
+    valid: Object.keys(errors).length === 0,
+    errors,
+  };
+}
+
+export interface JobPostFilterOptions {
+  category: ServiceCategory | 'ALL';
+  city: MoroccanCity | 'ALL';
+  quartier?: string;
+  urgency: JobUrgency | 'ALL';
+  minBudgetMad?: number;
+  maxBudgetMad?: number;
+  searchQuery: string;
+}
+
+const URGENCY_WEIGHT: Record<JobUrgency, number> = {
+  urgent: 0,
+  this_week: 1,
+  flexible: 2,
+};
+
+export function filterJobPosts(
+  jobs: JobPostRecord[],
+  filters: JobPostFilterOptions
+): JobPostRecord[] {
+  const q = filters.searchQuery.trim().toLowerCase();
+  const quartierQ = (filters.quartier ?? '').trim().toLowerCase();
+  const minBudget = filters.minBudgetMad ?? 0;
+  const maxBudget = filters.maxBudgetMad ?? 1000000;
+
+  return jobs
+    .filter((job) => {
+      if (filters.category !== 'ALL' && job.category !== filters.category) return false;
+      if (filters.city !== 'ALL' && job.city !== filters.city) return false;
+      if (filters.urgency !== 'ALL' && job.urgency !== filters.urgency) return false;
+      if (job.budgetMad < minBudget || job.budgetMad > maxBudget) return false;
+      if (quartierQ && !job.neighborhood.toLowerCase().includes(quartierQ)) return false;
+
+      if (!q) return true;
+      const haystack = [
+        job.title,
+        job.description,
+        job.category,
+        job.city,
+        job.neighborhood,
+        job.jobRef,
+      ]
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(q);
+    })
+    .sort((a, b) => {
+      if (URGENCY_WEIGHT[a.urgency] !== URGENCY_WEIGHT[b.urgency]) {
+        return URGENCY_WEIGHT[a.urgency] - URGENCY_WEIGHT[b.urgency];
+      }
+      return b.createdAtIso.localeCompare(a.createdAtIso);
+    });
+}

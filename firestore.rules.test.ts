@@ -177,4 +177,25 @@ test('Architect Audit Hardening: safe asset URLs, full array validation, financi
   assert.ok(storageRulesContent.includes("'phone_number' in request.auth.token"));
 });
 
+test('Open Client Job Board & Proposal Privacy Rules: validated jobPosts, isolated Maâlem quotes, diploma fields, and jobPosts Storage uploads', () => {
+  // Maâlem card diploma fields supported safely
+  assert.ok(rulesContent.includes("'diplomaFr'"));
+  assert.ok(rulesContent.includes("'diplomaAr'"));
+
+  // Job posts schema & access rules
+  assert.ok(rulesContent.includes('function isValidJobPost(data)'));
+  assert.ok(rulesContent.includes('function isValidJobProposal(data)'));
+  assert.ok(rulesContent.includes('match /jobPosts/{jobId}'));
+  assert.ok(rulesContent.includes('match /proposals/{providerId}'));
+
+  // Competing Maâlems cannot read each other's bids
+  assert.ok(rulesContent.includes('request.auth.uid == providerId ||'));
+  assert.ok(rulesContent.includes('existing().clientId == request.auth.uid ||'));
+  assert.ok(rulesContent.includes('exists(/databases/$(database)/documents/providers/$(request.auth.uid))'));
+  assert.ok(rulesContent.includes('incoming().clientId != request.auth.uid'));
+
+  // Storage rule for job post problem photos
+  assert.ok(storageRulesContent.includes('match /jobPosts/{jobId}/{userId}/{fileName}'));
+});
+
 
