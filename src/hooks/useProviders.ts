@@ -13,6 +13,7 @@ import { db, reportFirestoreError, OperationType } from '../firebase';
 import { VETTED_PROVIDERS } from '../data/providers';
 import {
   CITY_COORDINATES,
+  DEFAULT_CATEGORY_IMAGE,
   isSafeImageUrl,
   type MoroccanCity,
   type ServiceCategory,
@@ -64,15 +65,20 @@ export function useProviders(
             quartier: 'Maârif',
           };
           const isVerified = Boolean(data.verifiedBadge);
+          const resolvedCategory =
+            (data.category as ServiceCategory) || seeded?.category || 'Plomberie';
           const rawImages = Array.isArray(data.portfolioImages)
             ? data.portfolioImages.map(String).filter((u) => isSafeImageUrl(u))
             : [];
+          const hasOnlyGenericHero =
+            rawImages.length === 1 &&
+            rawImages[0] === '/src/assets/images/hero_moroccan_craftsman_1794980476857.jpg';
           return {
             uid: d.id,
             id: d.id,
             fullNameFr: String(data.fullNameFr || seeded?.fullNameFr || 'Maâlem'),
             fullNameAr: String(data.fullNameAr || seeded?.fullNameAr || 'معلم'),
-            category: (data.category as ServiceCategory) || seeded?.category || 'Plomberie',
+            category: resolvedCategory,
             bioFr: String(data.bioFr || seeded?.bioFr || ''),
             bioAr: String(data.bioAr || seeded?.bioAr || ''),
             hourlyRateMAD: Number(data.hourlyRateMAD || seeded?.hourlyRateMAD || 150),
@@ -85,11 +91,9 @@ export function useProviders(
               seeded?.skillsAr ||
               (Array.isArray(data.skills) ? data.skills.map(String) : ['خدمة موثقة']),
             portfolioImages:
-              rawImages.length > 0
+              rawImages.length > 0 && !hasOnlyGenericHero
                 ? rawImages
-                : seeded?.portfolioImages || [
-                    '/src/assets/images/hero_moroccan_craftsman_1794980476857.jpg',
-                  ],
+                : seeded?.portfolioImages || [DEFAULT_CATEGORY_IMAGE[resolvedCategory]],
             ratingAvg: Number(data.ratingAvg ?? 5.0),
             reviewCount: Number(data.reviewCount ?? 0),
             isAvailableNow: Boolean(data.isAvailableNow),
@@ -136,14 +140,16 @@ export function useProviders(
     return () => unsubscribe();
   }, []);
 
-  // Merge seeded 8 providers + live Firestore providers + local unsynced provider preview + overrides
+  // Merge seeded 8 providers + live Firestore providers + authenticated provider profile + overrides
   const allProviders = useMemo(() => {
     const mergedMap = new Map<string, VettedProvider>();
     VETTED_PROVIDERS.forEach((p) => mergedMap.set(p.id, p));
     firestoreProviders.forEach((p) => mergedMap.set(p.id, p));
 
     if (
+      firebaseUser &&
       userProfile &&
+      userProfile.uid === firebaseUser.uid &&
       (userProfile.role === 'provider' || userProfile.role === 'both') &&
       !mergedMap.has(userProfile.uid)
     ) {
@@ -169,7 +175,7 @@ export function useProviders(
         experienceYears: 5,
         skills: [cat],
         skillsAr: [t.categories[cat]],
-        portfolioImages: ['/src/assets/images/hero_moroccan_craftsman_1794980476857.jpg'],
+        portfolioImages: [DEFAULT_CATEGORY_IMAGE[cat]],
         ratingAvg: 5.0,
         reviewCount: 0,
         isAvailableNow: true,
@@ -221,7 +227,7 @@ export function useProviders(
             : p.reviewCount,
       };
     });
-  }, [firestoreProviders, userProfile, providerOverrides, t]);
+  }, [firebaseUser, firestoreProviders, userProfile, providerOverrides, t]);
 
   const toggleProviderAvailability = async (provider: VettedProvider) => {
     const previousVal = provider.isAvailableNow;

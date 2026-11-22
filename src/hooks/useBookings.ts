@@ -41,144 +41,6 @@ import {
 } from '../utils/marketplace';
 import { buildBootstrapClientProfile, isVerifiedAuthUser } from '../utils/authHelpers';
 
-// Consistent demo bookings used ONLY in unauthenticated local preview mode
-const INITIAL_DEMO_BOOKINGS: BookingRecord[] = [
-  {
-    id: 'booking-demo-101',
-    bookingRef: 'MK-101',
-    clientId: 'demo-client',
-    clientName: 'Karim Tazi',
-    clientPhone: '+212661234567',
-    providerId: 'maalem-driss-casa',
-    providerName: 'Maâlem Driss Berrada',
-    providerPhone: '+212661428910',
-    category: 'Plomberie',
-    serviceType: 'Détection de fuite sans casse',
-    city: 'Casablanca',
-    neighborhood: 'Maârif',
-    addressPin: 'Rue Normandie, Rés. Al Yassamine Appt 8, Maârif (33.5883, -7.6325)',
-    description: 'Remplacement mitigeur thermostatique et contrôle pression chauffe-eau.',
-    problemPhotoUrl: '/src/assets/images/service_plumbing_repair_1794980477189.jpg',
-    preferredDate: '2026-11-22',
-    preferredTimeSlot: '09:00 - 12:00',
-    paymentMethod: 'cmi_escrow',
-    paymentStatus: 'escrow_held',
-    estimatedMad: 230,
-    status: 'pending',
-    createdAtIso: '2026-11-17',
-  },
-  {
-    id: 'booking-demo-102',
-    bookingRef: 'MK-102',
-    clientId: 'demo-client',
-    clientName: 'Karim Tazi',
-    clientPhone: '+212661234567',
-    providerId: 'maalem-youssef-rabat',
-    providerName: 'Maâlem Youssef El Amrani',
-    providerPhone: '+212662845120',
-    category: 'Électricité',
-    serviceType: 'Tableaux électriques Schneider',
-    city: 'Rabat',
-    neighborhood: 'Agdal',
-    addressPin: 'Avenue de France, Imm 24 Appt 3, Agdal (33.9985, -6.8479)',
-    description: 'Mise aux normes tableau électrique différentiel et pose prises étanches.',
-    preferredDate: '2026-11-18',
-    preferredTimeSlot: '14:00 - 17:00',
-    paymentMethod: 'cmi_escrow',
-    paymentStatus: 'escrow_held',
-    estimatedMad: 260,
-    status: 'completed',
-    createdAtIso: '2026-11-16',
-  },
-  {
-    id: 'booking-demo-103',
-    bookingRef: 'MK-103',
-    clientId: 'demo-client',
-    clientName: 'Karim Tazi',
-    clientPhone: '+212661234567',
-    providerId: 'maalem-driss-casa',
-    providerName: 'Maâlem Driss Berrada',
-    providerPhone: '+212661428910',
-    category: 'Plomberie',
-    serviceType: 'Installation chauffe-eau thermodynamique',
-    city: 'Casablanca',
-    neighborhood: 'Gauthier',
-    addressPin: 'Rue Jean Jaurès, Imm 12 Appt 4, Gauthier (33.5912, -7.6285)',
-    description: 'Pose complète chauffe-eau 150L avec raccordement cuivre et purge circuit.',
-    preferredDate: '2026-11-24',
-    preferredTimeSlot: '14:00 - 17:00',
-    paymentMethod: 'cmi_escrow',
-    paymentStatus: 'escrow_held',
-    estimatedMad: 400,
-    status: 'in_progress',
-    createdAtIso: '2026-11-18',
-  },
-];
-
-const INITIAL_DEMO_CHATS: Record<string, ChatMessageRecord[]> = {
-  'booking-demo-101': [
-    {
-      id: 'msg-demo-1',
-      bookingId: 'booking-demo-101',
-      clientId: 'demo-client',
-      providerId: 'maalem-driss-casa',
-      senderId: 'demo-client',
-      senderName: 'Karim Tazi',
-      senderRole: 'client',
-      text: 'Bonjour Maâlem Driss, le chauffe-eau goutte sous la soupape de sécurité. Êtes-vous disponible sur le créneau 09:00 - 12:00 ?',
-      createdAtIso: '09:15',
-    },
-    {
-      id: 'msg-demo-2',
-      bookingId: 'booking-demo-101',
-      clientId: 'demo-client',
-      providerId: 'maalem-driss-casa',
-      senderId: 'maalem-driss-casa',
-      senderName: 'Maâlem Driss Berrada',
-      senderRole: 'provider',
-      text: 'Salam Sidi Karim, oui tout à fait ! J’apporte un groupe de sécurité neuf certifié et un joint fibre.',
-      createdAtIso: '09:18',
-    },
-  ],
-  'booking-demo-102': [
-    {
-      id: 'msg-demo-3',
-      bookingId: 'booking-demo-102',
-      clientId: 'demo-client',
-      providerId: 'maalem-youssef-rabat',
-      senderId: 'maalem-youssef-rabat',
-      senderName: 'Maâlem Youssef El Amrani',
-      senderRole: 'provider',
-      text: 'Intervention terminée et disjoncteur différentiel 30mA testé avec succès. Merci pour votre confiance !',
-      createdAtIso: '16:40',
-    },
-  ],
-  'booking-demo-103': [
-    {
-      id: 'msg-demo-4',
-      bookingId: 'booking-demo-103',
-      clientId: 'demo-client',
-      providerId: 'maalem-driss-casa',
-      senderId: 'demo-client',
-      senderName: 'Karim Tazi',
-      senderRole: 'client',
-      text: 'Bonjour Maâlem Driss, pour le second chantier à Gauthier (#MK-103), le ballon 150L est déjà livré sur place.',
-      createdAtIso: '11:05',
-    },
-    {
-      id: 'msg-demo-5',
-      bookingId: 'booking-demo-103',
-      clientId: 'demo-client',
-      providerId: 'maalem-driss-casa',
-      senderId: 'maalem-driss-casa',
-      senderName: 'Maâlem Driss Berrada',
-      senderRole: 'provider',
-      text: 'Parfait Sidi Karim, je suis en route avec le chalumeau et les raccords diélectriques.',
-      createdAtIso: '11:12',
-    },
-  ],
-};
-
 function mapFirestoreBooking(id: string, data: DocumentData): BookingRecord {
   let createdAtIso = new Date().toISOString().slice(0, 10);
   if (data.createdAt && typeof data.createdAt === 'object' && 'toDate' in data.createdAt) {
@@ -306,19 +168,18 @@ export function useBookings(params: {
     onApplyReviewOverride,
   } = params;
 
-  const [localBookings, setLocalBookings] = useState<BookingRecord[]>(INITIAL_DEMO_BOOKINGS);
   const [clientLiveBookings, setClientLiveBookings] = useState<BookingRecord[]>([]);
   const [providerLiveBookings, setProviderLiveBookings] = useState<BookingRecord[]>([]);
-  const [chatThreads, setChatThreads] = useState<Record<string, ChatMessageRecord[]>>(
-    INITIAL_DEMO_CHATS
-  );
+  const [adminOverrides, setAdminOverrides] = useState<Record<string, AdminBookingPatch>>({});
+  const [chatThreads, setChatThreads] = useState<Record<string, ChatMessageRecord[]>>({});
   const [bookingActionError, setBookingActionError] = useState<string | null>(null);
 
-  // Dual real-time Firestore listeners: clientId == uid AND providerId == uid (bounded)
+  // Dual real-time Firestore listeners: clientId == uid AND providerId == uid (strictly scoped to signed-in user)
   useEffect(() => {
     if (!authReady || !firebaseUser || !isVerifiedAuthUser(firebaseUser)) {
       setClientLiveBookings([]);
       setProviderLiveBookings([]);
+      setChatThreads({});
       return;
     }
 
@@ -360,27 +221,34 @@ export function useBookings(params: {
     };
   }, [authReady, firebaseUser]);
 
-  // Authenticated sessions strictly use live Firestore bookings (never polluted by demo fixtures)
+  // Signed-out users see zero bookings; authenticated users strictly see their own live Firestore bookings
   const bookings = useMemo(() => {
-    if (firebaseUser) {
-      const byId = new Map<string, BookingRecord>();
-      clientLiveBookings.forEach((b) => byId.set(b.id, b));
-      providerLiveBookings.forEach((b) => byId.set(b.id, b));
-      return Array.from(byId.values());
-    }
-    return localBookings;
-  }, [firebaseUser, clientLiveBookings, providerLiveBookings, localBookings]);
+    if (!firebaseUser) return [];
+    const byId = new Map<string, BookingRecord>();
+    clientLiveBookings.forEach((b) => byId.set(b.id, b));
+    providerLiveBookings.forEach((b) => byId.set(b.id, b));
+    return Array.from(byId.values())
+      .map((b) => (adminOverrides[b.id] ? { ...b, ...adminOverrides[b.id] } : b))
+      .sort((a, b) => b.createdAtIso.localeCompare(a.createdAtIso));
+  }, [firebaseUser, clientLiveBookings, providerLiveBookings, adminOverrides]);
 
   const submitBooking = async (payload: SubmitBookingPayload): Promise<string> => {
     setBookingActionError(null);
-    if (firebaseUser && !isVerifiedAuthUser(firebaseUser)) {
+    if (!firebaseUser) {
+      throw new Error(
+        lang === 'ar'
+          ? 'يرجى تسجيل الدخول أولاً لإرسال طلب حجز.'
+          : 'Veuillez vous connecter pour envoyer une demande de réservation.'
+      );
+    }
+    if (!isVerifiedAuthUser(firebaseUser)) {
       throw new Error(
         lang === 'ar'
           ? 'يرجى تأكيد بريدك الإلكتروني أولاً قبل إرسال طلب حجز.'
           : 'Veuillez vérifier votre adresse e-mail avant d’envoyer une réservation.'
       );
     }
-    if (firebaseUser && payload.provider.id === firebaseUser.uid) {
+    if (payload.provider.id === firebaseUser.uid) {
       throw new Error(
         lang === 'ar'
           ? 'لا يمكنك حجز خدمتك الخاصة.'
@@ -400,10 +268,10 @@ export function useBookings(params: {
       ? payload.problemPhotoUrl
       : undefined;
 
-    const newBooking: BookingRecord = {
-      id: bookingId,
+    const path = `bookings/${bookingId}`;
+    const bookingPayload = {
       bookingRef,
-      clientId: firebaseUser?.uid ?? 'local-client',
+      clientId: firebaseUser.uid,
       clientName: payload.clientName,
       clientPhone: payload.clientPhone,
       providerId: payload.provider.id,
@@ -415,100 +283,48 @@ export function useBookings(params: {
       neighborhood: payload.neighborhood,
       addressPin: payload.addressPin,
       description: payload.description,
-      problemPhotoUrl: payload.problemPhotoUrl,
+      ...(safePhotoUrl ? { problemPhotoUrl: safePhotoUrl } : {}),
       preferredDate: payload.preferredDate,
       preferredTimeSlot: payload.preferredTimeSlot,
       paymentMethod: payload.paymentMethod,
       paymentStatus,
       estimatedMad: Math.round(payload.estimatedMad),
       status: 'pending',
-      createdAtIso: new Date().toISOString().slice(0, 10),
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
     };
 
-    if (firebaseUser) {
-      const path = `bookings/${bookingId}`;
-      const bookingPayload = {
-        bookingRef,
-        clientId: firebaseUser.uid,
-        clientName: payload.clientName,
-        clientPhone: payload.clientPhone,
-        providerId: payload.provider.id,
-        providerName: providerDisplayName,
-        providerPhone: payload.provider.phone,
-        category: payload.provider.category,
-        serviceType: payload.serviceType,
-        city: payload.provider.location.city,
-        neighborhood: payload.neighborhood,
-        addressPin: payload.addressPin,
-        description: payload.description,
-        ...(safePhotoUrl ? { problemPhotoUrl: safePhotoUrl } : {}),
-        preferredDate: payload.preferredDate,
-        preferredTimeSlot: payload.preferredTimeSlot,
-        paymentMethod: payload.paymentMethod,
-        paymentStatus,
-        estimatedMad: Math.round(payload.estimatedMad),
-        status: 'pending',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
-
-      try {
-        let needsBootstrapProfile = !userProfile || userProfile.uid !== firebaseUser.uid;
-        if (needsBootstrapProfile) {
-          const existingUserSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
-          needsBootstrapProfile = !existingUserSnap.exists();
-        }
-
-        if (needsBootstrapProfile) {
-          const bootstrapProfile = buildBootstrapClientProfile({
-            uid: firebaseUser.uid,
-            fullName: payload.clientName,
-            phone: payload.clientPhone,
-            city: payload.provider.location.city,
-            neighborhood: payload.neighborhood,
-            languagePref: lang,
-          });
-          const batch = writeBatch(db);
-          batch.set(doc(db, 'users', firebaseUser.uid), {
-            ...bootstrapProfile,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-          batch.set(doc(db, 'bookings', bookingId), bookingPayload);
-          await batch.commit();
-          onBootstrapUserProfile?.(bootstrapProfile);
-        } else {
-          await setDoc(doc(db, 'bookings', bookingId), bookingPayload);
-        }
-      } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, path);
+    try {
+      let needsBootstrapProfile = !userProfile || userProfile.uid !== firebaseUser.uid;
+      if (needsBootstrapProfile) {
+        const existingUserSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
+        needsBootstrapProfile = !existingUserSnap.exists();
       }
-      return bookingRef;
+
+      if (needsBootstrapProfile) {
+        const bootstrapProfile = buildBootstrapClientProfile({
+          uid: firebaseUser.uid,
+          fullName: payload.clientName,
+          phone: payload.clientPhone,
+          city: payload.provider.location.city,
+          neighborhood: payload.neighborhood,
+          languagePref: lang,
+        });
+        const batch = writeBatch(db);
+        batch.set(doc(db, 'users', firebaseUser.uid), {
+          ...bootstrapProfile,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        batch.set(doc(db, 'bookings', bookingId), bookingPayload);
+        await batch.commit();
+        onBootstrapUserProfile?.(bootstrapProfile);
+      } else {
+        await setDoc(doc(db, 'bookings', bookingId), bookingPayload);
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, path);
     }
-
-    // Local unauthenticated preview mode only
-    setLocalBookings((prev) => [newBooking, ...prev]);
-    setChatThreads((prev) => ({
-      ...prev,
-      [bookingId]: [
-        {
-          id: `msg-init-${Date.now()}`,
-          bookingId,
-          clientId: newBooking.clientId,
-          providerId: newBooking.providerId,
-          senderId: newBooking.clientId,
-          senderName: newBooking.clientName,
-          senderRole: 'client',
-          text: `${payload.serviceType} — ${payload.description}`,
-          photoUrl: payload.problemPhotoUrl,
-          createdAtIso: new Date().toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-        },
-      ],
-    }));
-
     return bookingRef;
   };
 
@@ -519,6 +335,7 @@ export function useBookings(params: {
     actorRole: UserRole
   ) => {
     setBookingActionError(null);
+    if (!firebaseUser) return;
     const target = bookings.find((b) => b.id === bookingId);
     if (!target) return;
     if (!canTransitionBookingStatus(target.status, nextStatus, actorRole)) {
@@ -542,62 +359,52 @@ export function useBookings(params: {
       nextStatus
     );
 
-    if (firebaseUser) {
-      const path = `bookings/${bookingId}`;
-      try {
-        const updatePayload: Record<string, unknown> = {
-          status: nextStatus,
-          updatedAt: serverTimestamp(),
-        };
-        if (nextStatus === 'completed' && nextPaymentStatus !== target.paymentStatus) {
-          updatePayload.paymentStatus = nextPaymentStatus;
-        }
-
-        if (nextStatus === 'completed' && target.providerId === firebaseUser.uid) {
-          const providerRef = doc(db, 'providers', firebaseUser.uid);
-          const providerSnap = await getDoc(providerRef);
-          if (providerSnap.exists()) {
-            const pData = providerSnap.data();
-            const currentJobs =
-              typeof pData.completedJobs === 'number' ? Math.round(pData.completedJobs) : 0;
-            const batch = writeBatch(db);
-            batch.update(doc(db, 'bookings', bookingId), updatePayload);
-            batch.update(providerRef, {
-              completedJobs: currentJobs + 1,
-              lastCompletedBookingId: bookingId,
-              updatedAt: serverTimestamp(),
-            });
-            await batch.commit();
-            return;
-          }
-        }
-
-        await updateDoc(doc(db, 'bookings', bookingId), updatePayload);
-      } catch (err) {
-        reportFirestoreError(err, OperationType.UPDATE, path);
-        setBookingActionError(
-          lang === 'ar'
-            ? 'تعذر تحديث حالة الطلب. تحقق من صلاحيات حسابك وحاول مرة أخرى.'
-            : 'Impossible de mettre à jour le statut de la réservation. Vérifiez vos permissions.'
-        );
+    const path = `bookings/${bookingId}`;
+    try {
+      const updatePayload: Record<string, unknown> = {
+        status: nextStatus,
+        updatedAt: serverTimestamp(),
+      };
+      if (nextStatus === 'completed' && nextPaymentStatus !== target.paymentStatus) {
+        updatePayload.paymentStatus = nextPaymentStatus;
       }
-      return;
-    }
 
-    setLocalBookings((prev) =>
-      prev.map((b) =>
-        b.id === bookingId
-          ? { ...b, status: nextStatus, paymentStatus: nextPaymentStatus }
-          : b
-      )
-    );
+      if (nextStatus === 'completed' && target.providerId === firebaseUser.uid) {
+        const providerRef = doc(db, 'providers', firebaseUser.uid);
+        const providerSnap = await getDoc(providerRef);
+        if (providerSnap.exists()) {
+          const pData = providerSnap.data();
+          const currentJobs =
+            typeof pData.completedJobs === 'number' ? Math.round(pData.completedJobs) : 0;
+          const batch = writeBatch(db);
+          batch.update(doc(db, 'bookings', bookingId), updatePayload);
+          batch.update(providerRef, {
+            completedJobs: currentJobs + 1,
+            lastCompletedBookingId: bookingId,
+            updatedAt: serverTimestamp(),
+          });
+          await batch.commit();
+          return;
+        }
+      }
+
+      await updateDoc(doc(db, 'bookings', bookingId), updatePayload);
+    } catch (err) {
+      reportFirestoreError(err, OperationType.UPDATE, path);
+      setBookingActionError(
+        lang === 'ar'
+          ? 'تعذر تحديث حالة الطلب. تحقق من صلاحيات حسابك وحاول مرة أخرى.'
+          : 'Impossible de mettre à jour le statut de la réservation. Vérifiez vos permissions.'
+      );
+    }
   };
 
   // Client confirms job completion & releases CMI Escrow (respecting configured platformFeePct)
   const clientConfirmAndReleaseEscrow = async (bookingId: string) => {
     setBookingActionError(null);
+    if (!firebaseUser) return;
     const target = bookings.find((b) => b.id === bookingId);
-    if (!target) return;
+    if (!target || target.clientId !== firebaseUser.uid) return;
     if (
       target.paymentMethod !== 'cmi_escrow' ||
       target.paymentStatus !== 'escrow_held' ||
@@ -607,41 +414,23 @@ export function useBookings(params: {
     }
 
     const split = calculateEscrowSplit(target.estimatedMad, platformFeePct, 100);
-
-    if (firebaseUser) {
-      const path = `bookings/${bookingId}`;
-      try {
-        await updateDoc(doc(db, 'bookings', bookingId), {
-          paymentStatus: 'paid',
-          providerPayoutMad: split.providerPayoutMad,
-          platformFeeMad: split.platformFeeMad,
-          refundedClientMad: 0,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        reportFirestoreError(err, OperationType.UPDATE, path);
-        setBookingActionError(
-          lang === 'ar'
-            ? 'تعذر صرف ضمان CMI. يرجى المحاولة مجدداً.'
-            : 'Impossible de libérer le séquestre CMI. Veuillez réessayer.'
-        );
-      }
-      return;
+    const path = `bookings/${bookingId}`;
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), {
+        paymentStatus: 'paid',
+        providerPayoutMad: split.providerPayoutMad,
+        platformFeeMad: split.platformFeeMad,
+        refundedClientMad: 0,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      reportFirestoreError(err, OperationType.UPDATE, path);
+      setBookingActionError(
+        lang === 'ar'
+          ? 'تعذر صرف ضمان CMI. يرجى المحاولة مجدداً.'
+          : 'Impossible de libérer le séquestre CMI. Veuillez réessayer.'
+      );
     }
-
-    setLocalBookings((prev) =>
-      prev.map((b) =>
-        b.id === bookingId
-          ? {
-              ...b,
-              paymentStatus: 'paid',
-              providerPayoutMad: split.providerPayoutMad,
-              platformFeeMad: split.platformFeeMad,
-              refundedClientMad: 0,
-            }
-          : b
-      )
-    );
   };
 
   // Cancellation with explicit reason + automatic 100% CMI escrow refund when escrow_held
@@ -651,6 +440,7 @@ export function useBookings(params: {
     actorRole: UserRole
   ) => {
     setBookingActionError(null);
+    if (!firebaseUser) return;
     const target = bookings.find((b) => b.id === bookingId);
     if (!target) return;
     const effectiveRole: 'client' | 'provider' =
@@ -666,28 +456,21 @@ export function useBookings(params: {
       autoRefundOnProviderCancel
     );
 
-    if (firebaseUser) {
-      const path = `bookings/${bookingId}`;
-      try {
-        await updateDoc(doc(db, 'bookings', bookingId), {
-          ...settlement,
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        reportFirestoreError(err, OperationType.UPDATE, path);
-        setBookingActionError(
-          lang === 'ar'
-            ? 'تعذر إلغاء الحجز في قاعدة البيانات.'
-            : 'Impossible d’annuler la réservation.'
-        );
-        throw err;
-      }
-      return;
+    const path = `bookings/${bookingId}`;
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), {
+        ...settlement,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      reportFirestoreError(err, OperationType.UPDATE, path);
+      setBookingActionError(
+        lang === 'ar'
+          ? 'تعذر إلغاء الحجز في قاعدة البيانات.'
+          : 'Impossible d’annuler la réservation.'
+      );
+      throw err;
     }
-
-    setLocalBookings((prev) =>
-      prev.map((b) => (b.id === bookingId ? { ...b, ...settlement } : b))
-    );
   };
 
   // Reschedule pending or accepted booking to a new date & time slot
@@ -698,44 +481,29 @@ export function useBookings(params: {
     note: string
   ) => {
     setBookingActionError(null);
+    if (!firebaseUser) return;
     const target = bookings.find((b) => b.id === bookingId);
     if (!target) return;
     if (target.status !== 'pending' && target.status !== 'accepted') return;
     const safeNote = note.trim().slice(0, 200);
 
-    if (firebaseUser) {
-      const path = `bookings/${bookingId}`;
-      try {
-        await updateDoc(doc(db, 'bookings', bookingId), {
-          preferredDate: newDate,
-          preferredTimeSlot: newSlot,
-          ...(safeNote ? { rescheduleNote: safeNote } : {}),
-          updatedAt: serverTimestamp(),
-        });
-      } catch (err) {
-        reportFirestoreError(err, OperationType.UPDATE, path);
-        setBookingActionError(
-          lang === 'ar'
-            ? 'تعذر إعادة جدولة الموعد.'
-            : 'Impossible de reprogrammer le créneau.'
-        );
-        throw err;
-      }
-      return;
+    const path = `bookings/${bookingId}`;
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), {
+        preferredDate: newDate,
+        preferredTimeSlot: newSlot,
+        ...(safeNote ? { rescheduleNote: safeNote } : {}),
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      reportFirestoreError(err, OperationType.UPDATE, path);
+      setBookingActionError(
+        lang === 'ar'
+          ? 'تعذر إعادة جدولة الموعد.'
+          : 'Impossible de reprogrammer le créneau.'
+      );
+      throw err;
     }
-
-    setLocalBookings((prev) =>
-      prev.map((b) =>
-        b.id === bookingId
-          ? {
-              ...b,
-              preferredDate: newDate,
-              preferredTimeSlot: newSlot,
-              rescheduleNote: safeNote || b.rescheduleNote,
-            }
-          : b
-      )
-    );
   };
 
   // Transactional review write: bookings/{bookingId} -> 'reviewed' + reviews/{bookingId} + providers/{uid} rating aggregation
@@ -743,11 +511,16 @@ export function useBookings(params: {
     bookingId: string,
     rating: number,
     comment: string,
-    reviewCategories?: ReviewCategoryBreakdown
+    _reviewCategories?: ReviewCategoryBreakdown
   ) => {
     setBookingActionError(null);
+    if (!firebaseUser) return;
     const targetBooking = bookings.find((b) => b.id === bookingId);
-    if (!targetBooking || !canTransitionBookingStatus(targetBooking.status, 'reviewed', 'client')) {
+    if (
+      !targetBooking ||
+      targetBooking.clientId !== firebaseUser.uid ||
+      !canTransitionBookingStatus(targetBooking.status, 'reviewed', 'client')
+    ) {
       return;
     }
 
@@ -772,99 +545,71 @@ export function useBookings(params: {
       commentAr: safeComment,
     };
 
-    if (firebaseUser) {
-      const reviewPath = `reviews/${bookingId}`;
-      let committedRating: { ratingAvg: number; reviewCount: number } | null = null;
-      try {
-        committedRating = await runTransaction(db, async (tx) => {
-          const bookingRef = doc(db, 'bookings', bookingId);
-          const reviewRef = doc(db, 'reviews', bookingId);
-          const shouldUpdateProvider = targetBooking.providerId !== firebaseUser.uid;
-          const providerRef = doc(db, 'providers', targetBooking.providerId);
+    const reviewPath = `reviews/${bookingId}`;
+    let committedRating: { ratingAvg: number; reviewCount: number } | null = null;
+    try {
+      committedRating = await runTransaction(db, async (tx) => {
+        const bookingRef = doc(db, 'bookings', bookingId);
+        const reviewRef = doc(db, 'reviews', bookingId);
+        const shouldUpdateProvider = targetBooking.providerId !== firebaseUser.uid;
+        const providerRef = doc(db, 'providers', targetBooking.providerId);
 
-          const providerSnap = shouldUpdateProvider ? await tx.get(providerRef) : null;
+        const providerSnap = shouldUpdateProvider ? await tx.get(providerRef) : null;
 
-          tx.update(bookingRef, {
-            status: 'reviewed',
-            reviewRating: safeRating,
-            reviewComment: safeComment,
+        tx.update(bookingRef, {
+          status: 'reviewed',
+          reviewRating: safeRating,
+          reviewComment: safeComment,
+          updatedAt: serverTimestamp(),
+        });
+
+        tx.set(reviewRef, {
+          bookingId,
+          providerId: targetBooking.providerId,
+          clientId: firebaseUser.uid,
+          authorName: targetBooking.clientName,
+          quartier: targetBooking.neighborhood,
+          rating: safeRating,
+          comment: safeComment,
+          createdAt: serverTimestamp(),
+        });
+
+        if (providerSnap && providerSnap.exists()) {
+          const pData = providerSnap.data();
+          const liveCalc = recalculateProviderRating(
+            Number(pData.ratingAvg ?? 5.0),
+            Number(pData.reviewCount ?? 0),
+            safeRating
+          );
+          tx.update(providerRef, {
+            ratingAvg: liveCalc.ratingAvg,
+            reviewCount: liveCalc.reviewCount,
+            lastReviewBookingId: bookingId,
             updatedAt: serverTimestamp(),
           });
-
-          tx.set(reviewRef, {
-            bookingId,
-            providerId: targetBooking.providerId,
-            clientId: firebaseUser.uid,
-            authorName: targetBooking.clientName,
-            quartier: targetBooking.neighborhood,
-            rating: safeRating,
-            comment: safeComment,
-            createdAt: serverTimestamp(),
-          });
-
-          if (providerSnap && providerSnap.exists()) {
-            const pData = providerSnap.data();
-            const liveCalc = recalculateProviderRating(
-              Number(pData.ratingAvg ?? 5.0),
-              Number(pData.reviewCount ?? 0),
-              safeRating
-            );
-            tx.update(providerRef, {
-              ratingAvg: liveCalc.ratingAvg,
-              reviewCount: liveCalc.reviewCount,
-              lastReviewBookingId: bookingId,
-              updatedAt: serverTimestamp(),
-            });
-            return liveCalc;
-          }
-          return null;
-        });
-      } catch (err) {
-        reportFirestoreError(err, OperationType.WRITE, reviewPath);
-        throw err;
-      }
-
-      if (targetProvider && committedRating) {
-        onApplyReviewOverride(targetProvider.id, {
-          ratingAvg: committedRating.ratingAvg,
-          reviewCount: committedRating.reviewCount,
-          review: newReview,
-        });
-      }
-      return;
+          return liveCalc;
+        }
+        return null;
+      });
+    } catch (err) {
+      reportFirestoreError(err, OperationType.WRITE, reviewPath);
+      throw err;
     }
 
-    const recalculated = targetProvider
-      ? recalculateProviderRating(targetProvider.ratingAvg, targetProvider.reviewCount, safeRating)
-      : { ratingAvg: safeRating, reviewCount: 1 };
-
-    if (targetProvider) {
+    if (targetProvider && committedRating) {
       onApplyReviewOverride(targetProvider.id, {
-        ratingAvg: recalculated.ratingAvg,
-        reviewCount: recalculated.reviewCount,
+        ratingAvg: committedRating.ratingAvg,
+        reviewCount: committedRating.reviewCount,
         review: newReview,
       });
     }
-
-    setLocalBookings((prev) =>
-      prev.map((b) =>
-        b.id === bookingId
-          ? {
-              ...b,
-              status: 'reviewed',
-              reviewRating: safeRating,
-              reviewComment: safeComment,
-              reviewCategories,
-            }
-          : b
-      )
-    );
   };
 
   const applyAdminBookingPatch = (bookingId: string, patch: AdminBookingPatch) => {
-    setLocalBookings((prev) =>
-      prev.map((b) => (b.id === bookingId ? { ...b, ...patch } : b))
-    );
+    setAdminOverrides((prev) => ({
+      ...prev,
+      [bookingId]: { ...(prev[bookingId] || {}), ...patch },
+    }));
   };
 
   const sendLocalChatMessage = (msg: ChatMessageRecord) => {

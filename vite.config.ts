@@ -5,7 +5,7 @@ import path from 'path';
 import { defineConfig } from 'vite';
 
 const rootDir = import.meta.dirname;
-const DEFAULT_SITE_ORIGIN = 'https://serviceproviders.vercel.app';
+const DEFAULT_SITE_ORIGIN = 'https://servicepro-one.vercel.app';
 
 export default defineConfig(() => {
   const configuredSiteUrl = process.env.VITE_SITE_URL?.trim().replace(/\/+$/, '');

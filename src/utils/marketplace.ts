@@ -51,6 +51,15 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
   'Climatisation',
 ];
 
+export const DEFAULT_CATEGORY_IMAGE: Record<ServiceCategory, string> = {
+  Plomberie: '/src/assets/images/service_plumbing_repair_1794980477189.jpg',
+  Électricité: '/src/assets/images/service_electrical_smart_1794980478001.jpg',
+  Peinture: '/src/assets/images/service_home_painting_1794980476260.jpg',
+  'Soutien Scolaire': '/src/assets/images/service_tutoring.jpg',
+  Ménage: '/src/assets/images/service_home_cleaning.jpg',
+  Climatisation: '/src/assets/images/service_ac_hvac.jpg',
+};
+
 // City center reference coordinates for geolocation fallback / city switching
 export const CITY_COORDINATES: Record<
   MoroccanCity,

@@ -44,6 +44,7 @@ interface BookingModalProps {
   firebaseUser?: User | null;
   currentProfile: UserProfileRecord | null;
   onGoogleSignIn?: () => Promise<void>;
+  onOpenAuthModal?: () => void;
   onClose: () => void;
   onSubmitBooking: (payload: {
     bookingId?: string;
@@ -70,6 +71,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   firebaseUser = null,
   currentProfile,
   onGoogleSignIn,
+  onOpenAuthModal,
   onClose,
   onSubmitBooking,
 }) => {
@@ -105,7 +107,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [isLocatingPin, setIsLocatingPin] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedRef, setSubmittedRef] = useState<string | null>(null);
-  const [submittedInPreview, setSubmittedInPreview] = useState(false);
   const submittingLockRef = React.useRef(false);
 
   useEffect(() => {
@@ -243,7 +244,6 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         paymentMethod,
         estimatedMad,
       });
-      setSubmittedInPreview(submissionMode === 'local_preview');
       setSubmittedRef(bookingRef);
     } catch (err) {
       setSubmitError(mapProfileSaveError(err, lang));
@@ -311,24 +311,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-6 h-6" />
             </div>
-            {submittedInPreview && (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-300 text-[11px] font-semibold text-amber-900">
-                <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                <span>
-                  {lang === 'ar'
-                    ? 'معاينة محلية فقط — لم يتم الحفظ على الخادم (سجّل الدخول للحجز الفعلي)'
-                    : 'Mode aperçu local uniquement — non enregistré sur le serveur (connectez-vous pour réserver en réel)'}
-                </span>
-              </div>
-            )}
             <h3 className="text-lg font-bold text-slate-900">{t.requestSubmittedTitle}</h3>
-            <p className="text-sm text-slate-600 max-w-md mx-auto">
-              {submittedInPreview
-                ? lang === 'ar'
-                  ? 'هذا الحجز محفوظ مؤقتاً في متصفحك فقط ولن يصل إلى المعلم قبل تسجيل الدخول عبر Google.'
-                  : 'Cette simulation reste uniquement dans votre navigateur et ne sera pas transmise au Maâlem tant que vous n’êtes pas connecté.'
-                : t.requestSubmittedDesc}
-            </p>
+            <p className="text-sm text-slate-600 max-w-md mx-auto">{t.requestSubmittedDesc}</p>
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-slate-700 max-w-md mx-auto space-y-1.5">
               <div className="font-mono-tabular font-bold text-emerald-800">
                 Réf: {submittedRef}
@@ -369,35 +353,92 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               </button>
             </div>
           </div>
+        ) : !firebaseUser ? (
+          <div className="py-8 space-y-5 text-center">
+            <div className="w-12 h-12 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center mx-auto">
+              <ShieldCheck className="w-6 h-6" />
+            </div>
+            <div className="space-y-1.5 max-w-md mx-auto">
+              <h3 className="text-base font-bold text-slate-900">
+                {lang === 'ar'
+                  ? 'سجّل الدخول لتأكيد حجزك بأمان'
+                  : 'Connectez-vous pour confirmer votre réservation'}
+              </h3>
+              <p className="text-xs text-slate-600 leading-relaxed">
+                {lang === 'ar'
+                  ? 'لحماية طلباتك وتفعيل الدردشة المباشرة وضمان CMI، يرجى تسجيل الدخول بحسابك أو إنشاء حساب جديد في ثوانٍ.'
+                  : 'Pour suivre votre intervention, discuter en direct avec le Maâlem et bénéficier du séquestre CMI, connectez-vous en un clic.'}
+              </p>
+            </div>
+
+            <div className="max-w-md mx-auto p-3.5 bg-slate-50 border border-slate-200 rounded-xl flex items-center justify-between text-xs">
+              <span className="text-slate-600">{t.estimatedTotalLabel}</span>
+              <span className="font-bold tabular-nums text-slate-900">
+                {formatMadCurrency(estimatedMad, lang)}
+              </span>
+            </div>
+
+            {submitError && (
+              <div
+                role="alert"
+                className="max-w-md mx-auto p-3 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2 text-xs text-rose-800 text-start"
+              >
+                <AlertCircle className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
+                <span>{submitError}</span>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
+              {onGoogleSignIn && (
+                <button
+                  type="button"
+                  disabled={isSigningInInline}
+                  onClick={() => {
+                    void handleInlineGoogleSignIn();
+                  }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 disabled:opacity-60 transition-colors cursor-pointer"
+                >
+                  <LogIn className="w-4 h-4" />
+                  <span>{t.googleSignInBtn}</span>
+                </button>
+              )}
+              {onOpenAuthModal && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenAuthModal();
+                  }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  <span>
+                    {lang === 'ar'
+                      ? 'الدخول بالبريد الإلكتروني'
+                      : 'Connexion / Inscription par e-mail'}
+                  </span>
+                </button>
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-slate-100">
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 hover:underline"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span>
+                  {lang === 'ar'
+                    ? 'أو تواصل مباشرة عبر واتساب للاستفسار'
+                    : 'Ou poser une question rapide sur WhatsApp'}
+                </span>
+              </a>
+            </div>
+          </div>
         ) : (
           <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-4">
             <p className="text-xs text-slate-600">{t.bookingModalSubtitle}</p>
-
-            {submissionMode === 'local_preview' && (
-              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-amber-950">
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
-                  <p className="leading-snug">
-                    {lang === 'ar'
-                      ? 'أنت غير متصل بحساب Google. لإرسال حجز فعلي وحفظه مع المعلم، يرجى تسجيل الدخول أولاً.'
-                      : 'Vous êtes en mode aperçu local. Connectez-vous avec Google pour envoyer une réservation réelle au Maâlem.'}
-                  </p>
-                </div>
-                {onGoogleSignIn && (
-                  <button
-                    type="button"
-                    disabled={isSigningInInline}
-                    onClick={() => {
-                      void handleInlineGoogleSignIn();
-                    }}
-                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-amber-300 text-slate-900 font-semibold rounded-md hover:bg-amber-100 disabled:opacity-60 whitespace-nowrap shrink-0 cursor-pointer"
-                  >
-                    <LogIn className="w-3.5 h-3.5 text-emerald-700" />
-                    <span>{t.googleSignInBtn}</span>
-                  </button>
-                )}
-              </div>
-            )}
 
             {submissionMode === 'unverified' && (
               <div

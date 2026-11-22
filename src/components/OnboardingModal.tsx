@@ -561,7 +561,7 @@ export const OnboardingForm: React.FC<OnboardingFormProps> = ({
         {/* Dual-Role Selector */}
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-2">
-            {lang === 'ar' ? 'نوع الحساب (Role)' : 'Rôle sur la plateforme (role)'}
+            {lang === 'ar' ? 'نوع الحساب على المنصة' : 'Votre profil sur la plateforme'}
           </label>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <button
