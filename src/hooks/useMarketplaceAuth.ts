@@ -1,10 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { onAuthStateChanged, type User } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, writeBatch, serverTimestamp } from 'firebase/firestore';
 import {
   auth,
   db,
   signInWithGoogle,
+  resolvePendingAuthRedirect,
+  deleteCurrentAuthUser,
   signOutUser,
   handleFirestoreError,
   reportFirestoreError,
@@ -18,6 +20,7 @@ import {
   type UserProfileRecord,
   type UserRole,
 } from '../utils/marketplace';
+import { isVerifiedAuthUser } from '../utils/authHelpers';
 
 const PROFILE_STORAGE_KEY = 'moul_lkhedma_profile';
 
@@ -36,6 +39,8 @@ export interface SaveProfileInput {
 export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void) {
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState<boolean>(false);
+  const [authRedirectError, setAuthRedirectError] = useState<unknown | null>(null);
+  const authSeqRef = useRef<number>(0);
   const [userProfile, setUserProfile] = useState<UserProfileRecord | null>(() => {
     try {
       const saved = localStorage.getItem(PROFILE_STORAGE_KEY);
@@ -48,12 +53,25 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
     }
   });
 
+  // Resolve any pending OAuth redirect result (Safari / iOS WebView / mobile fallback)
+  useEffect(() => {
+    let active = true;
+    resolvePendingAuthRedirect().catch((err) => {
+      if (active) setAuthRedirectError(err);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   useEffect(() => {
     let active = true;
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!active) return;
+      const seq = ++authSeqRef.current;
       setFirebaseUser(user);
       setAuthReady(true);
+      if (user) setAuthRedirectError(null);
 
       if (!user) {
         // Prevent PII bleed across sessions when signing out
@@ -72,10 +90,14 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
         return;
       }
 
+      // Immediately drop any profile belonging to a different UID while fetching the new account's profile
+      setUserProfile((prev) => (prev?.uid === user.uid ? prev : null));
+
       const userDocPath = `users/${user.uid}`;
       try {
         const snap = await getDoc(doc(db, 'users', user.uid));
-        if (!active) return;
+        // Ignore stale responses if another auth event fired while this read was in flight
+        if (!active || authSeqRef.current !== seq) return;
         if (snap.exists()) {
           const data = snap.data() as UserProfileRecord;
           setUserProfile(data);
@@ -93,6 +115,7 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
           localStorage.removeItem(PROFILE_STORAGE_KEY);
         }
       } catch (err) {
+        if (!active || authSeqRef.current !== seq) return;
         reportFirestoreError(err, OperationType.GET, userDocPath);
       }
     });
@@ -133,9 +156,21 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
     };
 
     if (firebaseUser) {
+      if (!isVerifiedAuthUser(firebaseUser)) {
+        throw new Error(
+          profileInput.languagePref === 'ar'
+            ? 'يرجى تأكيد بريدك الإلكتروني أولاً لحفظ ملفك الشخصي على Firestore.'
+            : 'Veuillez vérifier votre adresse e-mail avant d’enregistrer votre profil.'
+        );
+      }
       const userPath = `users/${firebaseUser.uid}`;
+      const userRef = doc(db, 'users', firebaseUser.uid);
+      const providerRef = doc(db, 'providers', firebaseUser.uid);
       try {
-        const existingSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
+        const [existingSnap, providerSnap] = await Promise.all([
+          getDoc(userRef),
+          getDoc(providerRef),
+        ]);
         let createdAtVal: unknown = serverTimestamp();
 
         if (existingSnap.exists()) {
@@ -145,9 +180,11 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
         }
 
         record.verifiedBadge = verifiedBadgeVal;
+        const existingProvider = providerSnap.exists() ? providerSnap.data() : null;
 
-        await setDoc(
-          doc(db, 'users', firebaseUser.uid),
+        const batch = writeBatch(db);
+        batch.set(
+          userRef,
           {
             ...record,
             verifiedBadge: verifiedBadgeVal,
@@ -156,11 +193,6 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
           },
           { merge: false }
         );
-
-        const providerPath = `providers/${firebaseUser.uid}`;
-        const providerRef = doc(db, 'providers', firebaseUser.uid);
-        const providerSnap = await getDoc(providerRef);
-        const existingProvider = providerSnap.exists() ? providerSnap.data() : null;
 
         if (profileInput.role === 'provider' || profileInput.role === 'both') {
           const cat: ServiceCategory =
@@ -260,22 +292,16 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
             providerPayload.lastReviewBookingId = existingProvider.lastReviewBookingId;
           }
 
-          try {
-            await setDoc(providerRef, providerPayload, { merge: false });
-          } catch (providerErr) {
-            handleFirestoreError(providerErr, OperationType.WRITE, providerPath);
-          }
+          batch.set(providerRef, providerPayload, { merge: false });
         } else if (existingProvider && existingProvider.isAvailableNow) {
-          // User switched role back to 'client': mark public provider listing unavailable
-          try {
-            await updateDoc(providerRef, {
-              isAvailableNow: false,
-              updatedAt: serverTimestamp(),
-            });
-          } catch (providerErr) {
-            reportFirestoreError(providerErr, OperationType.UPDATE, providerPath);
-          }
+          // User switched role back to 'client': atomically mark public provider listing unavailable
+          batch.update(providerRef, {
+            isAvailableNow: false,
+            updatedAt: serverTimestamp(),
+          });
         }
+
+        await batch.commit();
       } catch (err) {
         handleFirestoreError(err, OperationType.WRITE, userPath);
       }
@@ -290,12 +316,47 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
     onLanguageSync(profileInput.languagePref);
   };
 
+  const hydrateUserProfile = (profile: UserProfileRecord) => {
+    setUserProfile(profile);
+    try {
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(profile));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!firebaseUser) return;
+    const providerRef = doc(db, 'providers', firebaseUser.uid);
+    try {
+      const providerSnap = await getDoc(providerRef);
+      if (providerSnap.exists() && providerSnap.data()?.isAvailableNow) {
+        await updateDoc(providerRef, {
+          isAvailableNow: false,
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch {
+      // Proceed with account deletion even if provider doc is absent or already inactive
+    }
+    await deleteCurrentAuthUser();
+    setUserProfile(null);
+    try {
+      localStorage.removeItem(PROFILE_STORAGE_KEY);
+    } catch {
+      // ignore storage errors
+    }
+  };
+
   return {
     firebaseUser,
     authReady,
+    authRedirectError,
     userProfile,
+    hydrateUserProfile,
     signInWithGoogle,
     signOutUser: handleSignOut,
+    deleteAccount: handleDeleteAccount,
     handleSaveProfile,
   };
 }

@@ -101,8 +101,10 @@ export function MarketplaceApp() {
     firebaseUser,
     authReady,
     userProfile,
+    hydrateUserProfile,
     signInWithGoogle,
     signOutUser,
+    deleteAccount,
     handleSaveProfile,
   } = useMarketplaceAuth(handleLanguageSync);
 
@@ -151,6 +153,8 @@ export function MarketplaceApp() {
   } = useBookings({
     firebaseUser,
     authReady,
+    userProfile,
+    onBootstrapUserProfile: hydrateUserProfile,
     lang,
     allProviders,
     platformFeePct: systemSettings.platformFeePct,
@@ -160,6 +164,7 @@ export function MarketplaceApp() {
 
   const {
     isLiveAdmin,
+    isCheckingAdmin,
     isLoadingAdmin,
     adminToast,
     adminProviders,
@@ -236,6 +241,16 @@ export function MarketplaceApp() {
   const [cancellingBooking, setCancellingBooking] = useState<BookingRecord | null>(null);
   const [reschedulingBooking, setReschedulingBooking] = useState<BookingRecord | null>(null);
   const [reviewingBooking, setReviewingBooking] = useState<BookingRecord | null>(null);
+
+  // Close user-scoped modals on sign-out or account switch to prevent stale PII display
+  useEffect(() => {
+    setBookingProvider(null);
+    setActiveChatBooking(null);
+    setDetailBooking(null);
+    setCancellingBooking(null);
+    setReschedulingBooking(null);
+    setReviewingBooking(null);
+  }, [firebaseUser?.uid]);
 
   const filteredProviders = useMemo(
     () =>
@@ -371,7 +386,9 @@ export function MarketplaceApp() {
           onToggleLanguage={toggleLanguage}
           onExitAdmin={() => navigateView('marketplace')}
           firebaseUser={firebaseUser}
+          authReady={authReady}
           isLiveAdmin={isLiveAdmin}
+          isCheckingAdmin={isCheckingAdmin}
           isLoadingAdmin={isLoadingAdmin}
           adminToast={adminToast}
           onGoogleSignIn={async () => {
@@ -964,6 +981,7 @@ export function MarketplaceApp() {
               onSignOut={async () => {
                 await signOutUser();
               }}
+              onDeleteAccount={deleteAccount}
               onSaveProfile={handleSaveProfile}
             />
           </div>
@@ -1062,6 +1080,7 @@ export function MarketplaceApp() {
               onSignOut={async () => {
                 await signOutUser();
               }}
+              onDeleteAccount={deleteAccount}
               onSaveProfile={async (data) => {
                 await handleSaveProfile(data);
               }}
@@ -1091,6 +1110,9 @@ export function MarketplaceApp() {
           t={t}
           firebaseUser={firebaseUser}
           currentProfile={userProfile}
+          onGoogleSignIn={async () => {
+            await signInWithGoogle();
+          }}
           onClose={() => setBookingProvider(null)}
           onSubmitBooking={submitBooking}
         />

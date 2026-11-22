@@ -13,6 +13,7 @@ import {
   Banknote,
   MessageCircle,
   Navigation,
+  LogIn,
 } from 'lucide-react';
 import {
   TIME_SLOTS,
@@ -30,6 +31,11 @@ import {
 import type { User } from 'firebase/auth';
 import type { Translations } from '../i18n/translations';
 import { uploadMarketplacePhoto, revokePreviewObjectUrl } from '../utils/storageUpload';
+import {
+  getBookingSubmissionMode,
+  mapFirebaseAuthError,
+  mapProfileSaveError,
+} from '../utils/authHelpers';
 
 interface BookingModalProps {
   provider: VettedProvider;
@@ -37,6 +43,7 @@ interface BookingModalProps {
   t: Translations;
   firebaseUser?: User | null;
   currentProfile: UserProfileRecord | null;
+  onGoogleSignIn?: () => Promise<void>;
   onClose: () => void;
   onSubmitBooking: (payload: {
     bookingId?: string;
@@ -62,6 +69,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   t,
   firebaseUser = null,
   currentProfile,
+  onGoogleSignIn,
   onClose,
   onSubmitBooking,
 }) => {
@@ -69,8 +77,11 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     lang === 'ar' && provider.skillsAr.length > 0 ? provider.skillsAr : provider.skills;
   const todayIso = useMemo(() => getTodayIsoDate(), []);
   const preGeneratedIds = useMemo(() => generateBookingIds(), [provider.id]);
+  const submissionMode = getBookingSubmissionMode(firebaseUser);
 
-  const [clientName, setClientName] = useState(currentProfile?.fullName ?? '');
+  const [clientName, setClientName] = useState(
+    currentProfile?.fullName ?? firebaseUser?.displayName ?? ''
+  );
   const [clientPhone, setClientPhone] = useState(currentProfile?.phone ?? '+2126');
   const [serviceType, setServiceType] = useState<string>(
     availableServices[0] || t.categories[provider.category]
@@ -90,10 +101,22 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash_on_completion');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSigningInInline, setIsSigningInInline] = useState(false);
   const [isLocatingPin, setIsLocatingPin] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedRef, setSubmittedRef] = useState<string | null>(null);
+  const [submittedInPreview, setSubmittedInPreview] = useState(false);
   const submittingLockRef = React.useRef(false);
+
+  useEffect(() => {
+    if (currentProfile) {
+      setClientName((prev) => prev || currentProfile.fullName);
+      setClientPhone((prev) => (prev === '+2126' || !prev ? currentProfile.phone : prev));
+      setNeighborhood((prev) => prev || currentProfile.neighborhood);
+    } else if (firebaseUser?.displayName) {
+      setClientName((prev) => prev || firebaseUser.displayName || '');
+    }
+  }, [currentProfile, firebaseUser?.displayName]);
 
   useEffect(() => {
     return () => {
@@ -220,18 +243,26 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         paymentMethod,
         estimatedMad,
       });
+      setSubmittedInPreview(submissionMode === 'local_preview');
       setSubmittedRef(bookingRef);
     } catch (err) {
-      setSubmitError(
-        err instanceof Error
-          ? err.message
-          : lang === 'ar'
-          ? 'تعذر إرسال طلب الحجز. يرجى التأكد من تسجيل الدخول وحفظ ملفك الشخصي.'
-          : 'Impossible d’enregistrer la réservation. Vérifiez votre connexion et votre profil.'
-      );
+      setSubmitError(mapProfileSaveError(err, lang));
     } finally {
       setIsSubmitting(false);
       submittingLockRef.current = false;
+    }
+  };
+
+  const handleInlineGoogleSignIn = async () => {
+    if (!onGoogleSignIn) return;
+    setSubmitError(null);
+    setIsSigningInInline(true);
+    try {
+      await onGoogleSignIn();
+    } catch (err) {
+      setSubmitError(mapFirebaseAuthError(err, lang));
+    } finally {
+      setIsSigningInInline(false);
     }
   };
 
@@ -280,8 +311,24 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             <div className="w-12 h-12 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center mx-auto">
               <CheckCircle2 className="w-6 h-6" />
             </div>
+            {submittedInPreview && (
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-300 text-[11px] font-semibold text-amber-900">
+                <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                <span>
+                  {lang === 'ar'
+                    ? 'معاينة محلية فقط — لم يتم الحفظ على الخادم (سجّل الدخول للحجز الفعلي)'
+                    : 'Mode aperçu local uniquement — non enregistré sur le serveur (connectez-vous pour réserver en réel)'}
+                </span>
+              </div>
+            )}
             <h3 className="text-lg font-bold text-slate-900">{t.requestSubmittedTitle}</h3>
-            <p className="text-sm text-slate-600 max-w-md mx-auto">{t.requestSubmittedDesc}</p>
+            <p className="text-sm text-slate-600 max-w-md mx-auto">
+              {submittedInPreview
+                ? lang === 'ar'
+                  ? 'هذا الحجز محفوظ مؤقتاً في متصفحك فقط ولن يصل إلى المعلم قبل تسجيل الدخول عبر Google.'
+                  : 'Cette simulation reste uniquement dans votre navigateur et ne sera pas transmise au Maâlem tant que vous n’êtes pas connecté.'
+                : t.requestSubmittedDesc}
+            </p>
             <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-slate-700 max-w-md mx-auto space-y-1.5">
               <div className="font-mono-tabular font-bold text-emerald-800">
                 Réf: {submittedRef}
@@ -325,6 +372,46 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         ) : (
           <form onSubmit={handleSubmit} noValidate className="mt-5 space-y-4">
             <p className="text-xs text-slate-600">{t.bookingModalSubtitle}</p>
+
+            {submissionMode === 'local_preview' && (
+              <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-amber-950">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+                  <p className="leading-snug">
+                    {lang === 'ar'
+                      ? 'أنت غير متصل بحساب Google. لإرسال حجز فعلي وحفظه مع المعلم، يرجى تسجيل الدخول أولاً.'
+                      : 'Vous êtes en mode aperçu local. Connectez-vous avec Google pour envoyer une réservation réelle au Maâlem.'}
+                  </p>
+                </div>
+                {onGoogleSignIn && (
+                  <button
+                    type="button"
+                    disabled={isSigningInInline}
+                    onClick={() => {
+                      void handleInlineGoogleSignIn();
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 bg-white border border-amber-300 text-slate-900 font-semibold rounded-md hover:bg-amber-100 disabled:opacity-60 whitespace-nowrap shrink-0 cursor-pointer"
+                  >
+                    <LogIn className="w-3.5 h-3.5 text-emerald-700" />
+                    <span>{t.googleSignInBtn}</span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {submissionMode === 'unverified' && (
+              <div
+                role="alert"
+                className="p-3.5 bg-rose-50 border border-rose-200 rounded-lg flex items-start gap-2 text-xs text-rose-900"
+              >
+                <AlertCircle className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
+                <p>
+                  {lang === 'ar'
+                    ? 'يرجى تأكيد بريدك الإلكتروني في قسم الملف الشخصي قبل تأكيد الحجز.'
+                    : 'Veuillez confirmer votre adresse e-mail depuis votre espace profil avant d’envoyer une réservation.'}
+                </p>
+              </div>
+            )}
 
             {/* Client Name & Moroccan Phone */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

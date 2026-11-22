@@ -35,6 +35,7 @@ import {
 } from '../../utils/adminMetrics';
 import type { Translations } from '../../i18n/translations';
 import type { AdminToastMessage } from '../../hooks/useAdminData';
+import { mapFirebaseAuthError } from '../../utils/authHelpers';
 import { AdminOverviewSection } from './AdminOverviewSection';
 import { AdminProvidersSection } from './AdminProvidersSection';
 import { AdminBookingsSection } from './AdminBookingsSection';
@@ -62,7 +63,9 @@ interface AdminDashboardProps {
   onToggleLanguage: () => void;
   onExitAdmin: () => void;
   firebaseUser: User | null;
+  authReady: boolean;
   isLiveAdmin: boolean;
+  isCheckingAdmin: boolean;
   isLoadingAdmin: boolean;
   adminToast: AdminToastMessage | null;
   onGoogleSignIn: () => Promise<void>;
@@ -98,7 +101,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onToggleLanguage,
   onExitAdmin,
   firebaseUser,
+  authReady,
   isLiveAdmin,
+  isCheckingAdmin,
   isLoadingAdmin,
   adminToast,
   onGoogleSignIn,
@@ -127,9 +132,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   const isAr = lang === 'ar';
   const [activeSection, setActiveSection] = useState<AdminSectionId>('overview');
   const [mobileNavOpen, setMobileNavOpen] = useState<boolean>(false);
+  const [adminAuthError, setAdminAuthError] = useState<string | null>(null);
+  const [isAuthenticating, setIsAuthenticating] = useState<boolean>(false);
 
   const BackIcon = isAr ? ArrowRight : ArrowLeft;
   const pendingWithdrawalsCount = withdrawals.filter((w) => w.status === 'pending').length;
+
+  const handleAdminSignIn = async () => {
+    setAdminAuthError(null);
+    setIsAuthenticating(true);
+    try {
+      await onGoogleSignIn();
+    } catch (err) {
+      setAdminAuthError(mapFirebaseAuthError(err, lang));
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  const handleAdminSignOut = async () => {
+    setAdminAuthError(null);
+    setIsAuthenticating(true);
+    try {
+      await onSignOut();
+    } catch (err) {
+      setAdminAuthError(mapFirebaseAuthError(err, lang));
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
+  // Prevent flashing "Access Denied" while Firebase Auth or admin RBAC check is in flight
+  if (!authReady || isCheckingAdmin) {
+    return (
+      <div className="min-h-screen bg-slate-50 text-slate-900 flex items-center justify-center p-4">
+        <div className="bg-white border border-slate-200 rounded-2xl max-w-sm w-full p-6 shadow-sm text-center space-y-3">
+          <div className="w-10 h-10 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin mx-auto" />
+          <p className="text-xs font-medium text-slate-600">
+            {isAr
+              ? 'جاري التحقق من صلاحيات المشرف...'
+              : 'Vérification des privilèges administrateur...'}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   // Strict RBAC Gate: Do not render Admin console or operational data to unauthenticated or non-admin users
   if (!isLiveAdmin) {
@@ -153,14 +200,23 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 : 'Veuillez vous connecter avec un compte administrateur vérifié pour accéder à la console.'}
             </p>
           </div>
+          {adminAuthError && (
+            <div
+              role="alert"
+              className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 text-start"
+            >
+              {adminAuthError}
+            </div>
+          )}
           <div className="flex flex-col gap-2.5 pt-1">
             {firebaseUser ? (
               <button
                 type="button"
+                disabled={isAuthenticating}
                 onClick={() => {
-                  void onSignOut();
+                  void handleAdminSignOut();
                 }}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 disabled:opacity-60 rounded-lg transition-colors cursor-pointer"
               >
                 <LogOut className="w-4 h-4" />
                 <span>{t.signOutBtn}</span>
@@ -168,10 +224,11 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             ) : (
               <button
                 type="button"
+                disabled={isAuthenticating}
                 onClick={() => {
-                  void onGoogleSignIn();
+                  void handleAdminSignIn();
                 }}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-60 rounded-lg transition-colors cursor-pointer"
               >
                 <LogIn className="w-4 h-4" />
                 <span>{isAr ? 'تسجيل دخول المشرف (Google)' : 'Connexion Administrateur Google'}</span>

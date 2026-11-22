@@ -13,7 +13,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "lint:rules": "eslint firestore.rules",
-    "test": "tsx --test src/utils/marketplace.test.ts src/utils/adminMetrics.test.ts firestore.rules.test.ts"
+    "test": "tsx --test src/utils/marketplace.test.ts src/utils/adminMetrics.test.ts src/utils/authHelpers.test.ts serverAuth.test.ts firestore.rules.test.ts"
   },
   "dependencies": {
     "express": "^4.21.2",

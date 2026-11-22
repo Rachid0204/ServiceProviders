@@ -90,6 +90,14 @@ test('Firebase Env & Cloud Run Port: resolveFirebaseConfig reads VITE_FIREBASE_*
     }
   );
   assert.equal(invalidDbEnv.firestoreDatabaseId, 'ai-studio-721fde67-a110-4e25-bcc2-2f011a526460');
+
+  const appCheckEnv = resolveFirebaseConfig(
+    {
+      VITE_FIREBASE_RECAPTCHA_SITE_KEY: '6LeTestSiteKey123',
+    },
+    {}
+  );
+  assert.equal(appCheckEnv.recaptchaSiteKey, '6LeTestSiteKey123');
 });
 
 test('Hardened Workflow Rules: sequential booking state machine, deterministic reviewId, atomic rating aggregation, and Storage DB ID', () => {
@@ -155,6 +163,18 @@ test('Architect Audit Hardening: safe asset URLs, full array validation, financi
   // Server security headers and 501 CMI stub
   assert.ok(serverContent.includes("app.disable('x-powered-by')"));
   assert.ok(serverContent.includes('res.status(501)'));
+
+  // Atomic client/provider profile bootstrap on both providers and bookings creation
+  const existsAfterMatches =
+    rulesContent.match(/existsAfter\(\/databases\/\$\(database\)\/documents\/users\/\$\(request\.auth\.uid\)\)/g) || [];
+  assert.ok(existsAfterMatches.length >= 2);
+
+  // Auth audit hardening: custom claims RBAC, case-insensitive admin email, and Phone Auth verification support
+  assert.ok(rulesContent.includes('request.auth.token.admin == true'));
+  assert.ok(rulesContent.includes("request.auth.token.email.lower() == 'wahbi.rachid@gmail.com'"));
+  assert.ok(rulesContent.includes("'phone_number' in request.auth.token"));
+  assert.ok(storageRulesContent.includes('request.auth.token.admin == true'));
+  assert.ok(storageRulesContent.includes("'phone_number' in request.auth.token"));
 });
 
 

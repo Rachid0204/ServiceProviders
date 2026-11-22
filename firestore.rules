@@ -13,7 +13,10 @@ service cloud.firestore {
     }
 
     function isVerifiedUser() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        ('phone_number' in request.auth.token && request.auth.token.phone_number != null)
+      );
     }
 
     function isValidId(id) {
@@ -29,13 +32,17 @@ service cloud.firestore {
     }
 
     function isBootstrappedAdmin() {
-      return isVerifiedUser() && request.auth.token.email == 'wahbi.rachid@gmail.com';
+      return isVerifiedUser() && (
+        request.auth.token.email == 'wahbi.rachid@gmail.com' ||
+        ('email' in request.auth.token && request.auth.token.email is string && request.auth.token.email.lower() == 'wahbi.rachid@gmail.com')
+      );
     }
 
     function isAdmin() {
-      return isBootstrappedAdmin() || (
-        isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      );
+      return (isVerifiedUser() && request.auth.token.admin == true) ||
+        isBootstrappedAdmin() || (
+          isVerifiedUser() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        );
     }
 
     function isValidCity(city) {
@@ -597,7 +604,7 @@ service cloud.firestore {
         !('lastCompletedBookingId' in incoming()) &&
         !('lastReviewBookingId' in incoming()) &&
         (incoming().verifiedBadge == false || isAdmin()) &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+        existsAfter(/databases/$(database)/documents/users/$(request.auth.uid));
 
       allow update: if isVerifiedUser() &&
         isValidId(uid) &&
@@ -728,7 +735,7 @@ service cloud.firestore {
         ) &&
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time &&
-        exists(/databases/$(database)/documents/users/$(request.auth.uid));
+        existsAfter(/databases/$(database)/documents/users/$(request.auth.uid));
 
       allow update: if isVerifiedUser() &&
         isValidId(bookingId) &&

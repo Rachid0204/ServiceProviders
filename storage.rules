@@ -14,7 +14,10 @@ service firebase.storage {
     }
 
     function isVerifiedUser() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+      return isSignedIn() && (
+        request.auth.token.email_verified == true ||
+        ('phone_number' in request.auth.token && request.auth.token.phone_number != null)
+      );
     }
 
     function isOwner(uid) {
@@ -23,7 +26,9 @@ service firebase.storage {
 
     function isAdmin() {
       return isVerifiedUser() && (
+        request.auth.token.admin == true ||
         request.auth.token.email == 'wahbi.rachid@gmail.com' ||
+        ('email' in request.auth.token && request.auth.token.email is string && request.auth.token.email.lower() == 'wahbi.rachid@gmail.com') ||
         firestore.exists(/databases/ai-studio-721fde67-a110-4e25-bcc2-2f011a526460/documents/admins/$(request.auth.uid))
       );
     }

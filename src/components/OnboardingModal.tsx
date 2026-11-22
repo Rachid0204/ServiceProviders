@@ -7,6 +7,8 @@ import {
   LogOut,
   CheckCircle2,
   AlertCircle,
+  Mail,
+  Trash2,
   X,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
@@ -21,6 +23,20 @@ import {
   type UserRole,
 } from '../utils/marketplace';
 import type { Translations } from '../i18n/translations';
+import {
+  mapFirebaseAuthError,
+  mapProfileSaveError,
+  isVerifiedAuthUser,
+  getInitialOnboardingFormState,
+  validateEmailPasswordInput,
+} from '../utils/authHelpers';
+import {
+  resendVerificationEmail,
+  reloadCurrentUser,
+  signInWithEmail,
+  signUpWithEmail,
+  requestPasswordReset,
+} from '../firebase';
 
 interface OnboardingFormProps {
   lang: LanguageCode;
@@ -29,6 +45,7 @@ interface OnboardingFormProps {
   currentProfile: UserProfileRecord | null;
   onGoogleSignIn: () => Promise<void>;
   onSignOut: () => Promise<void>;
+  onDeleteAccount?: () => Promise<void>;
   onSaveProfile: (profileData: {
     role: UserRole;
     fullName: string;
@@ -51,52 +68,58 @@ export const OnboardingForm: React.FC<OnboardingFormProps> = ({
   currentProfile,
   onGoogleSignIn,
   onSignOut,
+  onDeleteAccount,
   onSaveProfile,
   onClose,
   isModal = false,
 }) => {
-  const [role, setRole] = useState<UserRole>(currentProfile?.role ?? 'client');
-  const [fullName, setFullName] = useState<string>(
-    currentProfile?.fullName ?? firebaseUser?.displayName ?? ''
-  );
-  const [phone, setPhone] = useState<string>(currentProfile?.phone ?? '+2126');
-  const [city, setCity] = useState<MoroccanCity>(currentProfile?.city ?? 'Casablanca');
-  const [neighborhood, setNeighborhood] = useState<string>(currentProfile?.neighborhood ?? '');
-  const [languagePref, setLanguagePref] = useState<LanguageCode>(
-    currentProfile?.languagePref ?? lang
-  );
-  const [specialty, setSpecialty] = useState<ServiceCategory | 'none'>(
-    currentProfile?.specialty ?? 'Plomberie'
-  );
-  const [hourlyRateMad, setHourlyRateMad] = useState<number>(
-    currentProfile?.hourlyRateMad ?? 150
-  );
-  const [bio, setBio] = useState<string>(currentProfile?.bio ?? '');
+  const initial = getInitialOnboardingFormState(currentProfile, firebaseUser, lang);
+  const [role, setRole] = useState<UserRole>(initial.role);
+  const [fullName, setFullName] = useState<string>(initial.fullName);
+  const [phone, setPhone] = useState<string>(initial.phone);
+  const [city, setCity] = useState<MoroccanCity>(initial.city);
+  const [neighborhood, setNeighborhood] = useState<string>(initial.neighborhood);
+  const [languagePref, setLanguagePref] = useState<LanguageCode>(initial.languagePref);
+  const [specialty, setSpecialty] = useState<ServiceCategory | 'none'>(initial.specialty);
+  const [hourlyRateMad, setHourlyRateMad] = useState<number>(initial.hourlyRateMad);
+  const [bio, setBio] = useState<string>(initial.bio);
 
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authInfoNotice, setAuthInfoNotice] = useState<string | null>(null);
+  const [verificationNotice, setVerificationNotice] = useState<string | null>(null);
+  const [isCheckingVerification, setIsCheckingVerification] = useState(false);
+  const [showEmailAuth, setShowEmailAuth] = useState(false);
+  const [emailAuthMode, setEmailAuthMode] = useState<'signin' | 'signup' | 'reset'>('signin');
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [isEmailSubmitting, setIsEmailSubmitting] = useState(false);
+  const [confirmDeleteAccount, setConfirmDeleteAccount] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
+  const isUnverifiedAccount = Boolean(firebaseUser && !isVerifiedAuthUser(firebaseUser));
 
   useEffect(() => {
     setLanguagePref(lang);
   }, [lang]);
 
   useEffect(() => {
-    if (currentProfile) {
-      setRole(currentProfile.role);
-      setFullName(currentProfile.fullName);
-      setPhone(currentProfile.phone);
-      setCity(currentProfile.city);
-      setNeighborhood(currentProfile.neighborhood);
-      setLanguagePref(currentProfile.languagePref);
-      if (currentProfile.specialty) setSpecialty(currentProfile.specialty);
-      if (currentProfile.hourlyRateMad) setHourlyRateMad(currentProfile.hourlyRateMad);
-      if (currentProfile.bio !== undefined) setBio(currentProfile.bio);
-    } else if (firebaseUser?.displayName && !fullName) {
-      setFullName(firebaseUser.displayName);
-    }
-  }, [currentProfile, firebaseUser]);
+    const next = getInitialOnboardingFormState(currentProfile, firebaseUser, lang);
+    setRole(next.role);
+    setFullName(next.fullName);
+    setPhone(next.phone);
+    setCity(next.city);
+    setNeighborhood(next.neighborhood);
+    setLanguagePref(next.languagePref);
+    setSpecialty(next.specialty);
+    setHourlyRateMad(next.hourlyRateMad);
+    setBio(next.bio);
+    setErrors({});
+    setSaveSuccess(false);
+    setVerificationNotice(null);
+    setConfirmDeleteAccount(false);
+  }, [currentProfile, firebaseUser?.uid]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -138,7 +161,7 @@ export const OnboardingForm: React.FC<OnboardingFormProps> = ({
       setPhone(validation.normalizedPhone);
       setSaveSuccess(true);
     } catch (err) {
-      setAuthError(err instanceof Error ? err.message : String(err));
+      setAuthError(mapProfileSaveError(err, lang));
     } finally {
       setIsSaving(false);
     }
@@ -146,14 +169,85 @@ export const OnboardingForm: React.FC<OnboardingFormProps> = ({
 
   const handleGoogleClick = async () => {
     setAuthError(null);
+    setAuthInfoNotice(null);
     try {
       await onGoogleSignIn();
     } catch (err) {
-      setAuthError(
+      setAuthError(mapFirebaseAuthError(err, lang));
+    }
+  };
+
+  const handleSignOutClick = async () => {
+    setAuthError(null);
+    setAuthInfoNotice(null);
+    try {
+      await onSignOut();
+    } catch (err) {
+      setAuthError(mapFirebaseAuthError(err, lang));
+    }
+  };
+
+  const handleEmailAuthSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError(null);
+    setAuthInfoNotice(null);
+    const check = validateEmailPasswordInput({
+      email: authEmail,
+      password: authPassword,
+      mode: emailAuthMode,
+      lang,
+    });
+    if (!check.valid) {
+      setAuthError(check.error || null);
+      return;
+    }
+
+    setIsEmailSubmitting(true);
+    try {
+      if (emailAuthMode === 'signin') {
+        await signInWithEmail(check.normalizedEmail, authPassword);
+        setAuthPassword('');
+        setShowEmailAuth(false);
+      } else if (emailAuthMode === 'signup') {
+        await signUpWithEmail(check.normalizedEmail, authPassword);
+        setAuthPassword('');
+        setShowEmailAuth(false);
+        setAuthInfoNotice(
+          lang === 'ar'
+            ? 'تم إنشاء الحساب وإرسال رابط التحقق إلى بريدك الإلكتروني.'
+            : 'Compte créé ! Un lien de vérification vient d’être envoyé à votre e-mail.'
+        );
+      } else {
+        await requestPasswordReset(check.normalizedEmail);
+        setAuthInfoNotice(
+          lang === 'ar'
+            ? 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.'
+            : 'Un e-mail de réinitialisation du mot de passe a été envoyé.'
+        );
+      }
+    } catch (err) {
+      setAuthError(mapFirebaseAuthError(err, lang));
+    } finally {
+      setIsEmailSubmitting(false);
+    }
+  };
+
+  const handleConfirmAccountDelete = async () => {
+    if (!onDeleteAccount) return;
+    setAuthError(null);
+    setIsDeletingAccount(true);
+    try {
+      await onDeleteAccount();
+      setConfirmDeleteAccount(false);
+      setAuthInfoNotice(
         lang === 'ar'
-          ? 'تعذر فتح نافذة تسجيل الدخول عبر Google في هذه البيئة. يمكنك حفظ ملفك مباشرة أدناه.'
-          : 'La fenêtre Google Auth a été fermée ou bloquée. Vous pouvez enregistrer votre profil directement ci-dessous.'
+          ? 'تم حذف حسابك بنجاح.'
+          : 'Votre compte a été supprimé avec succès.'
       );
+    } catch (err) {
+      setAuthError(mapFirebaseAuthError(err, lang));
+    } finally {
+      setIsDeletingAccount(false);
     }
   };
 
@@ -177,47 +271,281 @@ export const OnboardingForm: React.FC<OnboardingFormProps> = ({
       </div>
 
       {/* Firebase Auth Bar */}
-      <div className="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        {firebaseUser ? (
-          <div className="flex flex-wrap items-center gap-3 text-sm">
-            <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
-            <div>
-              <span className="text-slate-600">{t.signedInAs} </span>
-              <span className="font-semibold text-slate-900">
-                {firebaseUser.email || firebaseUser.uid}
-              </span>
-              <span className="mx-2 text-slate-300" aria-hidden="true">
-                ·
-              </span>
-              <span className="text-emerald-700 font-medium">{t.firestoreSyncBadge}</span>
+      <div className="mt-6 p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          {firebaseUser ? (
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <ShieldCheck className="w-5 h-5 text-emerald-600 shrink-0" />
+              <div>
+                <span className="text-slate-600">{t.signedInAs} </span>
+                <span className="font-semibold text-slate-900">
+                  {firebaseUser.email || firebaseUser.uid}
+                </span>
+                <span className="mx-2 text-slate-300" aria-hidden="true">
+                  ·
+                </span>
+                <span className="text-emerald-700 font-medium">{t.firestoreSyncBadge}</span>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-slate-600">{t.localPreviewNotice}</p>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {firebaseUser ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleSignOutClick();
+                  }}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4" />
+                  <span>{t.signOutBtn}</span>
+                </button>
+                {onDeleteAccount && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDeleteAccount((v) => !v)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-rose-700 bg-white border border-rose-200 rounded-lg hover:bg-rose-50 transition-colors whitespace-nowrap cursor-pointer"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{lang === 'ar' ? 'حذف الحساب' : 'Supprimer compte'}</span>
+                  </button>
+                )}
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleGoogleClick}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-900 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap shadow-2xs cursor-pointer"
+                >
+                  <LogIn className="w-4 h-4 text-emerald-700" />
+                  <span>{t.googleSignInBtn}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowEmailAuth((v) => !v)}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors whitespace-nowrap cursor-pointer"
+                >
+                  <Mail className="w-3.5 h-3.5" />
+                  <span>{lang === 'ar' ? 'البريد الإلكتروني' : 'E-mail'}</span>
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Two-step Self-Service Account Deletion Confirmation */}
+        {firebaseUser && confirmDeleteAccount && onDeleteAccount && (
+          <div className="pt-3 border-t border-rose-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs text-rose-900 bg-rose-50/70 p-3 rounded-lg">
+            <p className="leading-snug">
+              {lang === 'ar'
+                ? 'هل أنت متأكد من حذف حسابك نهائياً؟ سيتم تعطيل ملفك كمعلم وحذف حساب المصادقة.'
+                : 'Confirmer la suppression définitive de votre compte ? Votre profil Maâlem sera désactivé et votre accès supprimé.'}
+            </p>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteAccount(false)}
+                className="px-3 py-1.5 font-medium bg-white border border-slate-300 text-slate-700 rounded-md hover:bg-slate-100 cursor-pointer"
+              >
+                {lang === 'ar' ? 'إلغاء' : 'Annuler'}
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingAccount}
+                onClick={() => {
+                  void handleConfirmAccountDelete();
+                }}
+                className="px-3 py-1.5 font-semibold bg-rose-700 text-white rounded-md hover:bg-rose-800 disabled:opacity-60 cursor-pointer"
+              >
+                {isDeletingAccount
+                  ? lang === 'ar'
+                    ? 'جاري الحذف...'
+                    : 'Suppression...'
+                  : lang === 'ar'
+                  ? 'تأكيد الحذف'
+                  : 'Confirmer suppression'}
+              </button>
             </div>
           </div>
-        ) : (
-          <p className="text-xs text-slate-600">{t.localPreviewNotice}</p>
         )}
 
-        <div className="shrink-0">
-          {firebaseUser ? (
-            <button
-              type="button"
-              onClick={onSignOut}
-              className="inline-flex items-center gap-2 px-3.5 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap"
-            >
-              <LogOut className="w-4 h-4" />
-              <span>{t.signOutBtn}</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleGoogleClick}
-              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-slate-900 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap shadow-2xs"
-            >
-              <LogIn className="w-4 h-4 text-emerald-700" />
-              <span>{t.googleSignInBtn}</span>
-            </button>
-          )}
-        </div>
+        {/* Collapsible Email/Password Sign-In, Sign-Up & Password Reset Panel */}
+        {!firebaseUser && showEmailAuth && (
+          <form
+            onSubmit={handleEmailAuthSubmit}
+            noValidate
+            className="pt-3 border-t border-slate-200 space-y-3 text-xs"
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              {(['signin', 'signup', 'reset'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => {
+                    setEmailAuthMode(mode);
+                    setAuthError(null);
+                    setAuthInfoNotice(null);
+                  }}
+                  className={`px-2.5 py-1 rounded-md font-semibold cursor-pointer ${
+                    emailAuthMode === mode
+                      ? 'bg-slate-900 text-white'
+                      : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-100'
+                  }`}
+                >
+                  {mode === 'signin'
+                    ? lang === 'ar'
+                      ? 'تسجيل الدخول'
+                      : 'Connexion'
+                    : mode === 'signup'
+                    ? lang === 'ar'
+                      ? 'إنشاء حساب'
+                      : 'Créer un compte'
+                    : lang === 'ar'
+                    ? 'نسيت كلمة المرور'
+                    : 'Mot de passe oublié'}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <input
+                type="email"
+                dir="ltr"
+                value={authEmail}
+                onChange={(e) => setAuthEmail(e.target.value)}
+                placeholder="nom@exemple.ma"
+                aria-label="Email"
+                className="px-3 py-2 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
+              />
+              {emailAuthMode !== 'reset' && (
+                <input
+                  type="password"
+                  dir="ltr"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  placeholder={lang === 'ar' ? 'كلمة المرور (8+ أحرف)' : 'Mot de passe (8+ caractères)'}
+                  aria-label="Password"
+                  className="px-3 py-2 bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                />
+              )}
+            </div>
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={isEmailSubmitting}
+                className="px-4 py-2 font-semibold bg-emerald-700 text-white rounded-lg hover:bg-emerald-800 disabled:opacity-60 cursor-pointer"
+              >
+                {isEmailSubmitting
+                  ? lang === 'ar'
+                    ? 'جاري المعالجة...'
+                    : 'Traitement...'
+                  : emailAuthMode === 'signin'
+                  ? lang === 'ar'
+                    ? 'دخول بالبريد'
+                    : 'Se connecter'
+                  : emailAuthMode === 'signup'
+                  ? lang === 'ar'
+                    ? 'إنشاء الحساب'
+                    : 'S’inscrire'
+                  : lang === 'ar'
+                  ? 'إرسال رابط الاستعادة'
+                  : 'Envoyer lien de réinitialisation'}
+              </button>
+            </div>
+          </form>
+        )}
       </div>
+
+      {authInfoNotice && (
+        <div
+          role="status"
+          className="mt-4 p-3.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2.5 text-xs font-medium text-emerald-900"
+        >
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{authInfoNotice}</span>
+        </div>
+      )}
+
+      {isUnverifiedAccount && (
+        <div
+          role="alert"
+          className="mt-4 p-4 bg-amber-50 border border-amber-300 rounded-lg space-y-2.5 text-xs text-amber-950"
+        >
+          <div className="flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+            <p className="leading-relaxed">
+              {lang === 'ar'
+                ? 'بريدك الإلكتروني غير مؤكد بعد. يرجى تأكيد بريدك الإلكتروني لتفعيل حفظ الملف الشخصي والحجوزات والمحادثة.'
+                : 'Votre adresse e-mail n’est pas encore vérifiée. Confirmez-la pour activer l’enregistrement du profil, les réservations et le chat.'}
+            </p>
+          </div>
+          {verificationNotice && (
+            <p className="text-emerald-800 font-medium">{verificationNotice}</p>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={isCheckingVerification}
+              onClick={async () => {
+                setAuthError(null);
+                setVerificationNotice(null);
+                setIsCheckingVerification(true);
+                try {
+                  await resendVerificationEmail();
+                  setVerificationNotice(
+                    lang === 'ar'
+                      ? 'تم إرسال رابط التحقق إلى بريدك الإلكتروني.'
+                      : 'Un lien de vérification vient d’être envoyé à votre adresse e-mail.'
+                  );
+                } catch (err) {
+                  setAuthError(mapFirebaseAuthError(err, lang));
+                } finally {
+                  setIsCheckingVerification(false);
+                }
+              }}
+              className="px-3 py-1.5 font-semibold bg-amber-700 text-white rounded-md hover:bg-amber-800 disabled:opacity-60 cursor-pointer"
+            >
+              {lang === 'ar' ? 'إعادة إرسال رابط التحقق' : 'Renvoyer l’e-mail de vérification'}
+            </button>
+            <button
+              type="button"
+              disabled={isCheckingVerification}
+              onClick={async () => {
+                setAuthError(null);
+                setVerificationNotice(null);
+                setIsCheckingVerification(true);
+                try {
+                  const refreshed = await reloadCurrentUser();
+                  if (refreshed && isVerifiedAuthUser(refreshed)) {
+                    setVerificationNotice(
+                      lang === 'ar'
+                        ? 'تم التحقق من بريدك الإلكتروني بنجاح!'
+                        : 'Adresse e-mail vérifiée avec succès !'
+                    );
+                  } else {
+                    setVerificationNotice(
+                      lang === 'ar'
+                        ? 'لم يتم تأكيد البريد بعد. تحقق من صندوق الوارد ثم أعد المحاولة.'
+                        : 'E-mail pas encore confirmé. Vérifiez votre boîte de réception puis réessayez.'
+                    );
+                  }
+                } catch (err) {
+                  setAuthError(mapFirebaseAuthError(err, lang));
+                } finally {
+                  setIsCheckingVerification(false);
+                }
+              }}
+              className="px-3 py-1.5 font-semibold bg-white text-amber-900 border border-amber-300 rounded-md hover:bg-amber-100 disabled:opacity-60 cursor-pointer"
+            >
+              {lang === 'ar' ? 'تحققت من بريدي' : 'J’ai vérifié mon e-mail'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {authError && (
         <div

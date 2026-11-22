@@ -35,9 +35,11 @@ import {
   type ReviewCategoryBreakdown,
   type ServiceCategory,
   type TimeSlot,
+  type UserProfileRecord,
   type UserRole,
   type VettedProvider,
 } from '../utils/marketplace';
+import { buildBootstrapClientProfile, isVerifiedAuthUser } from '../utils/authHelpers';
 
 // Consistent demo bookings used ONLY in unauthenticated local preview mode
 const INITIAL_DEMO_BOOKINGS: BookingRecord[] = [
@@ -277,6 +279,8 @@ export type AdminBookingPatch = Partial<
 export function useBookings(params: {
   firebaseUser: User | null;
   authReady: boolean;
+  userProfile: UserProfileRecord | null;
+  onBootstrapUserProfile?: (profile: UserProfileRecord) => void;
   lang: LanguageCode;
   allProviders: VettedProvider[];
   platformFeePct: number;
@@ -293,6 +297,8 @@ export function useBookings(params: {
   const {
     firebaseUser,
     authReady,
+    userProfile,
+    onBootstrapUserProfile,
     lang,
     allProviders,
     platformFeePct,
@@ -310,7 +316,7 @@ export function useBookings(params: {
 
   // Dual real-time Firestore listeners: clientId == uid AND providerId == uid (bounded)
   useEffect(() => {
-    if (!authReady || !firebaseUser) {
+    if (!authReady || !firebaseUser || !isVerifiedAuthUser(firebaseUser)) {
       setClientLiveBookings([]);
       setProviderLiveBookings([]);
       return;
@@ -367,6 +373,13 @@ export function useBookings(params: {
 
   const submitBooking = async (payload: SubmitBookingPayload): Promise<string> => {
     setBookingActionError(null);
+    if (firebaseUser && !isVerifiedAuthUser(firebaseUser)) {
+      throw new Error(
+        lang === 'ar'
+          ? 'يرجى تأكيد بريدك الإلكتروني أولاً قبل إرسال طلب حجز.'
+          : 'Veuillez vérifier votre adresse e-mail avant d’envoyer une réservation.'
+      );
+    }
     if (firebaseUser && payload.provider.id === firebaseUser.uid) {
       throw new Error(
         lang === 'ar'
@@ -414,31 +427,59 @@ export function useBookings(params: {
 
     if (firebaseUser) {
       const path = `bookings/${bookingId}`;
+      const bookingPayload = {
+        bookingRef,
+        clientId: firebaseUser.uid,
+        clientName: payload.clientName,
+        clientPhone: payload.clientPhone,
+        providerId: payload.provider.id,
+        providerName: providerDisplayName,
+        providerPhone: payload.provider.phone,
+        category: payload.provider.category,
+        serviceType: payload.serviceType,
+        city: payload.provider.location.city,
+        neighborhood: payload.neighborhood,
+        addressPin: payload.addressPin,
+        description: payload.description,
+        ...(safePhotoUrl ? { problemPhotoUrl: safePhotoUrl } : {}),
+        preferredDate: payload.preferredDate,
+        preferredTimeSlot: payload.preferredTimeSlot,
+        paymentMethod: payload.paymentMethod,
+        paymentStatus,
+        estimatedMad: Math.round(payload.estimatedMad),
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+
       try {
-        await setDoc(doc(db, 'bookings', bookingId), {
-          bookingRef,
-          clientId: firebaseUser.uid,
-          clientName: payload.clientName,
-          clientPhone: payload.clientPhone,
-          providerId: payload.provider.id,
-          providerName: providerDisplayName,
-          providerPhone: payload.provider.phone,
-          category: payload.provider.category,
-          serviceType: payload.serviceType,
-          city: payload.provider.location.city,
-          neighborhood: payload.neighborhood,
-          addressPin: payload.addressPin,
-          description: payload.description,
-          ...(safePhotoUrl ? { problemPhotoUrl: safePhotoUrl } : {}),
-          preferredDate: payload.preferredDate,
-          preferredTimeSlot: payload.preferredTimeSlot,
-          paymentMethod: payload.paymentMethod,
-          paymentStatus,
-          estimatedMad: Math.round(payload.estimatedMad),
-          status: 'pending',
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
+        let needsBootstrapProfile = !userProfile || userProfile.uid !== firebaseUser.uid;
+        if (needsBootstrapProfile) {
+          const existingUserSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
+          needsBootstrapProfile = !existingUserSnap.exists();
+        }
+
+        if (needsBootstrapProfile) {
+          const bootstrapProfile = buildBootstrapClientProfile({
+            uid: firebaseUser.uid,
+            fullName: payload.clientName,
+            phone: payload.clientPhone,
+            city: payload.provider.location.city,
+            neighborhood: payload.neighborhood,
+            languagePref: lang,
+          });
+          const batch = writeBatch(db);
+          batch.set(doc(db, 'users', firebaseUser.uid), {
+            ...bootstrapProfile,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+          batch.set(doc(db, 'bookings', bookingId), bookingPayload);
+          await batch.commit();
+          onBootstrapUserProfile?.(bootstrapProfile);
+        } else {
+          await setDoc(doc(db, 'bookings', bookingId), bookingPayload);
+        }
       } catch (err) {
         handleFirestoreError(err, OperationType.CREATE, path);
       }
