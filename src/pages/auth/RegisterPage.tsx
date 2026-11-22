@@ -21,11 +21,16 @@ export const RegisterPage: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<UserRole>(initialRole);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const handleGoogle = async () => {
     setError(null);
+    if (!termsAccepted) {
+      setError(t.termsConsentRequiredError);
+      return;
+    }
     setSignupRoleIntent(selectedRole);
     setIsSubmitting(true);
     try {
@@ -41,6 +46,11 @@ export const RegisterPage: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+
+    if (!termsAccepted) {
+      setError(t.termsConsentRequiredError);
+      return;
+    }
 
     const check = validateEmailPasswordInput({ email, password, mode: 'signup', lang });
     if (!check.valid) {
@@ -115,6 +125,35 @@ export const RegisterPage: React.FC = () => {
             <span>{error}</span>
           </div>
         )}
+
+        {/* Law 09-08 / Terms & Privacy Explicit Consent */}
+        <label className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={termsAccepted}
+            onChange={(e) => {
+              setTermsAccepted(e.target.checked);
+              if (e.target.checked) setError(null);
+            }}
+            className="mt-0.5 w-4 h-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600 shrink-0"
+          />
+          <span className="leading-relaxed">
+            {t.termsConsentLabel}{' '}
+            <Link
+              to={ROUTE_PATHS.TERMS}
+              className="text-emerald-700 font-semibold hover:underline"
+            >
+              {isAr ? 'شروط الاستخدام' : 'CGU'}
+            </Link>{' '}
+            ·{' '}
+            <Link
+              to={ROUTE_PATHS.PRIVACY}
+              className="text-emerald-700 font-semibold hover:underline"
+            >
+              {isAr ? 'الخصوصية (قانون 09-08)' : 'Confidentialité (Loi 09-08)'}
+            </Link>
+          </span>
+        </label>
 
         <button
           type="button"

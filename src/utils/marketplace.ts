@@ -7,7 +7,13 @@ export type ServiceCategory =
   | 'Peinture'
   | 'Soutien Scolaire'
   | 'Ménage'
-  | 'Climatisation';
+  | 'Climatisation'
+  | 'Menuiserie'
+  | 'Serrurerie'
+  | 'Électroménager'
+  | 'Jardinage'
+  | 'Déménagement'
+  | 'Maçonnerie';
 
 export type BookingStatus =
   | 'pending'
@@ -49,6 +55,12 @@ export const SERVICE_CATEGORIES: ServiceCategory[] = [
   'Soutien Scolaire',
   'Ménage',
   'Climatisation',
+  'Menuiserie',
+  'Serrurerie',
+  'Électroménager',
+  'Jardinage',
+  'Déménagement',
+  'Maçonnerie',
 ];
 
 export const DEFAULT_CATEGORY_IMAGE: Record<ServiceCategory, string> = {
@@ -58,6 +70,12 @@ export const DEFAULT_CATEGORY_IMAGE: Record<ServiceCategory, string> = {
   'Soutien Scolaire': '/src/assets/images/service_tutoring.jpg',
   Ménage: '/src/assets/images/service_home_cleaning.jpg',
   Climatisation: '/src/assets/images/service_ac_hvac.jpg',
+  Menuiserie: '/src/assets/images/hero_moroccan_craftsman_1794980476857.jpg',
+  Serrurerie: '/src/assets/images/service_plumbing_repair_1794980477189.jpg',
+  Électroménager: '/src/assets/images/service_electrical_smart_1794980478001.jpg',
+  Jardinage: '/src/assets/images/service_home_cleaning.jpg',
+  Déménagement: '/src/assets/images/hero_moroccan_craftsman_1794980476857.jpg',
+  Maçonnerie: '/src/assets/images/service_home_painting_1794980476260.jpg',
 };
 
 // City center reference coordinates for geolocation fallback / city switching
@@ -740,6 +758,14 @@ export function validateServiceRequestInput(
   };
 }
 
+export type ProviderSortOption =
+  | 'recommended'
+  | 'rating_desc'
+  | 'price_asc'
+  | 'price_desc'
+  | 'experience_desc'
+  | 'distance_asc';
+
 export interface ProviderFilterOptions {
   city: MoroccanCity | 'ALL';
   category: ServiceCategory | 'ALL';
@@ -748,6 +774,9 @@ export interface ProviderFilterOptions {
   searchQuery: string;
   verifiedOnly: boolean;
   availableNowOnly?: boolean;
+  favoritesOnly?: boolean;
+  favoriteIds?: ReadonlySet<string> | string[];
+  sortBy?: ProviderSortOption;
   userCoords?: { lat: number; lng: number } | null;
   nearMeActive?: boolean;
 }
@@ -759,6 +788,11 @@ export function filterProviders(
   const q = filters.searchQuery.trim().toLowerCase();
   const quartierQuery = (filters.quartier ?? '').trim().toLowerCase();
   const maxRate = filters.maxHourlyRateMAD ?? 10000;
+  const favSet = filters.favoriteIds
+    ? filters.favoriteIds instanceof Set
+      ? filters.favoriteIds
+      : new Set(filters.favoriteIds)
+    : null;
 
   const filtered = providers
     .map((p) => {
@@ -778,6 +812,7 @@ export function filterProviders(
       if (filters.category !== 'ALL' && p.category !== filters.category) return false;
       if (filters.verifiedOnly && !p.verifiedBadge) return false;
       if (filters.availableNowOnly && !p.isAvailableNow) return false;
+      if (filters.favoritesOnly && (!favSet || !favSet.has(p.id))) return false;
       if (p.hourlyRateMAD > maxRate) return false;
 
       if (quartierQuery && quartierQuery !== 'all') {
@@ -809,6 +844,24 @@ export function filterProviders(
 
   if (filters.nearMeActive && filters.userCoords != null) {
     filtered.sort((a, b) => (a.distanceKm ?? 99999) - (b.distanceKm ?? 99999));
+  } else if (filters.sortBy && filters.sortBy !== 'recommended') {
+    switch (filters.sortBy) {
+      case 'rating_desc':
+        filtered.sort((a, b) => b.ratingAvg - a.ratingAvg || b.reviewCount - a.reviewCount);
+        break;
+      case 'price_asc':
+        filtered.sort((a, b) => a.hourlyRateMAD - b.hourlyRateMAD);
+        break;
+      case 'price_desc':
+        filtered.sort((a, b) => b.hourlyRateMAD - a.hourlyRateMAD);
+        break;
+      case 'experience_desc':
+        filtered.sort((a, b) => b.experienceYears - a.experienceYears);
+        break;
+      case 'distance_asc':
+        filtered.sort((a, b) => (a.distanceKm ?? 99999) - (b.distanceKm ?? 99999));
+        break;
+    }
   }
 
   return filtered;
@@ -905,7 +958,183 @@ export const CATEGORY_SUGGESTED_SKILLS: Record<ServiceCategory, string[]> = {
     'Climatisation gainable',
     'Dépannage carte électronique',
   ],
+  Menuiserie: [
+    'Portes & placards bois sur mesure',
+    'Menuiserie aluminium & PVC',
+    'Cuisines équipées',
+    'Réparation volets roulants',
+    'Parquet & habillage mural',
+  ],
+  Serrurerie: [
+    'Ouverture porte claquée 24/7',
+    'Changement cylindre haute sécurité',
+    'Serrure multipoints & blindage',
+    'Ferronnerie & grilles de protection',
+    'Reproduction & dépannage serrures',
+  ],
+  Électroménager: [
+    'Réparation machine à laver',
+    'Dépannage réfrigérateur & congélateur',
+    'Four, plaque & hotte de cuisine',
+    'Lave-vaisselle toutes marques',
+    'Diagnostic carte électronique',
+  ],
+  Jardinage: [
+    'Taille haies, palmiers & arbustes',
+    'Entretien pelouse & gazon',
+    'Installation arrosage automatique',
+    'Création espaces verts & terrasses',
+    'Traitement phytosanitaire',
+  ],
+  Déménagement: [
+    'Déménagement appartement & villa',
+    'Emballage & protection meubles',
+    'Montage / démontage mobilier',
+    'Transport national inter-villes',
+    'Camion capitonné avec équipe',
+  ],
+  Maçonnerie: [
+    'Pose carrelage, zellige & marbre',
+    'Plâtre, faux plafond & gypse',
+    'Étanchéité terrasse & toiture',
+    'Rénovation salle de bain & cuisine',
+    'Cloisons, enduits & gros œuvre',
+  ],
 };
+
+// --- Phase 2: Provider Services Catalog & Private KYC Verification Contracts ---
+
+export type ServicePricingModel =
+  | 'fixed'
+  | 'hourly'
+  | 'starting_from'
+  | 'quote_required'
+  | 'callout_plus_work';
+
+export const SERVICE_PRICING_MODELS: ServicePricingModel[] = [
+  'fixed',
+  'hourly',
+  'starting_from',
+  'quote_required',
+  'callout_plus_work',
+];
+
+export interface ProviderServiceRecord {
+  id: string;
+  providerId: string;
+  category: ServiceCategory;
+  titleFr: string;
+  titleAr: string;
+  descriptionFr: string;
+  descriptionAr: string;
+  pricingModel: ServicePricingModel;
+  priceMad: number;
+  calloutFeeMad: number;
+  estimatedDurationMinutes: number;
+  isActive: boolean;
+  createdAtIso: string;
+}
+
+export type KycVerificationStatus =
+  | 'not_submitted'
+  | 'submitted'
+  | 'under_review'
+  | 'verified'
+  | 'rejected'
+  | 'resubmission_required';
+
+export interface ProviderKycDocumentRecord {
+  uid: string;
+  cinNumberMasked: string;
+  cinFrontUrl: string;
+  cinBackUrl: string;
+  certificateUrl?: string;
+  businessLicenseUrl?: string;
+  status: KycVerificationStatus;
+  rejectionReason?: string;
+  reviewedByUid?: string;
+  submittedAtIso?: string;
+  reviewedAtIso?: string;
+}
+
+export function maskMoroccanCin(rawCin: string): string {
+  const cleaned = rawCin.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+  if (cleaned.length < 4) return cleaned;
+  const prefix = cleaned.slice(0, 2);
+  const suffix = cleaned.slice(-2);
+  return `${prefix}-••••${suffix}`;
+}
+
+export function validateProviderServiceInput(
+  input: {
+    titleFr: string;
+    descriptionFr: string;
+    category: string;
+    pricingModel: string;
+    priceMad: number;
+    calloutFeeMad: number;
+    estimatedDurationMinutes: number;
+  },
+  lang: LanguageCode
+): {
+  valid: boolean;
+  errors: Partial<
+    Record<
+      'titleFr' | 'descriptionFr' | 'category' | 'pricingModel' | 'priceMad' | 'calloutFeeMad' | 'estimatedDurationMinutes',
+      string
+    >
+  >;
+} {
+  const isAr = lang === 'ar';
+  const errors: Partial<
+    Record<
+      'titleFr' | 'descriptionFr' | 'category' | 'pricingModel' | 'priceMad' | 'calloutFeeMad' | 'estimatedDurationMinutes',
+      string
+    >
+  > = {};
+
+  if (input.titleFr.trim().length < 4 || input.titleFr.trim().length > 100) {
+    errors.titleFr = isAr
+      ? 'عنوان الخدمة يجب أن يتكون من 4 إلى 100 حرف.'
+      : 'Le titre du service doit contenir entre 4 et 100 caractères.';
+  }
+  if (input.descriptionFr.trim().length < 10 || input.descriptionFr.trim().length > 500) {
+    errors.descriptionFr = isAr
+      ? 'وصف الخدمة يجب أن يتكون من 10 إلى 500 حرف.'
+      : 'La description doit contenir entre 10 et 500 caractères.';
+  }
+  if (!SERVICE_CATEGORIES.includes(input.category as ServiceCategory)) {
+    errors.category = isAr ? 'يرجى اختيار فئة صالحة.' : 'Veuillez sélectionner une catégorie valide.';
+  }
+  if (!SERVICE_PRICING_MODELS.includes(input.pricingModel as ServicePricingModel)) {
+    errors.pricingModel = isAr
+      ? 'يرجى اختيار نموذج تسعير صالح.'
+      : 'Veuillez sélectionner un modèle de tarification valide.';
+  }
+  const price = Math.round(Number(input.priceMad));
+  if (
+    input.pricingModel !== 'quote_required' &&
+    (Number.isNaN(price) || price < 30 || price > 100000)
+  ) {
+    errors.priceMad = isAr
+      ? 'السعر يجب أن يكون بين 30 و 100000 د.م.'
+      : 'Le tarif doit être compris entre 30 DH et 100 000 DH.';
+  }
+  const callout = Math.round(Number(input.calloutFeeMad));
+  if (Number.isNaN(callout) || callout < 0 || callout > 10000) {
+    errors.calloutFeeMad = isAr
+      ? 'واجب التنقل غير صالح (0 إلى 10000 د.م.).'
+      : 'Frais de déplacement invalides (0 à 10 000 DH).';
+  }
+  const dur = Math.round(Number(input.estimatedDurationMinutes));
+  if (Number.isNaN(dur) || dur < 15 || dur > 1440) {
+    errors.estimatedDurationMinutes = isAr
+      ? 'المدة التقديرية يجب أن تكون بين 15 و 1440 دقيقة.'
+      : 'La durée estimée doit être comprise entre 15 et 1440 minutes.';
+  }
+
+  return { valid: Object.keys(errors).length === 0, errors };
+}
 
 export function generateJobPostIds(): { jobId: string; jobRef: string } {
   const randomHex =

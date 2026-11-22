@@ -198,4 +198,37 @@ test('Open Client Job Board & Proposal Privacy Rules: validated jobPosts, isolat
   assert.ok(storageRulesContent.includes('match /jobPosts/{jobId}/{userId}/{fileName}'));
 });
 
+test('Phase 2 Security & Indexes: 12 categories, /services catalog, strictly private /providerDocuments KYC (Firestore + Storage), /favorites, and firestore.indexes.json', () => {
+  // 12 categories validated in Firestore rules
+  for (const cat of ['Menuiserie', 'Serrurerie', 'Électroménager', 'Jardinage', 'Déménagement', 'Maçonnerie']) {
+    assert.ok(rulesContent.includes(`cat == '${cat}'`), `Missing category ${cat} in firestore.rules`);
+  }
+
+  // Services catalog rules
+  assert.ok(rulesContent.includes('function isValidProviderService(data)'));
+  assert.ok(rulesContent.includes('match /services/{serviceId}'));
+
+  // Strictly private KYC documents in Firestore & Storage (owner cannot self-approve, no public read)
+  assert.ok(rulesContent.includes('function isValidProviderKycDocument(data)'));
+  assert.ok(rulesContent.includes('match /providerDocuments/{uid}'));
+  assert.ok(rulesContent.includes("incoming().status == 'submitted'"));
+  assert.ok(storageRulesContent.includes('match /providerDocuments/{uid}/{docType}/{fileName}'));
+  assert.ok(storageRulesContent.includes('function isValidKycDocumentUpload()'));
+
+  // Customer favorites owner isolation
+  assert.ok(rulesContent.includes('match /favorites/{favoriteId}'));
+  assert.ok(rulesContent.includes("favoriteId == request.auth.uid + '_' + incoming().providerId"));
+
+  // Law 09-08 consent timestamp whitelisted on user profiles
+  assert.ok(rulesContent.includes("'termsAcceptedAt'"));
+
+  // Composite indexes file exists and parses cleanly
+  const indexesRaw = fs.readFileSync(path.resolve(import.meta.dirname, 'firestore.indexes.json'), 'utf8');
+  const parsed = JSON.parse(indexesRaw) as { indexes: Array<{ collectionGroup: string }> };
+  const groups = new Set(parsed.indexes.map((i) => i.collectionGroup));
+  for (const col of ['bookings', 'jobPosts', 'services', 'reviews', 'favorites', 'withdrawals', 'providerDocuments']) {
+    assert.ok(groups.has(col), `Missing composite index for ${col} in firestore.indexes.json`);
+  }
+});
+
 

@@ -11,6 +11,8 @@ export const ROUTE_PATHS = {
   SERVICES: '/services',
   SERVICE_CATEGORY: '/services/:category',
   PROVIDER_DETAIL: '/providers/:id',
+  TERMS: '/terms',
+  PRIVACY: '/privacy',
 
   // Auth routes
   LOGIN: '/login',
@@ -34,6 +36,8 @@ export const ROUTE_PATHS = {
   PROVIDER_JOBS: '/provider/jobs',
   PROVIDER_MISSIONS: '/provider/missions',
   PROVIDER_CARD: '/provider/card',
+  PROVIDER_SERVICES: '/provider/services',
+  PROVIDER_VERIFICATION: '/provider/verification',
   PROVIDER_EARNINGS: '/provider/earnings',
 
   // Admin routes
@@ -49,6 +53,12 @@ export const CATEGORY_TO_SLUG: Record<ServiceCategory, string> = {
   'Soutien Scolaire': 'tutoring',
   Ménage: 'cleaning',
   Climatisation: 'hvac',
+  Menuiserie: 'carpentry',
+  Serrurerie: 'locksmith',
+  Électroménager: 'appliance-repair',
+  Jardinage: 'gardening',
+  Déménagement: 'moving',
+  Maçonnerie: 'masonry',
 };
 
 const SLUG_ALIASES_TO_CATEGORY: Record<string, ServiceCategory> = {
@@ -61,6 +71,13 @@ const SLUG_ALIASES_TO_CATEGORY: Record<string, ServiceCategory> = {
   cleaning: 'Ménage',
   hvac: 'Climatisation',
   ac: 'Climatisation',
+  carpentry: 'Menuiserie',
+  locksmith: 'Serrurerie',
+  'appliance-repair': 'Électroménager',
+  appliances: 'Électroménager',
+  gardening: 'Jardinage',
+  moving: 'Déménagement',
+  masonry: 'Maçonnerie',
   // French slugs (accent-stripped & hyphenated)
   plomberie: 'Plomberie',
   electricite: 'Électricité',
@@ -69,6 +86,12 @@ const SLUG_ALIASES_TO_CATEGORY: Record<string, ServiceCategory> = {
   soutien: 'Soutien Scolaire',
   menage: 'Ménage',
   climatisation: 'Climatisation',
+  menuiserie: 'Menuiserie',
+  serrurerie: 'Serrurerie',
+  electromenager: 'Électroménager',
+  jardinage: 'Jardinage',
+  demenagement: 'Déménagement',
+  maconnerie: 'Maçonnerie',
 };
 
 function normalizeSlug(raw: string): string {
@@ -101,6 +124,8 @@ export function buildProviderDetailPath(providerId: string): string {
 export function getProviderTabFromPathname(pathname: string): ProviderTab {
   if (pathname.startsWith(ROUTE_PATHS.PROVIDER_MISSIONS)) return 'missions';
   if (pathname.startsWith(ROUTE_PATHS.PROVIDER_CARD)) return 'card';
+  if (pathname.startsWith(ROUTE_PATHS.PROVIDER_SERVICES)) return 'services';
+  if (pathname.startsWith(ROUTE_PATHS.PROVIDER_VERIFICATION)) return 'verification';
   if (pathname.startsWith(ROUTE_PATHS.PROVIDER_EARNINGS)) return 'earnings';
   return 'jobs';
 }
@@ -111,6 +136,10 @@ export function getPathForProviderTab(tab: ProviderTab): string {
       return ROUTE_PATHS.PROVIDER_MISSIONS;
     case 'card':
       return ROUTE_PATHS.PROVIDER_CARD;
+    case 'services':
+      return ROUTE_PATHS.PROVIDER_SERVICES;
+    case 'verification':
+      return ROUTE_PATHS.PROVIDER_VERIFICATION;
     case 'earnings':
       return ROUTE_PATHS.PROVIDER_EARNINGS;
     case 'jobs':

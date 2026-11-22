@@ -63,7 +63,13 @@ service cloud.firestore {
         cat == 'Peinture' ||
         cat == 'Soutien Scolaire' ||
         cat == 'Ménage' ||
-        cat == 'Climatisation'
+        cat == 'Climatisation' ||
+        cat == 'Menuiserie' ||
+        cat == 'Serrurerie' ||
+        cat == 'Électroménager' ||
+        cat == 'Jardinage' ||
+        cat == 'Déménagement' ||
+        cat == 'Maçonnerie'
       );
     }
 
@@ -143,6 +149,7 @@ service cloud.firestore {
           'specialty',
           'hourlyRateMad',
           'bio',
+          'termsAcceptedAt',
           'createdAt',
           'updatedAt'
         ]) &&
@@ -162,6 +169,7 @@ service cloud.firestore {
         (!('specialty' in data) || isValidSpecialty(data.specialty)) &&
         (!('hourlyRateMad' in data) || (data.hourlyRateMad is int && data.hourlyRateMad >= 0 && data.hourlyRateMad <= 50000)) &&
         (!('bio' in data) || (data.bio is string && data.bio.size() <= 500)) &&
+        (!('termsAcceptedAt' in data) || data.termsAcceptedAt is timestamp) &&
         (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
 
@@ -1295,6 +1303,209 @@ service cloud.firestore {
 
         allow delete: if isAdmin() && isValidId(jobId) && isValidId(providerId);
       }
+    }
+
+    // 23. Validation Blueprint: ProviderService (/services/{serviceId})
+    function isValidProviderService(data) {
+      return data.keys().hasAll([
+          'providerId',
+          'category',
+          'titleFr',
+          'titleAr',
+          'descriptionFr',
+          'descriptionAr',
+          'pricingModel',
+          'priceMad',
+          'calloutFeeMad',
+          'estimatedDurationMinutes',
+          'isActive',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'providerId',
+          'category',
+          'titleFr',
+          'titleAr',
+          'descriptionFr',
+          'descriptionAr',
+          'pricingModel',
+          'priceMad',
+          'calloutFeeMad',
+          'estimatedDurationMinutes',
+          'isActive',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.providerId) &&
+        isValidCategory(data.category) &&
+        data.titleFr is string && data.titleFr.size() >= 4 && data.titleFr.size() <= 100 &&
+        data.titleAr is string && data.titleAr.size() >= 2 && data.titleAr.size() <= 100 &&
+        data.descriptionFr is string && data.descriptionFr.size() >= 10 && data.descriptionFr.size() <= 500 &&
+        data.descriptionAr is string && data.descriptionAr.size() >= 10 && data.descriptionAr.size() <= 500 &&
+        data.pricingModel is string && data.pricingModel.size() <= 24 && (
+          data.pricingModel == 'fixed' ||
+          data.pricingModel == 'hourly' ||
+          data.pricingModel == 'starting_from' ||
+          data.pricingModel == 'quote_required' ||
+          data.pricingModel == 'callout_plus_work'
+        ) &&
+        data.priceMad is int && (
+          (data.pricingModel == 'quote_required' && data.priceMad == 0) ||
+          (data.pricingModel != 'quote_required' && data.priceMad >= 30 && data.priceMad <= 100000)
+        ) &&
+        data.calloutFeeMad is int && data.calloutFeeMad >= 0 && data.calloutFeeMad <= 10000 &&
+        data.estimatedDurationMinutes is int && data.estimatedDurationMinutes >= 15 && data.estimatedDurationMinutes <= 1440 &&
+        data.isActive is bool &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // 24. Match: /services/{serviceId} (Public service catalog; verified providers manage only their own services)
+    match /services/{serviceId} {
+      allow get: if isValidId(serviceId);
+      allow list: if true;
+
+      allow create: if isVerifiedUser() &&
+        isValidId(serviceId) &&
+        isValidProviderService(incoming()) &&
+        incoming().providerId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/providers/$(request.auth.uid));
+
+      allow update: if isVerifiedUser() &&
+        isValidId(serviceId) &&
+        isValidProviderService(incoming()) &&
+        incoming().providerId == existing().providerId &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          existing().providerId == request.auth.uid ||
+          isAdmin()
+        );
+
+      allow delete: if isVerifiedUser() &&
+        isValidId(serviceId) && (
+          existing().providerId == request.auth.uid ||
+          isAdmin()
+        );
+    }
+
+    // 25. Validation Blueprint: Private Provider KYC Verification (/providerDocuments/{uid})
+    function isValidProviderKycDocument(data) {
+      return data.keys().hasAll([
+          'uid',
+          'cinNumberMasked',
+          'cinFrontUrl',
+          'cinBackUrl',
+          'status',
+          'submittedAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid',
+          'cinNumberMasked',
+          'cinFrontUrl',
+          'cinBackUrl',
+          'certificateUrl',
+          'businessLicenseUrl',
+          'status',
+          'rejectionReason',
+          'reviewedByUid',
+          'submittedAt',
+          'reviewedAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.cinNumberMasked is string && data.cinNumberMasked.size() >= 4 && data.cinNumberMasked.size() <= 32 &&
+        data.cinFrontUrl is string && data.cinFrontUrl.size() >= 10 && data.cinFrontUrl.size() <= 2048 && data.cinFrontUrl.matches('^https://.*') &&
+        data.cinBackUrl is string && data.cinBackUrl.size() >= 10 && data.cinBackUrl.size() <= 2048 && data.cinBackUrl.matches('^https://.*') &&
+        (!('certificateUrl' in data) || (data.certificateUrl is string && data.certificateUrl.size() <= 2048 && data.certificateUrl.matches('^https://.*'))) &&
+        (!('businessLicenseUrl' in data) || (data.businessLicenseUrl is string && data.businessLicenseUrl.size() <= 2048 && data.businessLicenseUrl.matches('^https://.*'))) &&
+        data.status is string && data.status.size() <= 24 && (
+          data.status == 'submitted' ||
+          data.status == 'under_review' ||
+          data.status == 'verified' ||
+          data.status == 'rejected' ||
+          data.status == 'resubmission_required'
+        ) &&
+        (!('rejectionReason' in data) || (data.rejectionReason is string && data.rejectionReason.size() <= 400)) &&
+        (!('reviewedByUid' in data) || isValidId(data.reviewedByUid)) &&
+        data.submittedAt is timestamp &&
+        (!('reviewedAt' in data) || data.reviewedAt is timestamp) &&
+        data.updatedAt is timestamp;
+    }
+
+    // 26. Match: /providerDocuments/{uid} (STRICTLY PRIVATE KYC — owner & verified admins only; owner cannot self-approve)
+    match /providerDocuments/{uid} {
+      allow get: if isVerifiedUser() && isValidId(uid) && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+
+      allow create: if isVerifiedUser() &&
+        isValidId(uid) &&
+        request.auth.uid == uid &&
+        incoming().uid == request.auth.uid &&
+        isValidProviderKycDocument(incoming()) &&
+        incoming().status == 'submitted' &&
+        !('reviewedByUid' in incoming()) &&
+        !('reviewedAt' in incoming()) &&
+        !('rejectionReason' in incoming()) &&
+        incoming().submittedAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(uid) &&
+        isValidProviderKycDocument(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().updatedAt == request.time && (
+          (
+            request.auth.uid == uid &&
+            incoming().status == 'submitted' &&
+            incoming().submittedAt == request.time &&
+            !('reviewedByUid' in incoming()) &&
+            !('reviewedAt' in incoming()) &&
+            !('rejectionReason' in incoming())
+          ) ||
+          (
+            isAdmin() &&
+            incoming().submittedAt == existing().submittedAt &&
+            incoming().reviewedByUid == request.auth.uid &&
+            incoming().reviewedAt == request.time
+          )
+        );
+
+      allow delete: if isAdmin() && isValidId(uid);
+    }
+
+    // 27. Validation Blueprint & Match: Customer Favorites (/favorites/{favoriteId})
+    function isValidFavorite(data) {
+      return data.keys().hasAll(['userId', 'providerId', 'createdAt']) &&
+        data.keys().hasOnly(['userId', 'providerId', 'createdAt']) &&
+        isValidId(data.userId) &&
+        isValidId(data.providerId) &&
+        data.createdAt is timestamp;
+    }
+
+    match /favorites/{favoriteId} {
+      allow get: if isVerifiedUser() && isValidId(favoriteId) && (
+        existing().userId == request.auth.uid || isAdmin()
+      );
+      allow list: if isVerifiedUser() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(favoriteId) &&
+        isValidFavorite(incoming()) &&
+        incoming().userId == request.auth.uid &&
+        favoriteId == request.auth.uid + '_' + incoming().providerId &&
+        incoming().createdAt == request.time;
+
+      allow update: if false;
+
+      allow delete: if isVerifiedUser() && isValidId(favoriteId) && (
+        existing().userId == request.auth.uid || isAdmin()
+      );
     }
   }
 }

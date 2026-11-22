@@ -26,6 +26,7 @@ import { useAdminAccess } from '../../hooks/useAdminAccess';
 import { useProviders } from '../../hooks/useProviders';
 import { useBookings } from '../../hooks/useBookings';
 import { useJobPosts } from '../../hooks/useJobPosts';
+import { useFavorites } from '../../hooks/useFavorites';
 import { ROUTE_PATHS } from '../routePaths';
 import type { SystemSettingsRecord } from '../../utils/systemSettings';
 
@@ -65,6 +66,8 @@ export interface MarketplaceContextValue {
   allProviders: VettedProvider[];
   firestoreProviders: VettedProvider[];
   ownProvider: VettedProvider | null;
+  favoriteProviderIds: string[];
+  toggleFavoriteProvider: (providerId: string) => Promise<void>;
   toggleProviderAvailability: ReturnType<typeof useProviders>['toggleProviderAvailability'];
   applyAdminProviderOverride: ReturnType<typeof useProviders>['applyAdminProviderOverride'];
   removeProviderReview: ReturnType<typeof useProviders>['removeProviderReview'];
@@ -236,6 +239,12 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     lang,
     onBootstrapUserProfile: hydrateUserProfile,
   });
+
+  const { favoriteProviderIds, toggleFavoriteProvider } = useFavorites(
+    firebaseUser,
+    authReady,
+    isVerified
+  );
 
   const effectiveRole: UserRole | null = userProfile?.role ?? signupRoleIntent ?? null;
   const isPureProvider = Boolean(firebaseUser && effectiveRole === 'provider');
@@ -411,6 +420,8 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       allProviders,
       firestoreProviders,
       ownProvider,
+      favoriteProviderIds,
+      toggleFavoriteProvider,
       toggleProviderAvailability,
       applyAdminProviderOverride,
       removeProviderReview,
@@ -490,6 +501,8 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       allProviders,
       firestoreProviders,
       ownProvider,
+      favoriteProviderIds,
+      toggleFavoriteProvider,
       toggleProviderAvailability,
       applyAdminProviderOverride,
       removeProviderReview,

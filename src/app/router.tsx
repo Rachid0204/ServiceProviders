@@ -52,6 +52,12 @@ const AdminDashboardPage = lazy(() =>
     default: m.AdminDashboardPage,
   }))
 );
+const TermsPage = lazy(() =>
+  import('../pages/public/LegalPages').then((m) => ({ default: m.TermsPage }))
+);
+const PrivacyPage = lazy(() =>
+  import('../pages/public/LegalPages').then((m) => ({ default: m.PrivacyPage }))
+);
 
 const LazyPageFallback: React.FC = () => {
   const { t } = useMarketplace();
@@ -83,6 +89,8 @@ export const AppRouter: React.FC = () => {
             <Route path={ROUTE_PATHS.PROVIDER_DETAIL} element={<ProviderPublicProfilePage />} />
           </Route>
 
+          <Route path={ROUTE_PATHS.TERMS} element={<TermsPage />} />
+          <Route path={ROUTE_PATHS.PRIVACY} element={<PrivacyPage />} />
           <Route path={ROUTE_PATHS.LOGIN} element={<LoginPage />} />
           <Route path={ROUTE_PATHS.REGISTER} element={<RegisterPage />} />
           <Route path={ROUTE_PATHS.VERIFY_EMAIL} element={<VerifyEmailPage />} />
@@ -115,6 +123,8 @@ export const AppRouter: React.FC = () => {
             <Route path={ROUTE_PATHS.PROVIDER_JOBS} element={<ProviderDashboardPage />} />
             <Route path={ROUTE_PATHS.PROVIDER_MISSIONS} element={<ProviderDashboardPage />} />
             <Route path={ROUTE_PATHS.PROVIDER_CARD} element={<ProviderDashboardPage />} />
+            <Route path={ROUTE_PATHS.PROVIDER_SERVICES} element={<ProviderDashboardPage />} />
+            <Route path={ROUTE_PATHS.PROVIDER_VERIFICATION} element={<ProviderDashboardPage />} />
             <Route path={ROUTE_PATHS.PROVIDER_EARNINGS} element={<ProviderDashboardPage />} />
           </Route>
         </Route>

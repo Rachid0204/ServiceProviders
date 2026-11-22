@@ -80,6 +80,8 @@ import {
   mapProfileSaveError,
 } from '../../utils/authHelpers';
 import { ProviderCard } from '../ProviderCard';
+import { ProviderServicesManager } from './ProviderServicesManager';
+import { ProviderVerificationPanel } from './ProviderVerificationPanel';
 
 interface ProviderWithdrawalItem {
   id: string;
@@ -91,7 +93,7 @@ interface ProviderWithdrawalItem {
   createdAtIso: string;
 }
 
-export type ProviderTab = 'jobs' | 'missions' | 'card' | 'earnings';
+export type ProviderTab = 'jobs' | 'missions' | 'card' | 'services' | 'verification' | 'earnings';
 
 interface ProviderDashboardProps {
   lang: LanguageCode;
@@ -852,7 +854,8 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
     );
   }
 
-  const effectiveTab: ProviderTab = !ownProvider ? 'card' : activeTab;
+  const effectiveTab: ProviderTab =
+    !ownProvider && activeTab !== 'services' && activeTab !== 'verification' ? 'card' : activeTab;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7 lg:py-9 space-y-6">
@@ -974,6 +977,22 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
               badge: completeness.percent < 100 ? 1 : 0,
               labelFr: 'Ma Fiche Maâlem',
               labelAr: 'بطاقتي المهنية',
+            },
+            {
+              id: 'services' as const,
+              icon: Wrench,
+              disabled: false,
+              badge: 0,
+              labelFr: 'Mes Services',
+              labelAr: 'خدماتي',
+            },
+            {
+              id: 'verification' as const,
+              icon: ShieldCheck,
+              disabled: false,
+              badge: ownProvider?.verifiedBadge ? 0 : 1,
+              labelFr: 'Vérification CIN',
+              labelAr: 'توثيق البطاقة الوطنية',
             },
             {
               id: 'earnings' as const,
@@ -2375,6 +2394,25 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
             )}
           </div>
         </div>
+      )}
+
+      {effectiveTab === 'services' && (
+        <ProviderServicesManager
+          providerId={firebaseUser.uid}
+          defaultCategory={ownProvider?.category || 'Plomberie'}
+          hasProviderProfile={Boolean(ownProvider)}
+          lang={lang}
+          t={t}
+          onGoToCardSetup={() => setActiveTab('card')}
+        />
+      )}
+
+      {effectiveTab === 'verification' && (
+        <ProviderVerificationPanel
+          uid={firebaseUser.uid}
+          isVerifiedBadge={Boolean(ownProvider?.verifiedBadge || userProfile?.verifiedBadge)}
+          lang={lang}
+        />
       )}
     </div>
   );

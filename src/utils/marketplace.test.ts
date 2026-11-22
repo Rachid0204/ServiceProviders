@@ -444,3 +444,76 @@ test('Job Board Helpers: generateJobPostIds, validateJobPostInput, validateJobPr
   assert.equal(casaPlumbing[0].id, 'job-1');
 });
 
+test('Phase 2 Catalog & KYC Helpers: 12 categories, sorting/favorites filter, CIN masking, and service pricing model validation', async () => {
+  const {
+    SERVICE_CATEGORIES,
+    CATEGORY_SUGGESTED_SKILLS,
+    maskMoroccanCin,
+    validateProviderServiceInput,
+  } = await import('./marketplace');
+
+  assert.equal(SERVICE_CATEGORIES.length, 12);
+  for (const cat of SERVICE_CATEGORIES) {
+    assert.ok(
+      Array.isArray(CATEGORY_SUGGESTED_SKILLS[cat]) && CATEGORY_SUGGESTED_SKILLS[cat].length >= 3,
+      `Missing suggested skills for ${cat}`
+    );
+  }
+
+  // Price sorting & favorites filtering
+  const byPriceAsc = filterProviders(VETTED_PROVIDERS, {
+    city: 'ALL',
+    category: 'ALL',
+    searchQuery: '',
+    verifiedOnly: false,
+    sortBy: 'price_asc',
+  });
+  assert.ok(byPriceAsc[0].hourlyRateMAD <= byPriceAsc[byPriceAsc.length - 1].hourlyRateMAD);
+
+  const favOnly = filterProviders(VETTED_PROVIDERS, {
+    city: 'ALL',
+    category: 'ALL',
+    searchQuery: '',
+    verifiedOnly: false,
+    favoritesOnly: true,
+    favoriteIds: [VETTED_PROVIDERS[0].id],
+  });
+  assert.equal(favOnly.length, 1);
+  assert.equal(favOnly[0].id, VETTED_PROVIDERS[0].id);
+
+  // CIN masking never leaves middle digits exposed
+  assert.equal(maskMoroccanCin('bk 123456'), 'BK-••••56');
+
+  // Service pricing model validation (quote_required allows 0; fixed rejects < 30 MAD)
+  const validQuote = validateProviderServiceInput(
+    {
+      titleFr: 'Rénovation complète salle de bain',
+      descriptionFr: 'Diagnostic sur place et devis détaillé carrelage et sanitaires.',
+      category: 'Maçonnerie',
+      pricingModel: 'quote_required',
+      priceMad: 0,
+      calloutFeeMad: 80,
+      estimatedDurationMinutes: 120,
+    },
+    'fr'
+  );
+  assert.equal(validQuote.valid, true);
+
+  const invalidFixed = validateProviderServiceInput(
+    {
+      titleFr: 'OK',
+      descriptionFr: 'Court',
+      category: 'Plomberie',
+      pricingModel: 'fixed',
+      priceMad: 10,
+      calloutFeeMad: 0,
+      estimatedDurationMinutes: 5,
+    },
+    'fr'
+  );
+  assert.equal(invalidFixed.valid, false);
+  assert.ok(invalidFixed.errors.titleFr);
+  assert.ok(invalidFixed.errors.priceMad);
+  assert.ok(invalidFixed.errors.estimatedDurationMinutes);
+});
+
