@@ -1,5 +1,5 @@
 import React, { useMemo, lazy, Suspense } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useMarketplace } from './MarketplaceContext';
 import { ROUTE_PATHS } from '../routePaths';
 
@@ -37,6 +37,7 @@ const RescheduleModal = lazy(() =>
 
 export const GlobalModals: React.FC = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const {
     lang,
     t,
@@ -163,6 +164,9 @@ export const GlobalModals: React.FC = () => {
           onOpenReschedule={setReschedulingBooking}
           onOpenCancel={setCancellingBooking}
           onOpenReview={setReviewingBooking}
+          onOpenDispute={(b) => {
+            navigate(`${ROUTE_PATHS.DISPUTES}?bookingId=${encodeURIComponent(b.id)}`);
+          }}
           onConfirmAndReleaseEscrow={clientConfirmAndReleaseEscrow}
         />
       )}
@@ -214,6 +218,7 @@ export const GlobalModals: React.FC = () => {
           booking={reviewingBooking}
           lang={lang}
           t={t}
+          userId={firebaseUser?.uid ?? null}
           onClose={() => setReviewingBooking(null)}
           onSubmitReview={submitClientReview}
         />

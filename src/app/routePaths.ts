@@ -30,10 +30,11 @@ export const ROUTE_PATHS = {
   CUSTOMER_PROFILE: '/profile',
   CUSTOMER_ALT_PROFILE: '/customer/profile',
 
-  // Shared authenticated communication & alerts routes
+  // Shared authenticated communication, alerts & disputes routes
   MESSAGES: '/messages',
   MESSAGES_THREAD: '/messages/:bookingId',
   NOTIFICATIONS: '/notifications',
+  DISPUTES: '/disputes',
 
   // Provider routes
   PROVIDER_ROOT: '/provider',

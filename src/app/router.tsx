@@ -68,6 +68,11 @@ const NotificationsPage = lazy(() =>
     default: m.NotificationsPage,
   }))
 );
+const DisputesPage = lazy(() =>
+  import('../pages/disputes/DisputesPage').then((m) => ({
+    default: m.DisputesPage,
+  }))
+);
 
 const LazyPageFallback: React.FC = () => {
   const { t } = useMarketplace();
@@ -118,13 +123,14 @@ export const AppRouter: React.FC = () => {
           </Route>
         </Route>
 
-        {/* 3. Shared Authenticated Routes (All Verified Roles: Profile, Messages, Notifications) */}
+        {/* 3. Shared Authenticated Routes (All Verified Roles: Profile, Messages, Notifications, Disputes) */}
         <Route element={<RequireAuth requireVerified={true} />}>
           <Route element={<CustomerLayout />}>
             <Route path={ROUTE_PATHS.CUSTOMER_PROFILE} element={<ProfileSettingsPage />} />
             <Route path={ROUTE_PATHS.MESSAGES} element={<MessagesInboxPage />} />
             <Route path={ROUTE_PATHS.MESSAGES_THREAD} element={<MessagesInboxPage />} />
             <Route path={ROUTE_PATHS.NOTIFICATIONS} element={<NotificationsPage />} />
+            <Route path={ROUTE_PATHS.DISPUTES} element={<DisputesPage />} />
           </Route>
         </Route>
 

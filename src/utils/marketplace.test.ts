@@ -623,4 +623,87 @@ test('Phase 4 Messaging & Notifications Helpers: unread tracking, default prefer
   assert.equal(sanitizeNotificationLinkPath(undefined), '/dashboard');
 });
 
+test('Phase 5 Payments Adapter (0% Default Commission), Bilingual Receipts & Structured Disputes Helpers', async () => {
+  const { DEFAULT_SYSTEM_SETTINGS } = await import('./systemSettings');
+  const {
+    getActivePaymentGateways,
+    buildPaymentIdempotencyKey,
+    computeInvoiceBreakdown,
+    buildBookingReceiptHtml,
+  } = await import('./paymentsAdapter');
+  const { canTransitionDisputeStatus, validateDisputeInput } = await import('./marketplace');
+
+  // 0% default commission at launch (Spec §11)
+  assert.equal(DEFAULT_SYSTEM_SETTINGS.platformFeePct, 0);
+
+  // Only Cash on Completion is live in browser; online gateways require server webhooks
+  const activeGateways = getActivePaymentGateways();
+  assert.equal(activeGateways.length, 1);
+  assert.equal(activeGateways[0].id, 'cash_on_completion');
+
+  // Idempotency key & invoice math
+  assert.equal(
+    buildPaymentIdempotencyKey('bk-900', 'cmi_card', 'capture'),
+    'pay_bk-900_cmi_card_capture'
+  );
+  const zeroFeeInvoice = computeInvoiceBreakdown(
+    { bookingRef: 'MK-900', estimatedMad: 450 },
+    DEFAULT_SYSTEM_SETTINGS.platformFeePct
+  );
+  assert.equal(zeroFeeInvoice.platformFeeMad, 0);
+  assert.equal(zeroFeeInvoice.providerNetMad, 450);
+
+  const receiptHtml = buildBookingReceiptHtml(
+    {
+      id: 'bk-900',
+      bookingRef: 'MK-900',
+      clientId: 'c-1',
+      clientName: 'Salma <script>alert(1)</script>',
+      clientPhone: '+212661234567',
+      providerId: 'p-1',
+      providerName: 'Maâlem Driss',
+      providerPhone: '+212661428910',
+      category: 'Plomberie',
+      serviceType: 'Fuite',
+      city: 'Casablanca',
+      neighborhood: 'Maârif',
+      addressPin: 'Rue Normandie',
+      description: 'Test receipt',
+      preferredDate: '2026-11-23',
+      preferredTimeSlot: '09:00 - 12:00',
+      paymentMethod: 'cash_on_completion',
+      paymentStatus: 'paid',
+      estimatedMad: 450,
+      status: 'completed',
+      createdAtIso: '2026-11-23',
+    },
+    'ar',
+    0
+  );
+  assert.ok(receiptHtml.includes('dir="rtl"'));
+  assert.ok(receiptHtml.includes('INV-MK-900'));
+  assert.ok(!receiptHtml.includes('<script>'));
+
+  // Disputes workflow & validation
+  assert.equal(canTransitionDisputeStatus('open', 'under_review'), true);
+  assert.equal(canTransitionDisputeStatus('closed', 'open'), false);
+  assert.equal(
+    validateDisputeInput(
+      {
+        bookingId: 'bk-900',
+        reason: 'quality_issue',
+        description: 'Fuite non réparée après intervention du plombier.',
+      },
+      'fr'
+    ).valid,
+    true
+  );
+  assert.equal(
+    validateDisputeInput({ bookingId: 'bk-900', reason: 'quality_issue', description: 'court' }, 'fr')
+      .valid,
+    false
+  );
+});
+
+
 

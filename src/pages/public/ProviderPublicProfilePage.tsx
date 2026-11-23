@@ -30,6 +30,7 @@ import {
   WEEKDAY_KEYS,
   buildWhatsAppUrl,
   formatMadCurrency,
+  isSafeImageUrl,
   type ProviderReview,
   type WeekdayKey,
 } from '../../utils/marketplace';
@@ -37,6 +38,7 @@ import { useMarketplace } from '../../app/providers/MarketplaceContext';
 import { ROUTE_PATHS, buildServiceCategoryPath } from '../../app/routePaths';
 import { useProviderServices } from '../../hooks/useProviderServices';
 import { useProviderAvailability } from '../../hooks/useProviderAvailability';
+import { submitReviewModerationReport } from '../../hooks/useDisputes';
 import { getPricingModelLabel } from '../../components/dashboards/ProviderServicesManager';
 
 const DAY_SHORT: Record<WeekdayKey, { fr: string; ar: string }> = {
@@ -66,6 +68,8 @@ export const ProviderPublicProfilePage: React.FC = () => {
     lang,
     t,
     isAr,
+    firebaseUser,
+    isVerified,
     allProviders,
     favoriteProviderIds,
     toggleFavoriteProvider,
@@ -73,6 +77,7 @@ export const ProviderPublicProfilePage: React.FC = () => {
   } = useMarketplace();
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [liveReviews, setLiveReviews] = useState<ProviderReview[]>([]);
+  const [reportedReviewFeedback, setReportedReviewFeedback] = useState<string | null>(null);
 
   const provider = useMemo(
     () => (id ? allProviders.find((p) => p.id === id || p.uid === id) ?? null : null),
@@ -87,9 +92,26 @@ export const ProviderPublicProfilePage: React.FC = () => {
   );
   const isFavorite = Boolean(provider && favoriteProviderIds.includes(provider.id));
 
+  const handleReportReview = async (reviewId: string) => {
+    if (!firebaseUser || !isVerified || !provider) return;
+    try {
+      await submitReviewModerationReport({
+        reviewId,
+        providerId: provider.id,
+        reporterId: firebaseUser.uid,
+        reason: 'Contenu inapproprié ou suspect',
+        details: `Signalement de l’avis ${reviewId} depuis la fiche publique.`,
+      });
+      setReportedReviewFeedback(t.reviewReportedNotice);
+    } catch {
+      // ignore duplicate / transient failures
+    }
+  };
+
   useEffect(() => {
     setActiveImageIndex(0);
     setLiveReviews([]);
+    setReportedReviewFeedback(null);
     if (!provider?.id) return;
 
     const q = query(
@@ -102,6 +124,10 @@ export const ProviderPublicProfilePage: React.FC = () => {
       (snapshot) => {
         const loaded: ProviderReview[] = snapshot.docs.map((d) => {
           const data = d.data();
+          const rawPhotos = Array.isArray(data.photoUrls) ? data.photoUrls : [];
+          const photoUrls = rawPhotos.filter(
+            (u): u is string => typeof u === 'string' && isSafeImageUrl(u)
+          );
           return {
             id: d.id,
             authorName: String(data.authorName || 'Client'),
@@ -110,6 +136,7 @@ export const ProviderPublicProfilePage: React.FC = () => {
             date: formatReviewDate(data.createdAt),
             commentFr: String(data.comment || ''),
             commentAr: String(data.comment || ''),
+            ...(photoUrls.length > 0 ? { photoUrls } : {}),
           };
         });
         loaded.sort((a, b) => b.date.localeCompare(a.date));
@@ -454,6 +481,11 @@ export const ProviderPublicProfilePage: React.FC = () => {
           <h2 className="text-base font-bold text-slate-900">
             {t.detailModalReviewsTitle} ({displayedReviews.length})
           </h2>
+          {reportedReviewFeedback && (
+            <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-medium text-emerald-800">
+              {reportedReviewFeedback}
+            </div>
+          )}
           {displayedReviews.length === 0 ? (
             <p className="text-xs text-slate-500">
               {isAr
@@ -465,7 +497,7 @@ export const ProviderPublicProfilePage: React.FC = () => {
               {displayedReviews.map((review) => (
                 <div
                   key={review.id}
-                  className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-1.5"
+                  className="p-4 rounded-xl bg-slate-50 border border-slate-100 space-y-2"
                 >
                   <div className="flex items-center justify-between text-xs">
                     <span className="font-bold text-slate-900">{review.authorName}</span>
@@ -477,7 +509,39 @@ export const ProviderPublicProfilePage: React.FC = () => {
                   <p className="text-xs text-slate-700 leading-relaxed">
                     {isAr ? review.commentAr : review.commentFr}
                   </p>
-                  <div className="text-[11px] text-slate-400">{review.date}</div>
+                  {review.photoUrls && review.photoUrls.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {review.photoUrls.map((url, idx) => (
+                        <a
+                          key={url}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                        >
+                          <img
+                            src={url}
+                            alt={`Photo avis ${idx + 1}`}
+                            className="w-16 h-16 rounded-lg object-cover border border-slate-200 hover:opacity-90"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>{review.date}</span>
+                    {firebaseUser && isVerified && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void handleReportReview(review.id);
+                        }}
+                        className="text-slate-500 hover:text-rose-600 font-medium cursor-pointer"
+                      >
+                        {t.reviewReportBtn}
+                      </button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

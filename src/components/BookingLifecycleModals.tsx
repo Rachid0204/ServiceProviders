@@ -13,6 +13,8 @@ import {
   MessageSquare,
   Star,
   RefreshCw,
+  Download,
+  Scale,
 } from 'lucide-react';
 import {
   TIME_SLOTS,
@@ -25,6 +27,7 @@ import {
   type TimeSlot,
   type UserRole,
 } from '../utils/marketplace';
+import { downloadBookingReceipt } from '../utils/paymentsAdapter';
 import type { Translations } from '../i18n/translations';
 import { BookingTimeline } from './BookingTimeline';
 
@@ -39,6 +42,7 @@ interface BookingDetailModalProps {
   onOpenReschedule: (booking: BookingRecord) => void;
   onOpenCancel: (booking: BookingRecord) => void;
   onOpenReview: (booking: BookingRecord) => void;
+  onOpenDispute?: (booking: BookingRecord) => void;
   onConfirmAndReleaseEscrow: (bookingId: string) => Promise<void>;
 }
 
@@ -47,12 +51,13 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   lang,
   t,
   activeRole,
-  platformFeePct = 10,
+  platformFeePct = 0,
   onClose,
   onOpenChat,
   onOpenReschedule,
   onOpenCancel,
   onOpenReview,
+  onOpenDispute,
   onConfirmAndReleaseEscrow,
 }) => {
   const isAr = lang === 'ar';
@@ -278,6 +283,31 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
               >
                 <Calendar className="w-3.5 h-3.5" />
                 <span>{isAr ? 'إعادة الجدولة' : 'Reprogrammer'}</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                downloadBookingReceipt(booking, lang, platformFeePct);
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-700" />
+              <span>{t.downloadReceiptBtn}</span>
+            </button>
+
+            {onOpenDispute && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenDispute(booking);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-amber-800 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg cursor-pointer"
+              >
+                <Scale className="w-3.5 h-3.5" />
+                <span>{t.openDisputeBtn}</span>
               </button>
             )}
 

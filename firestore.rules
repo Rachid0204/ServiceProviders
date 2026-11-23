@@ -267,6 +267,7 @@ service cloud.firestore {
           'quartier',
           'rating',
           'comment',
+          'photoUrls',
           'createdAt'
         ]) &&
         data.bookingId is string && data.bookingId.size() >= 1 && data.bookingId.size() <= 128 && data.bookingId.matches('^[a-zA-Z0-9_\\-]+$') &&
@@ -277,6 +278,13 @@ service cloud.firestore {
         data.quartier is string && data.quartier.size() >= 2 && data.quartier.size() <= 80 &&
         data.rating is int && data.rating >= 1 && data.rating <= 5 &&
         data.comment is string && data.comment.size() >= 2 && data.comment.size() <= 500 &&
+        (!('photoUrls' in data) || (
+          data.photoUrls is list &&
+          data.photoUrls.size() <= 3 &&
+          (data.photoUrls.size() < 1 || isSafeAssetUrl(data.photoUrls[0])) &&
+          (data.photoUrls.size() < 2 || isSafeAssetUrl(data.photoUrls[1])) &&
+          (data.photoUrls.size() < 3 || isSafeAssetUrl(data.photoUrls[2]))
+        )) &&
         data.createdAt is timestamp;
     }
 
@@ -1818,6 +1826,223 @@ service cloud.firestore {
         incoming().updatedAt == request.time;
 
       allow delete: if isAdmin() && isValidId(uid);
+    }
+
+    // 34. Validation Blueprint & Match: Structured Disputes (/disputes/{disputeId})
+    function isValidDispute(data) {
+      return data.keys().hasAll([
+          'bookingId',
+          'bookingRef',
+          'clientId',
+          'providerId',
+          'openedByUid',
+          'openedByRole',
+          'reason',
+          'description',
+          'evidenceUrls',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'bookingId',
+          'bookingRef',
+          'clientId',
+          'providerId',
+          'openedByUid',
+          'openedByRole',
+          'reason',
+          'description',
+          'evidenceUrls',
+          'status',
+          'resolutionSummary',
+          'resolvedByUid',
+          'createdAt',
+          'updatedAt'
+        ]) &&
+        isValidId(data.bookingId) &&
+        data.bookingRef is string && data.bookingRef.size() >= 3 && data.bookingRef.size() <= 32 &&
+        isValidId(data.clientId) &&
+        isValidId(data.providerId) &&
+        isValidId(data.openedByUid) &&
+        data.openedByRole is string && (data.openedByRole == 'client' || data.openedByRole == 'provider') &&
+        data.reason is string && (
+          data.reason == 'quality_issue' ||
+          data.reason == 'no_show' ||
+          data.reason == 'pricing_mismatch' ||
+          data.reason == 'property_damage' ||
+          data.reason == 'payment_issue' ||
+          data.reason == 'other'
+        ) &&
+        data.description is string && data.description.size() >= 15 && data.description.size() <= 1000 &&
+        data.evidenceUrls is list &&
+        data.evidenceUrls.size() <= 4 &&
+        (data.evidenceUrls.size() < 1 || isSafeAssetUrl(data.evidenceUrls[0])) &&
+        (data.evidenceUrls.size() < 2 || isSafeAssetUrl(data.evidenceUrls[1])) &&
+        (data.evidenceUrls.size() < 3 || isSafeAssetUrl(data.evidenceUrls[2])) &&
+        (data.evidenceUrls.size() < 4 || isSafeAssetUrl(data.evidenceUrls[3])) &&
+        data.status is string && (
+          data.status == 'open' ||
+          data.status == 'under_review' ||
+          data.status == 'waiting_for_client' ||
+          data.status == 'waiting_for_provider' ||
+          data.status == 'resolved' ||
+          data.status == 'closed'
+        ) &&
+        (!('resolutionSummary' in data) || (data.resolutionSummary is string && data.resolutionSummary.size() <= 600)) &&
+        (!('resolvedByUid' in data) || isValidId(data.resolvedByUid)) &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    match /disputes/{disputeId} {
+      allow get: if isVerifiedUser() && isValidId(disputeId) && (
+        existing().clientId == request.auth.uid ||
+        existing().providerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isVerifiedUser() && (
+        resource.data.clientId == request.auth.uid ||
+        resource.data.providerId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(disputeId) &&
+        isValidDispute(incoming()) &&
+        incoming().openedByUid == request.auth.uid &&
+        incoming().status == 'open' &&
+        !('resolutionSummary' in incoming()) &&
+        !('resolvedByUid' in incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/bookings/$(incoming().bookingId)) &&
+        get(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.clientId == incoming().clientId &&
+        get(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.providerId == incoming().providerId && (
+          (incoming().clientId == request.auth.uid && incoming().openedByRole == 'client') ||
+          (incoming().providerId == request.auth.uid && incoming().openedByRole == 'provider')
+        );
+
+      allow update: if isVerifiedUser() &&
+        isValidId(disputeId) &&
+        isValidDispute(incoming()) &&
+        incoming().bookingId == existing().bookingId &&
+        incoming().clientId == existing().clientId &&
+        incoming().providerId == existing().providerId &&
+        incoming().openedByUid == existing().openedByUid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            (existing().clientId == request.auth.uid || existing().providerId == request.auth.uid) &&
+            existing().status != 'resolved' &&
+            existing().status != 'closed' &&
+            incoming().status == existing().status &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['evidenceUrls', 'updatedAt'])
+          )
+        );
+
+      allow delete: if isAdmin() && isValidId(disputeId);
+    }
+
+    // 35. Validation Blueprint & Match: Review Moderation Reports (/reviewReports/{reportId})
+    function isValidReviewReport(data) {
+      return data.keys().hasAll(['reviewId', 'providerId', 'reporterId', 'reason', 'details', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['reviewId', 'providerId', 'reporterId', 'reason', 'details', 'status', 'createdAt']) &&
+        isValidId(data.reviewId) &&
+        isValidId(data.providerId) &&
+        isValidId(data.reporterId) &&
+        data.reason is string && data.reason.size() >= 3 && data.reason.size() <= 80 &&
+        data.details is string && data.details.size() >= 5 && data.details.size() <= 400 &&
+        data.status is string && (data.status == 'open' || data.status == 'reviewed' || data.status == 'dismissed') &&
+        data.createdAt is timestamp;
+    }
+
+    match /reviewReports/{reportId} {
+      allow get, list, update, delete: if isAdmin();
+      allow create: if isVerifiedUser() &&
+        isValidId(reportId) &&
+        isValidReviewReport(incoming()) &&
+        incoming().reporterId == request.auth.uid &&
+        incoming().status == 'open' &&
+        incoming().createdAt == request.time;
+    }
+
+    // 36. Immutable Server/Admin-Verified Payment & Refund Ledgers (/payments/{paymentId}, /refunds/{refundId})
+    // Clients can NEVER forge payment captures or refunds from browser code; read-only for involved participants.
+    function isValidPaymentRecord(data) {
+      return data.keys().hasAll([
+          'bookingId',
+          'clientId',
+          'providerId',
+          'gateway',
+          'amountMad',
+          'platformFeeMad',
+          'providerNetMad',
+          'status',
+          'idempotencyKey',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'bookingId',
+          'clientId',
+          'providerId',
+          'gateway',
+          'amountMad',
+          'platformFeeMad',
+          'providerNetMad',
+          'status',
+          'idempotencyKey',
+          'gatewayReference',
+          'createdAt'
+        ]) &&
+        isValidId(data.bookingId) &&
+        isValidId(data.clientId) &&
+        isValidId(data.providerId) &&
+        data.gateway is string && (data.gateway == 'cash_on_completion' || data.gateway == 'cmi_card' || data.gateway == 'bank_transfer') &&
+        data.amountMad is int && data.amountMad >= 50 && data.amountMad <= 100000 &&
+        data.platformFeeMad is int && data.platformFeeMad >= 0 && data.platformFeeMad <= data.amountMad &&
+        data.providerNetMad is int && data.providerNetMad >= 0 && data.providerNetMad + data.platformFeeMad == data.amountMad &&
+        data.status is string && (
+          data.status == 'pending_cod' ||
+          data.status == 'authorized' ||
+          data.status == 'captured' ||
+          data.status == 'settled_cod' ||
+          data.status == 'refunded' ||
+          data.status == 'failed'
+        ) &&
+        data.idempotencyKey is string && data.idempotencyKey.size() >= 6 && data.idempotencyKey.size() <= 128 &&
+        (!('gatewayReference' in data) || (data.gatewayReference is string && data.gatewayReference.size() <= 128)) &&
+        data.createdAt is timestamp;
+    }
+
+    match /payments/{paymentId} {
+      allow get: if isVerifiedUser() && isValidId(paymentId) && (
+        existing().clientId == request.auth.uid ||
+        existing().providerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isVerifiedUser() && (
+        resource.data.clientId == request.auth.uid ||
+        resource.data.providerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create, update: if isAdmin() && isValidId(paymentId) && isValidPaymentRecord(incoming());
+      allow delete: if false;
+    }
+
+    match /refunds/{refundId} {
+      allow get: if isVerifiedUser() && isValidId(refundId) && (
+        existing().clientId == request.auth.uid ||
+        existing().providerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isVerifiedUser() && (
+        resource.data.clientId == request.auth.uid ||
+        resource.data.providerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow create, update: if isAdmin() && isValidId(refundId);
+      allow delete: if false;
     }
   }
 }
