@@ -283,6 +283,21 @@ test('Phase 5 Trust, Disputes, Review Photos/Reports & Immutable Payments Ledger
   assert.ok(groups.has('payments'), 'Missing composite index for payments');
 });
 
+test('Phase 6 Complete Admin Portal Rules: CNDP document_viewed audit logs, KYC review, dispute resolution, moderation, and admin-only accountStatus suspension', () => {
+  // accountStatus is validated on UserProfile but excluded from self-edit affectedKeys
+  assert.ok(rulesContent.includes("'accountStatus'"));
+  assert.ok(rulesContent.includes("data.accountStatus == 'suspended'"));
+
+  // Law 09-08 / CNDP mandatory audit log action types & collections
+  for (const action of ['document_viewed', 'kyc_reviewed', 'dispute_resolved', 'report_moderated', 'user_suspended']) {
+    assert.ok(rulesContent.includes(`data.actionType == '${action}'`), `Missing adminLog actionType ${action}`);
+  }
+  for (const col of ['providerDocuments', 'disputes', 'reviewReports', 'chatReports']) {
+    assert.ok(rulesContent.includes(`data.targetCollection == '${col}'`), `Missing adminLog targetCollection ${col}`);
+  }
+});
+
+
 
 
 

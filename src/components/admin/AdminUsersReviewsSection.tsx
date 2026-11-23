@@ -32,6 +32,7 @@ interface AdminUsersSectionProps {
   t: Translations;
   users: UserProfileRecord[];
   onToggleUserVerified: (user: UserProfileRecord) => void;
+  onToggleUserSuspension?: (user: UserProfileRecord) => void;
 }
 
 export const AdminUsersSection: React.FC<AdminUsersSectionProps> = ({
@@ -39,6 +40,7 @@ export const AdminUsersSection: React.FC<AdminUsersSectionProps> = ({
   t,
   users,
   onToggleUserVerified,
+  onToggleUserSuspension,
 }) => {
   const isAr = lang === 'ar';
   const [search, setSearch] = useState<string>('');
@@ -132,62 +134,93 @@ export const AdminUsersSection: React.FC<AdminUsersSectionProps> = ({
                   </td>
                 </tr>
               ) : (
-                filtered.map((u) => (
-                  <tr key={u.uid} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-4">
-                      <div className="font-bold text-slate-900">{u.fullName}</div>
-                      <div className="text-[11px] font-mono-tabular text-slate-400">{u.uid}</div>
-                    </td>
-                    <td className="py-3 px-4 text-slate-700 font-medium whitespace-nowrap">
-                      {u.role === 'both'
-                        ? `${isAr ? 'زبون ومعلم' : 'Client & Maâlem'}${
-                            u.specialty && u.specialty !== 'none'
-                              ? ` · ${t.categories[u.specialty]}`
-                              : ''
-                          }`
-                        : u.role === 'provider'
-                        ? `${isAr ? 'معلم' : 'Maâlem'}${
-                            u.specialty && u.specialty !== 'none'
-                              ? ` · ${t.categories[u.specialty]}`
-                              : ''
-                          }`
-                        : isAr
-                        ? 'زبون'
-                        : 'Client'}
-                    </td>
-                    <td className="py-3 px-4 font-mono-tabular text-slate-700 whitespace-nowrap" dir="ltr">
-                      {u.phone}
-                    </td>
-                    <td className="py-3 px-4 text-slate-700 whitespace-nowrap">
-                      {t.cities[u.city]} · {u.neighborhood}
-                    </td>
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      {u.verifiedBadge ? (
-                        <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
-                          <ShieldCheck className="w-3.5 h-3.5" />
-                          <span>{isAr ? 'موثق' : 'Vérifié'}</span>
-                        </span>
-                      ) : (
-                        <span className="text-slate-500">{isAr ? 'غير موثق' : 'Standard'}</span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 text-end whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={() => onToggleUserVerified(u)}
-                        className="px-3 py-1.5 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
-                      >
-                        {u.verifiedBadge
-                          ? isAr
-                            ? 'إلغاء الشارة'
-                            : 'Retirer badge'
+                filtered.map((u) => {
+                  const isSuspended = u.accountStatus === 'suspended';
+                  return (
+                    <tr key={u.uid} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-slate-900">{u.fullName}</span>
+                          {isSuspended && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 text-rose-800">
+                              {isAr ? 'معلق' : 'Suspendu'}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-[11px] font-mono-tabular text-slate-400">{u.uid}</div>
+                      </td>
+                      <td className="py-3 px-4 text-slate-700 font-medium whitespace-nowrap">
+                        {u.role === 'both'
+                          ? `${isAr ? 'زبون ومعلم' : 'Client & Maâlem'}${
+                              u.specialty && u.specialty !== 'none'
+                                ? ` · ${t.categories[u.specialty]}`
+                                : ''
+                            }`
+                          : u.role === 'provider'
+                          ? `${isAr ? 'معلم' : 'Maâlem'}${
+                              u.specialty && u.specialty !== 'none'
+                                ? ` · ${t.categories[u.specialty]}`
+                                : ''
+                            }`
                           : isAr
-                          ? 'تفعيل التوثيق'
-                          : 'Vérifier CIN'}
-                      </button>
-                    </td>
-                  </tr>
-                ))
+                          ? 'زبون'
+                          : 'Client'}
+                      </td>
+                      <td className="py-3 px-4 font-mono-tabular text-slate-700 whitespace-nowrap" dir="ltr">
+                        {u.phone}
+                      </td>
+                      <td className="py-3 px-4 text-slate-700 whitespace-nowrap">
+                        {t.cities[u.city]} · {u.neighborhood}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        {u.verifiedBadge ? (
+                          <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>{isAr ? 'موثق' : 'Vérifié'}</span>
+                          </span>
+                        ) : (
+                          <span className="text-slate-500">{isAr ? 'غير موثق' : 'Standard'}</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-end whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => onToggleUserVerified(u)}
+                            className="px-3 py-1.5 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
+                          >
+                            {u.verifiedBadge
+                              ? isAr
+                                ? 'إلغاء الشارة'
+                                : 'Retirer badge'
+                              : isAr
+                              ? 'تفعيل التوثيق'
+                              : 'Vérifier CIN'}
+                          </button>
+                          {onToggleUserSuspension && (
+                            <button
+                              type="button"
+                              onClick={() => onToggleUserSuspension(u)}
+                              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer ${
+                                isSuspended
+                                  ? 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200'
+                                  : 'text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200'
+                              }`}
+                            >
+                              {isSuspended
+                                ? isAr
+                                  ? 'إعادة التفعيل'
+                                  : 'Réactiver'
+                                : isAr
+                                ? 'تعليق'
+                                : 'Suspendre'}
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -674,7 +707,12 @@ export const AdminAuditSection: React.FC<AdminAuditSectionProps> = ({ lang, logs
     const map: Record<AdminAuditLog['actionType'], { fr: string; ar: string }> = {
       cin_approved: { fr: 'CIN Approuvée', ar: 'المصادقة على CIN' },
       cin_revoked: { fr: 'CIN Révoquée', ar: 'إلغاء توثيق CIN' },
-      escrow_released: { fr: 'Séquestre CMI Libéré (90/10)', ar: 'صرف ضمان CMI (90/10)' },
+      document_viewed: { fr: 'Accès Document CNDP', ar: 'معاينة وثيقة CNDP' },
+      kyc_reviewed: { fr: 'Dossier KYC Traité', ar: 'معالجة ملف KYC' },
+      dispute_resolved: { fr: 'Décision Litige', ar: 'قرار ملف نزاع' },
+      report_moderated: { fr: 'Signalement Traité', ar: 'معالجة بلاغ' },
+      user_suspended: { fr: 'Statut Compte', ar: 'تعليق / تفعيل حساب' },
+      escrow_released: { fr: 'Séquestre CMI Libéré', ar: 'صرف ضمان CMI' },
       escrow_refunded: { fr: 'Séquestre Remboursé (100%)', ar: 'استرجاع ضمان CMI (100%)' },
       dispute_split: { fr: 'Arbitrage Litige (50/50)', ar: 'تسوية نزاع (50/50)' },
       booking_override: { fr: 'Statut Modifié', ar: 'تعديل حالة الحجز' },

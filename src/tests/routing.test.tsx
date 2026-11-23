@@ -607,6 +607,43 @@ describe('Phase 1 Routing Acceptance Tests (Spec §2B)', () => {
     ).toBeInTheDocument();
   });
 
+  it('supports bookmarkable nested /admin/* sub-routes (/admin/kyc, /admin/disputes, /admin/users) for admins and blocks non-admins', async () => {
+    const { getAdminSectionFromPathname, getPathForAdminSection } = await import('../app/routePaths');
+    expect(getAdminSectionFromPathname('/admin/kyc')).toBe('kyc');
+    expect(getAdminSectionFromPathname('/admin/disputes')).toBe('disputes');
+    expect(getAdminSectionFromPathname('/admin/users')).toBe('users');
+    expect(getAdminSectionFromPathname('/admin/dashboard')).toBe('overview');
+    expect(getPathForAdminSection('kyc')).toBe('/admin/kyc');
+    expect(getPathForAdminSection('disputes')).toBe('/admin/disputes');
+
+    const adminUser = createMockUser('admin-p6', 'admin@moul-lkhedma.ma', true);
+    for (const adminPath of ['/admin/kyc', '/admin/disputes', '/admin/users']) {
+      const { unmount } = renderAtRoute([adminPath], {
+        firebaseUser: adminUser,
+        userProfile: createMockProfile('admin-p6', 'client'),
+        isVerified: true,
+        hasAdminAccess: true,
+        isCheckingAdmin: false,
+      });
+      expect(await screen.findByTestId('admin-dashboard-page')).toBeInTheDocument();
+      expect(screen.getByTestId('current-location')).toHaveTextContent(adminPath);
+      unmount();
+    }
+
+    // Non-admin client blocked from /admin/kyc
+    const clientUser = createMockUser('client-p6', 'client-p6@example.ma', true);
+    renderAtRoute(['/admin/kyc'], {
+      firebaseUser: clientUser,
+      userProfile: createMockProfile('client-p6', 'client'),
+      isVerified: true,
+      hasAdminAccess: false,
+      isCheckingAdmin: false,
+    });
+    expect(
+      await screen.findByRole('heading', { name: TRANSLATIONS.fr.unauthorizedTitle })
+    ).toBeInTheDocument();
+  });
+
   it('enforces single <BrowserRouter> mount in src/main.tsx and zero manual window.history.pushState in src/', () => {
     const srcRoot = path.resolve(process.cwd(), 'src');
     const files: string[] = [];

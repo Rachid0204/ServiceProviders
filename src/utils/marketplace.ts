@@ -144,6 +144,7 @@ export interface UserProfileRecord {
   specialty?: ServiceCategory | 'none';
   hourlyRateMad?: number;
   bio?: string;
+  accountStatus?: 'active' | 'suspended';
   createdAt?: unknown;
   updatedAt?: unknown;
 }

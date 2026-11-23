@@ -149,6 +149,7 @@ service cloud.firestore {
           'specialty',
           'hourlyRateMad',
           'bio',
+          'accountStatus',
           'termsAcceptedAt',
           'createdAt',
           'updatedAt'
@@ -169,6 +170,7 @@ service cloud.firestore {
         (!('specialty' in data) || isValidSpecialty(data.specialty)) &&
         (!('hourlyRateMad' in data) || (data.hourlyRateMad is int && data.hourlyRateMad >= 0 && data.hourlyRateMad <= 50000)) &&
         (!('bio' in data) || (data.bio is string && data.bio.size() <= 500)) &&
+        (!('accountStatus' in data) || (data.accountStatus is string && (data.accountStatus == 'active' || data.accountStatus == 'suspended'))) &&
         (!('termsAcceptedAt' in data) || data.termsAcceptedAt is timestamp) &&
         (!('updatedAt' in data) || data.updatedAt is timestamp);
     }
@@ -465,6 +467,11 @@ service cloud.firestore {
         data.actionType is string && data.actionType.size() <= 32 && (
           data.actionType == 'cin_approved' ||
           data.actionType == 'cin_revoked' ||
+          data.actionType == 'document_viewed' ||
+          data.actionType == 'kyc_reviewed' ||
+          data.actionType == 'dispute_resolved' ||
+          data.actionType == 'report_moderated' ||
+          data.actionType == 'user_suspended' ||
           data.actionType == 'escrow_released' ||
           data.actionType == 'escrow_refunded' ||
           data.actionType == 'dispute_split' ||
@@ -477,8 +484,12 @@ service cloud.firestore {
         data.targetCollection is string && data.targetCollection.size() <= 24 && (
           data.targetCollection == 'users' ||
           data.targetCollection == 'providers' ||
+          data.targetCollection == 'providerDocuments' ||
           data.targetCollection == 'bookings' ||
+          data.targetCollection == 'disputes' ||
           data.targetCollection == 'reviews' ||
+          data.targetCollection == 'reviewReports' ||
+          data.targetCollection == 'chatReports' ||
           data.targetCollection == 'withdrawals' ||
           data.targetCollection == 'settings'
         ) &&
