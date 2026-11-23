@@ -2,13 +2,13 @@ name: CI Quality Gate
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 'fix/audit-*']
   push:
-    branches: [main]
+    branches: [main, 'fix/audit-*']
 
 jobs:
   verify:
-    name: Typecheck, i18n, Rules, Build & Tests
+    name: Typecheck, i18n, Rules, Live Emulator, Build & Audit
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -23,6 +23,13 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Download Firebase Firestore Emulator JAR
+        run: |
+          mkdir -p ~/.cache/firebase/emulators
+          if [ ! -f ~/.cache/firebase/emulators/cloud-firestore-emulator-v1.19.8.jar ]; then
+            curl -sSL https://storage.googleapis.com/firebase-preview-drop/emulator/cloud-firestore-emulator-v1.19.8.jar -o ~/.cache/firebase/emulators/cloud-firestore-emulator-v1.19.8.jar
+          fi
+
       - name: TypeScript typecheck
         run: npm run lint
 
@@ -35,5 +42,9 @@ jobs:
       - name: Production build (client + server)
         run: npm run build
 
-      - name: Run unit, policy, and routing tests
+      - name: Run unit, policy, live emulator, and routing tests
         run: npm test
+
+      - name: Dependency security audit
+        run: npm audit --audit-level=high
+
