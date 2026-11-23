@@ -1,0 +1,85 @@
+name: Deploy Firebase Rules & Indexes
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'firebase.json'
+      - '.firebaserc'
+      - 'firestore.rules'
+      - 'firestore.indexes.json'
+      - 'storage.rules'
+      - '.github/workflows/firebase-deploy.yml'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Firebase deploy target (--only)'
+        required: true
+        default: 'firestore,storage'
+        type: choice
+        options:
+          - 'firestore,storage'
+          - 'firestore:indexes'
+          - 'firestore:rules'
+          - 'storage'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firebase-deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy-firebase:
+    name: Validate & Deploy Firestore / Storage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Validate JSON config & indexes
+        run: |
+          node -e "JSON.parse(require('fs').readFileSync('firebase.json', 'utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('.firebaserc', 'utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('firestore.indexes.json', 'utf8'))"
+
+      - name: Lint Firestore Security Rules
+        run: |
+          npm ci --ignore-scripts
+          npm run lint:rules
+
+      - name: Check FIREBASE_SERVICE_ACCOUNT secret
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$SA_JSON" ]; then
+            echo "::error::Missing FIREBASE_SERVICE_ACCOUNT repository secret. Add it in Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+      - name: Deploy to Firebase (serviceproviders-530c4)
+        env:
+          SA_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          DEPLOY_ONLY: ${{ github.event.inputs.only || 'firestore,storage' }}
+          SA_PATH: ${{ runner.temp }}/firebase-service-account.json
+        run: |
+          umask 077
+          printf '%s' "$SA_JSON" > "$SA_PATH"
+          GOOGLE_APPLICATION_CREDENTIALS="$SA_PATH" npx --yes firebase-tools@13 deploy \
+            --only "$DEPLOY_ONLY" \
+            --project serviceproviders-530c4 \
+            --non-interactive
+
+      - name: Cleanup temporary credentials
+        if: always()
+        env:
+          SA_PATH: ${{ runner.temp }}/firebase-service-account.json
+        run: rm -f "$SA_PATH"
