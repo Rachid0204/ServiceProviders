@@ -188,10 +188,12 @@ All security rule and transactional precondition assertions in `firestore.rules.
 
 ---
 
-## 8. GitHub Actions Results for Each PR
+## 8. GitHub Actions Results for Each PR Branch
 
-- **PR #14 (`fix/audit-wave0-security-financial` → `main`):** GitHub Actions `CI — Quality, Security & Production Build Gate` runs automatically on push (including live Firestore Emulator execution, TypeScript check, rules lint, i18n parity, unit tests, Vitest route tests, production build, and `npm audit`).
-- **PR #15 (`fix/audit-wave1-workflows-integrity` → `fix/audit-wave0-security-financial`):** GitHub Actions `CI — Quality, Security & Production Build Gate` runs automatically on push.
+| Branch / PR | Workflow | Run ID | Commit SHA | Steps Executed in GitHub Actions | Status / Conclusion |
+|---|---|---|---|---|---|
+| `fix/audit-wave0-security-financial` (PR #14) | `CI Quality Gate` | `45143478743` | `abd8850` | `npm ci`, Download Firebase Firestore Emulator JAR (`v1.19.8`), `npm run lint`, `node scripts/check-i18n.mjs`, `npm run lint:rules`, `npm run build`, `npm test` (including live Firestore Emulator execution), `npm audit --audit-level=high` | **COMPLETED — `success` (33s)** |
+| `fix/audit-wave1-workflows-integrity` (PR #15) | `CI Quality Gate` | `45143478791` | `861ffad` | `npm ci`, Download Firebase Firestore Emulator JAR (`v1.19.8`), `npm run lint`, `node scripts/check-i18n.mjs`, `npm run lint:rules`, `npm run build`, `npm test` (including live Firestore Emulator execution), `npm audit --audit-level=high` | **COMPLETED — `success` (34s)** |
 
 ---
 
