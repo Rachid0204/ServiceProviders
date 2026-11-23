@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Award,
   Briefcase,
+  Calendar,
   CheckCircle2,
   Clock,
   Heart,
@@ -26,14 +27,27 @@ import {
 } from 'firebase/firestore';
 import { db, reportFirestoreError, OperationType } from '../../firebase';
 import {
+  WEEKDAY_KEYS,
   buildWhatsAppUrl,
   formatMadCurrency,
   type ProviderReview,
+  type WeekdayKey,
 } from '../../utils/marketplace';
 import { useMarketplace } from '../../app/providers/MarketplaceContext';
 import { ROUTE_PATHS, buildServiceCategoryPath } from '../../app/routePaths';
 import { useProviderServices } from '../../hooks/useProviderServices';
+import { useProviderAvailability } from '../../hooks/useProviderAvailability';
 import { getPricingModelLabel } from '../../components/dashboards/ProviderServicesManager';
+
+const DAY_SHORT: Record<WeekdayKey, { fr: string; ar: string }> = {
+  mon: { fr: 'Lun', ar: 'إثنين' },
+  tue: { fr: 'Mar', ar: 'ثلاثاء' },
+  wed: { fr: 'Mer', ar: 'أربعاء' },
+  thu: { fr: 'Jeu', ar: 'خميس' },
+  fri: { fr: 'Ven', ar: 'جمعة' },
+  sat: { fr: 'Sam', ar: 'سبت' },
+  sun: { fr: 'Dim', ar: 'أحد' },
+};
 
 function formatReviewDate(ts: unknown): string {
   if (ts && typeof ts === 'object' && 'toDate' in ts) {
@@ -66,6 +80,7 @@ export const ProviderPublicProfilePage: React.FC = () => {
   );
 
   const { services: providerServices } = useProviderServices(provider?.id, lang);
+  const { schedule: providerSchedule } = useProviderAvailability(provider?.id, lang);
   const activeServices = useMemo(
     () => providerServices.filter((s) => s.isActive),
     [providerServices]
@@ -409,6 +424,30 @@ export const ProviderPublicProfilePage: React.FC = () => {
               <dd className="font-semibold text-slate-900 mt-0.5">{displayDiploma}</dd>
             </div>
           </dl>
+
+          <div className="pt-3 border-t border-slate-100 space-y-2.5">
+            <h3 className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+              <Calendar className="w-4 h-4 text-emerald-700" />
+              <span>{t.availabilityTitle}</span>
+            </h3>
+            <div className="grid grid-cols-7 gap-1 text-center text-[10px]">
+              {WEEKDAY_KEYS.map((day) => {
+                const open = providerSchedule.days[day]?.enabled;
+                return (
+                  <div
+                    key={day}
+                    className={`py-1.5 rounded-lg border font-semibold ${
+                      open
+                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                        : 'bg-slate-50 border-slate-200 text-slate-400'
+                    }`}
+                  >
+                    {isAr ? DAY_SHORT[day].ar : DAY_SHORT[day].fr}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <div className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 space-y-4">

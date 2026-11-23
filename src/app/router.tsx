@@ -124,6 +124,7 @@ export const AppRouter: React.FC = () => {
             <Route path={ROUTE_PATHS.PROVIDER_MISSIONS} element={<ProviderDashboardPage />} />
             <Route path={ROUTE_PATHS.PROVIDER_CARD} element={<ProviderDashboardPage />} />
             <Route path={ROUTE_PATHS.PROVIDER_SERVICES} element={<ProviderDashboardPage />} />
+            <Route path={ROUTE_PATHS.PROVIDER_CALENDAR} element={<ProviderDashboardPage />} />
             <Route path={ROUTE_PATHS.PROVIDER_VERIFICATION} element={<ProviderDashboardPage />} />
             <Route path={ROUTE_PATHS.PROVIDER_EARNINGS} element={<ProviderDashboardPage />} />
           </Route>

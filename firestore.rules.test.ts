@@ -231,4 +231,16 @@ test('Phase 2 Security & Indexes: 12 categories, /services catalog, strictly pri
   }
 });
 
+test('Phase 3 Quotations & Scheduling Rules: itemized proposal totals invariant, /providerAvailability, and /scheduleLocks', () => {
+  assert.ok(rulesContent.includes("'laborCostMad'"));
+  assert.ok(rulesContent.includes("'materialsCostMad'"));
+  assert.ok(rulesContent.includes('data.laborCostMad + data.materialsCostMad == data.proposedPriceMad'));
+  assert.ok(rulesContent.includes("'validUntilIso'"));
+  assert.ok(rulesContent.includes('function isValidProviderAvailability(data)'));
+  assert.ok(rulesContent.includes('match /providerAvailability/{uid}'));
+  assert.ok(rulesContent.includes('function isValidScheduleLock(data)'));
+  assert.ok(rulesContent.includes('match /scheduleLocks/{lockId}'));
+  assert.ok(rulesContent.includes('existsAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId))'));
+});
+
 

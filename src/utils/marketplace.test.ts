@@ -517,3 +517,72 @@ test('Phase 2 Catalog & KYC Helpers: 12 categories, sorting/favorites filter, CI
   assert.ok(invalidFixed.errors.estimatedDurationMinutes);
 });
 
+test('Phase 3 Quotations, Anti-Double-Booking & Weekly Availability Calendar Helpers', async () => {
+  const {
+    computeQuotationTotals,
+    isQuotationExpired,
+    buildScheduleLockId,
+    hasScheduleConflict,
+    createDefaultWeeklySchedule,
+    isProviderSlotAvailable,
+  } = await import('./marketplace');
+
+  // Itemized quotation math invariant
+  const q = computeQuotationTotals(250, 120);
+  assert.equal(q.laborCostMad, 250);
+  assert.equal(q.materialsCostMad, 120);
+  assert.equal(q.totalMad, 370);
+
+  // Expiration boundary
+  assert.equal(isQuotationExpired('2026-11-20', '2026-11-22'), true);
+  assert.equal(isQuotationExpired('2026-11-22', '2026-11-22'), false);
+  assert.equal(isQuotationExpired('2026-11-29', '2026-11-22'), false);
+  assert.equal(isQuotationExpired(undefined, '2026-11-22'), false);
+
+  // Deterministic anti-double-booking schedule lock ID
+  assert.equal(
+    buildScheduleLockId('prov-1', '2026-11-25', '09:00 - 12:00'),
+    'prov-1_20261125_09001200'
+  );
+
+  // Active conflict detection ignores cancelled/completed bookings
+  const existing = [
+    {
+      providerId: 'prov-1',
+      preferredDate: '2026-11-25',
+      preferredTimeSlot: '09:00 - 12:00' as const,
+      status: 'accepted' as const,
+    },
+    {
+      providerId: 'prov-1',
+      preferredDate: '2026-11-25',
+      preferredTimeSlot: '14:00 - 17:00' as const,
+      status: 'cancelled' as const,
+    },
+  ];
+  assert.equal(
+    hasScheduleConflict(existing, {
+      providerId: 'prov-1',
+      preferredDate: '2026-11-25',
+      preferredTimeSlot: '09:00 - 12:00',
+    }),
+    true
+  );
+  assert.equal(
+    hasScheduleConflict(existing, {
+      providerId: 'prov-1',
+      preferredDate: '2026-11-25',
+      preferredTimeSlot: '14:00 - 17:00',
+    }),
+    false
+  );
+
+  // Weekly availability schedule evaluation (2026-11-22 is Sunday, 2026-11-23 is Monday)
+  const schedule = createDefaultWeeklySchedule('prov-1');
+  schedule.blockedDates = ['2026-11-24'];
+  assert.equal(isProviderSlotAvailable(schedule, '2026-11-23', '09:00 - 12:00'), true);
+  assert.equal(isProviderSlotAvailable(schedule, '2026-11-23', '18:00 - 20:00'), false);
+  assert.equal(isProviderSlotAvailable(schedule, '2026-11-22', '09:00 - 12:00'), false); // Sunday off
+  assert.equal(isProviderSlotAvailable(schedule, '2026-11-24', '09:00 - 12:00'), false); // Blocked date
+});
+

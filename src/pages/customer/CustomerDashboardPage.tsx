@@ -20,6 +20,7 @@ export const CustomerDashboardPage: React.FC = () => {
     clearJobActionError,
     setIsPostJobModalOpen,
     cancelJobPost,
+    rejectJobProposal,
     acceptProposalAndCreateBooking,
     handleSaveProfile,
     setAuthModalIntent,
@@ -46,6 +47,7 @@ export const CustomerDashboardPage: React.FC = () => {
       onDismissJobError={clearJobActionError}
       onOpenPostJob={() => setIsPostJobModalOpen(true)}
       onCancelJobPost={cancelJobPost}
+      onRejectProposal={rejectJobProposal}
       onAcceptProposal={acceptProposalAndCreateBooking}
       onQuickSaveClientProfile={handleSaveProfile}
       onExploreProviders={() => navigate(ROUTE_PATHS.SERVICES)}

@@ -196,7 +196,16 @@ export interface Translations {
   termsConsentLabel: string;
   termsConsentRequiredError: string;
   providerServicesTab: string;
+  providerCalendarTab: string;
   providerVerificationTab: string;
+  timelineTitle: string;
+  quoteCompareTitle: string;
+  laborCostLabel: string;
+  materialsCostLabel: string;
+  quoteValidUntilLabel: string;
+  quoteExpiredBadge: string;
+  rejectQuoteBtn: string;
+  availabilityTitle: string;
   cities: Record<MoroccanCity, string>;
   categories: Record<ServiceCategory, string>;
 }
@@ -421,7 +430,16 @@ export const TRANSLATIONS: Record<LanguageCode, Translations> = {
     termsConsentRequiredError:
       'Veuillez accepter les Conditions d’Utilisation et la Politique de Confidentialité avant de créer votre compte.',
     providerServicesTab: 'Mes Services',
+    providerCalendarTab: 'Mon Agenda',
     providerVerificationTab: 'Vérification CIN',
+    timelineTitle: 'Suivi & Historique de l’intervention',
+    quoteCompareTitle: 'Comparateur de devis reçus',
+    laborCostLabel: 'Main-d’œuvre (DH)',
+    materialsCostLabel: 'Matériel & pièces (DH)',
+    quoteValidUntilLabel: 'Valide jusqu’au',
+    quoteExpiredBadge: 'Devis expiré',
+    rejectQuoteBtn: 'Refuser',
+    availabilityTitle: 'Horaires & Disponibilités hebdomadaires',
     cities: {
       Casablanca: 'Casablanca',
       Rabat: 'Rabat',
@@ -659,7 +677,16 @@ export const TRANSLATIONS: Record<LanguageCode, Translations> = {
     termsConsentRequiredError:
       'يرجى الموافقة على شروط الاستخدام وسياسة الخصوصية قبل إنشاء الحساب.',
     providerServicesTab: 'خدماتي',
+    providerCalendarTab: 'جدول المواعيد',
     providerVerificationTab: 'توثيق البطاقة الوطنية',
+    timelineTitle: 'تتبع مراحل وتاريخ التدخل',
+    quoteCompareTitle: 'مقارنة عروض الأثمنة المستلمة',
+    laborCostLabel: 'اليد العاملة (د.م.)',
+    materialsCostLabel: 'المواد وقطع الغيار (د.م.)',
+    quoteValidUntilLabel: 'صالح إلى غاية',
+    quoteExpiredBadge: 'عرض منتهي الصلاحية',
+    rejectQuoteBtn: 'رفض العرض',
+    availabilityTitle: 'أوقات العمل والأيام المتاحة أسبوعياً',
     cities: {
       Casablanca: 'الدار البيضاء',
       Rabat: 'الرباط',

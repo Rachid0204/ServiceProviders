@@ -26,6 +26,7 @@ import {
   type UserRole,
 } from '../utils/marketplace';
 import type { Translations } from '../i18n/translations';
+import { BookingTimeline } from './BookingTimeline';
 
 interface BookingDetailModalProps {
   booking: BookingRecord;
@@ -151,6 +152,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Visual Request & Booking Status Timeline */}
+        <BookingTimeline booking={booking} lang={lang} t={t} />
 
         {booking.rescheduleNote && (
           <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-900 flex items-start gap-2">

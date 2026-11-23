@@ -10,6 +10,7 @@ import {
   setDoc,
   updateDoc,
   writeBatch,
+  runTransaction,
   serverTimestamp,
   type DocumentData,
   type Timestamp,
@@ -17,8 +18,11 @@ import {
 import type { User } from 'firebase/auth';
 import { db, handleFirestoreError, reportFirestoreError, OperationType } from '../firebase';
 import {
+  buildScheduleLockId,
+  computeQuotationTotals,
   generateBookingIds,
   generateJobPostIds,
+  isQuotationExpired,
   isSafeImageUrl,
   type JobPostRecord,
   type JobPostStatus,
@@ -90,6 +94,10 @@ function mapFirestoreProposal(id: string, data: DocumentData): JobProposalRecord
     providerRating: Number(data.providerRating ?? 5.0),
     providerVerified: Boolean(data.providerVerified),
     proposedPriceMad: Number(data.proposedPriceMad || 0),
+    laborCostMad: typeof data.laborCostMad === 'number' ? data.laborCostMad : undefined,
+    materialsCostMad: typeof data.materialsCostMad === 'number' ? data.materialsCostMad : undefined,
+    validUntilIso: typeof data.validUntilIso === 'string' ? data.validUntilIso : undefined,
+    warrantyNote: typeof data.warrantyNote === 'string' ? data.warrantyNote : undefined,
     estimatedDuration: String(data.estimatedDuration || ''),
     message: String(data.message || ''),
     status: (data.status as ProposalStatus) || 'pending',
@@ -116,6 +124,10 @@ export interface CreateJobPostPayload {
 
 export interface SubmitProposalPayload {
   proposedPriceMad: number;
+  laborCostMad?: number;
+  materialsCostMad?: number;
+  validUntilIso?: string;
+  warrantyNote?: string;
   estimatedDuration: string;
   message: string;
 }
@@ -353,6 +365,17 @@ export function useJobPosts(params: {
       const providerName = (
         lang === 'ar' ? ownProvider.fullNameAr : ownProvider.fullNameFr
       ).slice(0, 80);
+
+      const hasItemized =
+        payload.laborCostMad !== undefined || payload.materialsCostMad !== undefined;
+      const totals = hasItemized
+        ? computeQuotationTotals(payload.laborCostMad ?? 0, payload.materialsCostMad ?? 0)
+        : null;
+      const finalPriceMad = Math.max(
+        50,
+        Math.min(100000, Math.round(totals && totals.totalMad >= 50 ? totals.totalMad : payload.proposedPriceMad))
+      );
+
       const proposalData = {
         jobId: job.id,
         clientId: job.clientId,
@@ -363,7 +386,19 @@ export function useJobPosts(params: {
         providerCity: ownProvider.location.city,
         providerRating: Number(ownProvider.ratingAvg ?? 5.0),
         providerVerified: Boolean(ownProvider.verifiedBadge),
-        proposedPriceMad: Math.max(50, Math.min(100000, Math.round(payload.proposedPriceMad))),
+        proposedPriceMad: finalPriceMad,
+        ...(totals && totals.totalMad === finalPriceMad
+          ? {
+              laborCostMad: totals.laborCostMad,
+              materialsCostMad: totals.materialsCostMad,
+            }
+          : {}),
+        ...(payload.validUntilIso && payload.validUntilIso.length >= 8
+          ? { validUntilIso: payload.validUntilIso.slice(0, 16) }
+          : {}),
+        ...(payload.warrantyNote && payload.warrantyNote.trim()
+          ? { warrantyNote: payload.warrantyNote.trim().slice(0, 160) }
+          : {}),
         estimatedDuration: payload.estimatedDuration.trim().slice(0, 64),
         message: payload.message.trim().slice(0, 500),
         status: 'pending' as ProposalStatus,
@@ -424,9 +459,30 @@ export function useJobPosts(params: {
     [firebaseUser, isVerified, lang]
   );
 
+  const rejectJobProposal = useCallback(
+    async (jobId: string, providerId: string) => {
+      setJobActionError(null);
+      if (!firebaseUser || !isVerified) return;
+      const path = `jobPosts/${jobId}/proposals/${providerId}`;
+      try {
+        await updateDoc(doc(db, 'jobPosts', jobId, 'proposals', providerId), {
+          status: 'rejected',
+          updatedAt: serverTimestamp(),
+        });
+      } catch (err) {
+        reportFirestoreError(err, OperationType.UPDATE, path);
+        setJobActionError(
+          lang === 'ar' ? 'تعذر رفض هذا العرض.' : 'Impossible de refuser ce devis pour le moment.'
+        );
+      }
+    },
+    [firebaseUser, isVerified, lang]
+  );
+
   /**
-   * Client accepts a Maâlem's quote: atomically assigns the job post, marks the proposal accepted,
-   * and creates a real live Booking so both sides get direct Chat, WhatsApp, and CMI Escrow tracking.
+   * Transactional proposal acceptance (anti-double-acceptance & anti-double-booking):
+   * Atomically verifies the job is still open, the quote is pending & unexpired, and
+   * acquires a deterministic schedule slot lock before assigning the job & creating the booking.
    */
   const acceptProposalAndCreateBooking = useCallback(
     async (job: JobPostRecord, proposal: JobProposalRecord): Promise<string> => {
@@ -435,10 +491,24 @@ export function useJobPosts(params: {
         throw new Error('Unauthorized');
       }
 
+      if (isQuotationExpired(proposal.validUntilIso)) {
+        throw new Error(
+          lang === 'ar'
+            ? 'انتهت صلاحية هذا العرض. يرجى اختيار عرض آخر أو طلب تحديثه.'
+            : 'Ce devis a expiré. Veuillez choisir un autre devis ou demander un devis actualisé.'
+        );
+      }
+
       const { bookingId, bookingRef } = generateBookingIds();
       const jobDocRef = doc(db, 'jobPosts', job.id);
       const proposalRef = doc(db, 'jobPosts', job.id, 'proposals', proposal.providerId);
       const bookingDocRef = doc(db, 'bookings', bookingId);
+      const lockId = buildScheduleLockId(
+        proposal.providerId,
+        job.preferredDate,
+        job.preferredTimeSlot
+      );
+      const lockRef = doc(db, 'scheduleLocks', lockId);
       const path = `jobPosts/${job.id}`;
 
       const bookingPayload = {
@@ -467,26 +537,68 @@ export function useJobPosts(params: {
       };
 
       try {
-        const batch = writeBatch(db);
-        batch.update(jobDocRef, {
-          status: 'assigned',
-          assignedProviderId: proposal.providerId,
-          assignedProviderName: proposal.providerName,
-          assignedBookingId: bookingId,
-          updatedAt: serverTimestamp(),
+        await runTransaction(db, async (tx) => {
+          const [liveJobSnap, livePropSnap, liveLockSnap] = await Promise.all([
+            tx.get(jobDocRef),
+            tx.get(proposalRef),
+            tx.get(lockRef),
+          ]);
+
+          if (!liveJobSnap.exists() || liveJobSnap.data().status !== 'open') {
+            throw new Error(
+              lang === 'ar'
+                ? 'تم تعيين هذا الطلب بالفعل أو لم يعد مفتوحاً.'
+                : 'Cette annonce a déjà été attribuée ou n’est plus ouverte.'
+            );
+          }
+
+          if (!livePropSnap.exists() || livePropSnap.data().status !== 'pending') {
+            throw new Error(
+              lang === 'ar'
+                ? 'هذا العرض لم يعد متاحاً للقبول.'
+                : 'Ce devis n’est plus en attente de validation.'
+            );
+          }
+
+          if (liveLockSnap.exists()) {
+            throw new Error(
+              lang === 'ar'
+                ? 'هذا المعلم محجوز بالفعل في نفس التاريخ والفترة الزمنية.'
+                : 'Ce Maâlem est déjà réservé sur ce créneau horaire. Veuillez choisir un autre devis ou horaire.'
+            );
+          }
+
+          tx.update(jobDocRef, {
+            status: 'assigned',
+            assignedProviderId: proposal.providerId,
+            assignedProviderName: proposal.providerName,
+            assignedBookingId: bookingId,
+            updatedAt: serverTimestamp(),
+          });
+          tx.update(proposalRef, {
+            status: 'accepted',
+            updatedAt: serverTimestamp(),
+          });
+          tx.set(bookingDocRef, bookingPayload);
+          tx.set(lockRef, {
+            providerId: proposal.providerId,
+            clientId: firebaseUser.uid,
+            bookingId,
+            preferredDate: job.preferredDate,
+            preferredTimeSlot: job.preferredTimeSlot,
+            createdAt: serverTimestamp(),
+          });
         });
-        batch.update(proposalRef, {
-          status: 'accepted',
-          updatedAt: serverTimestamp(),
-        });
-        batch.set(bookingDocRef, bookingPayload);
-        await batch.commit();
+
         return bookingRef;
       } catch (err) {
+        if (err instanceof Error && !err.message.toLowerCase().includes('permission')) {
+          throw err;
+        }
         handleFirestoreError(err, OperationType.WRITE, path);
       }
     },
-    [firebaseUser, isVerified]
+    [firebaseUser, isVerified, lang]
   );
 
   return {
@@ -499,6 +611,7 @@ export function useJobPosts(params: {
     cancelJobPost,
     submitJobProposal,
     withdrawJobProposal,
+    rejectJobProposal,
     acceptProposalAndCreateBooking,
   };
 }
