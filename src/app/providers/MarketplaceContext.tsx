@@ -431,7 +431,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const supportWhatsAppUrl = useMemo(
     () =>
       buildWhatsAppUrl({
-        phone: systemSettings.supportWhatsAppPhone || '+212661428910',
+        phone: systemSettings.supportWhatsAppPhone || '',
         lang,
         providerName: isAr ? 'مول الخدمة' : "Moul L'Khedma",
         category: isAr ? 'خدمة منزلية' : 'Service à domicile',

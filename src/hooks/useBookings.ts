@@ -18,12 +18,15 @@ import {
 import type { User } from 'firebase/auth';
 import { db, handleFirestoreError, reportFirestoreError, OperationType } from '../firebase';
 import {
+  buildScheduleLockId,
   calculateEscrowSplit,
   canTransitionBookingStatus,
   computeCancellationSettlement,
   generateBookingIds,
   getNextPaymentStatus,
+  isProviderSlotAvailable,
   isSafeImageUrl,
+  parseProviderAvailabilitySnapshot,
   recalculateProviderRating,
   type BookingRecord,
   type BookingStatus,
@@ -69,10 +72,10 @@ function mapFirestoreBooking(id: string, data: DocumentData): BookingRecord {
     bookingRef: String(data.bookingRef || id.slice(0, 8).toUpperCase()),
     clientId: String(data.clientId),
     clientName: String(data.clientName),
-    clientPhone: String(data.clientPhone),
+    clientPhone: String(data.clientPhone || ''),
     providerId: String(data.providerId),
     providerName: String(data.providerName),
-    providerPhone: String(data.providerPhone || '+212661428910'),
+    providerPhone: String(data.providerPhone || ''),
     category: data.category as ServiceCategory,
     serviceType: String(data.serviceType || data.category),
     city: data.city as MoroccanCity,
@@ -302,33 +305,82 @@ export function useBookings(params: {
       updatedAt: serverTimestamp(),
     };
 
-    try {
-      let needsBootstrapProfile = !userProfile || userProfile.uid !== firebaseUser.uid;
-      if (needsBootstrapProfile) {
-        const existingUserSnap = await getDoc(doc(db, 'users', firebaseUser.uid));
-        needsBootstrapProfile = !existingUserSnap.exists();
-      }
+    const lockId = buildScheduleLockId(
+      payload.provider.id,
+      payload.preferredDate,
+      payload.preferredTimeSlot
+    );
+    const lockRef = doc(db, 'scheduleLocks', lockId);
+    const availRef = doc(db, 'providerAvailability', payload.provider.id);
+    const userRef = doc(db, 'users', firebaseUser.uid);
+    const bookingDocRef = doc(db, 'bookings', bookingId);
 
-      if (needsBootstrapProfile) {
-        const bootstrapProfile = buildBootstrapClientProfile({
-          uid: firebaseUser.uid,
-          fullName: payload.clientName,
-          phone: payload.clientPhone,
-          city: payload.provider.location.city,
-          neighborhood: payload.neighborhood,
-          languagePref: lang,
-        });
-        const batch = writeBatch(db);
-        batch.set(doc(db, 'users', firebaseUser.uid), {
-          ...bootstrapProfile,
+    try {
+      let bootstrappedProfile: UserProfileRecord | null = null;
+      await runTransaction(db, async (tx) => {
+        const [userSnap, availSnap, lockSnap] = await Promise.all([
+          tx.get(userRef),
+          tx.get(availRef),
+          tx.get(lockRef),
+        ]);
+
+        if (availSnap.exists()) {
+          const schedule = parseProviderAvailabilitySnapshot(
+            payload.provider.id,
+            availSnap.data()
+          );
+          if (
+            !isProviderSlotAvailable(
+              schedule,
+              payload.preferredDate,
+              payload.preferredTimeSlot
+            )
+          ) {
+            throw new Error(
+              lang === 'ar'
+                ? 'هذا المعلم غير متاح في التاريخ أو الفترة الزمنية المختارة حسب جدول مواعيده.'
+                : 'Ce Maâlem n’est pas disponible sur ce créneau selon son agenda hebdomadaire.'
+            );
+          }
+        }
+
+        if (lockSnap.exists()) {
+          throw new Error(
+            lang === 'ar'
+              ? 'هذه الفترة الزمنية محجوزة بالفعل لدى المعلم. يرجى اختيار موعد آخر.'
+              : 'Ce créneau horaire est déjà réservé pour ce Maâlem. Veuillez choisir un autre horaire.'
+          );
+        }
+
+        if (!userSnap.exists()) {
+          bootstrappedProfile = buildBootstrapClientProfile({
+            uid: firebaseUser.uid,
+            fullName: payload.clientName,
+            phone: payload.clientPhone,
+            city: payload.provider.location.city,
+            neighborhood: payload.neighborhood,
+            languagePref: lang,
+          });
+          tx.set(userRef, {
+            ...bootstrappedProfile,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+
+        tx.set(bookingDocRef, bookingPayload);
+        tx.set(lockRef, {
+          providerId: payload.provider.id,
+          clientId: firebaseUser.uid,
+          bookingId,
+          preferredDate: payload.preferredDate,
+          preferredTimeSlot: payload.preferredTimeSlot,
           createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
         });
-        batch.set(doc(db, 'bookings', bookingId), bookingPayload);
-        await batch.commit();
-        onBootstrapUserProfile?.(bootstrapProfile);
-      } else {
-        await setDoc(doc(db, 'bookings', bookingId), bookingPayload);
+      });
+
+      if (bootstrappedProfile) {
+        onBootstrapUserProfile?.(bootstrappedProfile);
       }
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, path);
@@ -367,7 +419,7 @@ export function useBookings(params: {
         bookingId,
         actorRole === 'client'
           ? 'Annulation par le client avant intervention'
-          : 'Indisponibilité signalée par le Maâlem — Remboursement automatique CMI',
+          : 'Indisponibilité signalée par le Maâlem',
         actorRole
       );
       return;
@@ -457,7 +509,7 @@ export function useBookings(params: {
     );
   };
 
-  // Cancellation with explicit reason + automatic 100% CMI escrow refund when escrow_held
+  // Cancellation with explicit reason + atomic release of deterministic /scheduleLocks/{lockId} (AUD-006)
   const cancelBookingWithReason = async (
     bookingId: string,
     reason: string,
@@ -480,11 +532,25 @@ export function useBookings(params: {
       autoRefundOnProviderCancel
     );
 
+    const lockId = buildScheduleLockId(
+      target.providerId,
+      target.preferredDate,
+      target.preferredTimeSlot
+    );
+    const lockRef = doc(db, 'scheduleLocks', lockId);
+    const bookingDocRef = doc(db, 'bookings', bookingId);
     const path = `bookings/${bookingId}`;
+
     try {
-      await updateDoc(doc(db, 'bookings', bookingId), {
-        ...settlement,
-        updatedAt: serverTimestamp(),
+      await runTransaction(db, async (tx) => {
+        const lockSnap = await tx.get(lockRef);
+        tx.update(bookingDocRef, {
+          ...settlement,
+          updatedAt: serverTimestamp(),
+        });
+        if (lockSnap.exists()) {
+          tx.delete(lockRef);
+        }
       });
     } catch (err) {
       reportFirestoreError(err, OperationType.UPDATE, path);
@@ -497,7 +563,7 @@ export function useBookings(params: {
     }
   };
 
-  // Reschedule pending or accepted booking to a new date & time slot
+  // Reschedule pending or accepted booking to a new date & time slot while atomically checking availability & moving the slot lock (AUD-006)
   const rescheduleBooking = async (
     bookingId: string,
     newDate: string,
@@ -511,18 +577,75 @@ export function useBookings(params: {
     if (target.status !== 'pending' && target.status !== 'accepted') return;
     const safeNote = note.trim().slice(0, 200);
 
+    const oldLockId = buildScheduleLockId(
+      target.providerId,
+      target.preferredDate,
+      target.preferredTimeSlot
+    );
+    const newLockId = buildScheduleLockId(target.providerId, newDate, newSlot);
+    const oldLockRef = doc(db, 'scheduleLocks', oldLockId);
+    const newLockRef = doc(db, 'scheduleLocks', newLockId);
+    const availRef = doc(db, 'providerAvailability', target.providerId);
+    const bookingDocRef = doc(db, 'bookings', bookingId);
     const path = `bookings/${bookingId}`;
+
     try {
-      await updateDoc(doc(db, 'bookings', bookingId), {
-        preferredDate: newDate,
-        preferredTimeSlot: newSlot,
-        ...(safeNote ? { rescheduleNote: safeNote } : {}),
-        updatedAt: serverTimestamp(),
+      await runTransaction(db, async (tx) => {
+        const [availSnap, oldLockSnap, newLockSnap] = await Promise.all([
+          tx.get(availRef),
+          tx.get(oldLockRef),
+          newLockId !== oldLockId ? tx.get(newLockRef) : Promise.resolve(null),
+        ]);
+
+        if (availSnap.exists()) {
+          const schedule = parseProviderAvailabilitySnapshot(
+            target.providerId,
+            availSnap.data()
+          );
+          if (!isProviderSlotAvailable(schedule, newDate, newSlot)) {
+            throw new Error(
+              lang === 'ar'
+                ? 'هذا المعلم غير متاح في التاريخ أو الفترة الزمنية الجديدة حسب جدول مواعيده.'
+                : 'Ce Maâlem n’est pas disponible sur ce nouveau créneau selon son agenda.'
+            );
+          }
+        }
+
+        if (newLockId !== oldLockId && newLockSnap && newLockSnap.exists()) {
+          throw new Error(
+            lang === 'ar'
+              ? 'الفترة الزمنية الجديدة محجوزة بالفعل لدى المعلم.'
+              : 'Ce nouveau créneau horaire est déjà réservé pour ce Maâlem.'
+          );
+        }
+
+        tx.update(bookingDocRef, {
+          preferredDate: newDate,
+          preferredTimeSlot: newSlot,
+          ...(safeNote ? { rescheduleNote: safeNote } : {}),
+          updatedAt: serverTimestamp(),
+        });
+
+        if (newLockId !== oldLockId) {
+          if (oldLockSnap.exists()) {
+            tx.delete(oldLockRef);
+          }
+          tx.set(newLockRef, {
+            providerId: target.providerId,
+            clientId: target.clientId,
+            bookingId,
+            preferredDate: newDate,
+            preferredTimeSlot: newSlot,
+            createdAt: serverTimestamp(),
+          });
+        }
       });
     } catch (err) {
       reportFirestoreError(err, OperationType.UPDATE, path);
       setBookingActionError(
-        lang === 'ar'
+        err instanceof Error && err.message
+          ? err.message
+          : lang === 'ar'
           ? 'تعذر إعادة جدولة الموعد.'
           : 'Impossible de reprogrammer le créneau.'
       );

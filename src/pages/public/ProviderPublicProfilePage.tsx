@@ -364,22 +364,26 @@ export const ProviderPublicProfilePage: React.FC = () => {
               >
                 <Heart className={`w-4 h-4 ${isFavorite ? 'fill-rose-600 text-rose-600' : ''}`} />
               </button>
-              <a
-                href={providerWhatsappUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-emerald-900 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl transition-colors"
-              >
-                <MessageCircle className="w-4 h-4 text-emerald-700" />
-                <span>WhatsApp</span>
-              </a>
-              <a
-                href={telHref}
-                className="inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-slate-800 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors"
-              >
-                <Phone className="w-4 h-4 text-slate-600" />
-                <span>{isAr ? 'اتصال' : 'Appeler'}</span>
-              </a>
+              {providerWhatsappUrl && (
+                <a
+                  href={providerWhatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-emerald-900 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4 text-emerald-700" />
+                  <span>WhatsApp</span>
+                </a>
+              )}
+              {provider.phone && (
+                <a
+                  href={telHref}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-slate-800 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors"
+                >
+                  <Phone className="w-4 h-4 text-slate-600" />
+                  <span>{isAr ? 'اتصال' : 'Appeler'}</span>
+                </a>
+              )}
             </div>
           </div>
         </div>

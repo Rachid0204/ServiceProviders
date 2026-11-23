@@ -798,10 +798,171 @@ test('Wave 0 Live Firebase Firestore Emulator Execution: AUD-001, AUD-002, AUD-0
     200,
     `AUD-005: Admin creating kyc_updated notification must succeed: ${adminKycNotif.body}`
   );
+
+  // --- AUD-006: Schedule lock creation and provider-initiated reschedule lock creation ---
+  const createInitialScheduleLock = await commitWrite({
+    token: clientToken,
+    docPath: 'scheduleLocks/prov1_2026-11-28_09001200',
+    data: {
+      providerId: 'prov1',
+      clientId: 'client1',
+      bookingId: 'bk_cod_1',
+      preferredDate: '2026-11-28',
+      preferredTimeSlot: '09:00 - 12:00',
+    },
+    requestTimeFields: ['createdAt'],
+    currentDocumentExists: false,
+  });
+  assert.equal(
+    createInitialScheduleLock.status,
+    200,
+    `AUD-006: Client creating scheduleLock matching booking must succeed: ${createInitialScheduleLock.body}`
+  );
+
+  // Provider reschedules bk_cod_1 to 2026-11-29 (14:00 - 17:00) and acquires new scheduleLock
+  const codBookingCreatedIso =
+    JSON.parse(codBookingAttempt.body).writeResults?.[0]?.transformResults?.[0]?.timestampValue ??
+    fixedCreatedIso;
+  const providerRescheduleBooking = await commitWrite({
+    token: providerToken,
+    docPath: 'bookings/bk_cod_1',
+    data: {
+      ...baseBookingData,
+      paymentMethod: 'cash_on_completion',
+      paymentStatus: 'unpaid_cod',
+      preferredDate: '2026-11-29',
+      preferredTimeSlot: '14:00 - 17:00',
+      rescheduleNote: 'Reporté au lendemain après-midi',
+    },
+    rawTimestampFields: { createdAt: codBookingCreatedIso },
+    requestTimeFields: ['updatedAt'],
+    currentDocumentExists: true,
+  });
+  assert.equal(
+    providerRescheduleBooking.status,
+    200,
+    `AUD-006: Provider rescheduling booking must succeed: ${providerRescheduleBooking.body}`
+  );
+
+  const providerCreateNewLock = await commitWrite({
+    token: providerToken,
+    docPath: 'scheduleLocks/prov1_2026-11-29_14001700',
+    data: {
+      providerId: 'prov1',
+      clientId: 'client1',
+      bookingId: 'bk_cod_1',
+      preferredDate: '2026-11-29',
+      preferredTimeSlot: '14:00 - 17:00',
+    },
+    requestTimeFields: ['createdAt'],
+    currentDocumentExists: false,
+  });
+  assert.equal(
+    providerCreateNewLock.status,
+    200,
+    `AUD-006: Provider creating new scheduleLock on reschedule must succeed: ${providerCreateNewLock.body}`
+  );
+
+  // --- AUD-007: Provider can withdraw and revise/resubmit proposal while job is open ---
+  const seedJobPost = await commitWrite({
+    token: 'owner',
+    docPath: 'jobPosts/job_open_1',
+    data: {
+      jobRef: 'JOB-101',
+      clientId: 'client1',
+      clientName: 'Salma Bennani',
+      clientPhone: '+212661234567',
+      category: 'Plomberie',
+      title: 'Installation chauffe-eau',
+      description: 'Installation complète chauffe-eau électrique 50L.',
+      city: 'Casablanca',
+      neighborhood: 'Maârif',
+      preferredDate: '2026-11-30',
+      preferredTimeSlot: '09:00 - 12:00',
+      urgency: 'normal',
+      budgetMinMad: 250,
+      budgetMaxMad: 500,
+      status: 'open',
+      proposalCount: 1,
+    },
+    rawTimestampFields: { createdAt: fixedCreatedIso, updatedAt: fixedCreatedIso },
+  });
+  assert.equal(seedJobPost.status, 200);
+
+  const baseProposalData = {
+    jobId: 'job_open_1',
+    clientId: 'client1',
+    providerId: 'prov1',
+    providerName: 'Maâlem Karim Pro',
+    providerPhone: '+212661987654',
+    providerCategory: 'Plomberie',
+    providerCity: 'Casablanca',
+    providerRating: 5,
+    providerVerified: true,
+    proposedPriceMad: 350,
+    laborCostMad: 250,
+    materialsCostMad: 100,
+    validUntilIso: '2026-12-05',
+    warrantyNote: 'Garantie 30 jours main-d’œuvre',
+    estimatedDuration: '2h',
+    message: 'Disponible avec outillage complet et joints neufs.',
+    status: 'pending',
+  };
+
+  const createProposal = await commitWrite({
+    token: providerToken,
+    docPath: 'jobPosts/job_open_1/proposals/prov1',
+    data: baseProposalData,
+    requestTimeFields: ['createdAt', 'updatedAt'],
+    currentDocumentExists: false,
+  });
+  assert.equal(
+    createProposal.status,
+    200,
+    `AUD-007: Provider creating initial proposal must succeed: ${createProposal.body}`
+  );
+  const proposalCreatedIso =
+    JSON.parse(createProposal.body).writeResults?.[0]?.transformResults?.[0]?.timestampValue ??
+    fixedCreatedIso;
+
+  // Provider withdraws proposal
+  const withdrawProposal = await commitWrite({
+    token: providerToken,
+    docPath: 'jobPosts/job_open_1/proposals/prov1',
+    data: {
+      ...baseProposalData,
+      status: 'withdrawn',
+    },
+    rawTimestampFields: { createdAt: proposalCreatedIso },
+    requestTimeFields: ['updatedAt'],
+    currentDocumentExists: true,
+  });
+  assert.equal(
+    withdrawProposal.status,
+    200,
+    `AUD-007: Provider withdrawing proposal must succeed: ${withdrawProposal.body}`
+  );
+
+  // Provider revises price/breakdown and resubmits withdrawn proposal back to pending
+  const reviseProposal = await commitWrite({
+    token: providerToken,
+    docPath: 'jobPosts/job_open_1/proposals/prov1',
+    data: {
+      ...baseProposalData,
+      proposedPriceMad: 320,
+      laborCostMad: 220,
+      materialsCostMad: 100,
+      message: 'Offre révisée avec remise fidélité.',
+      status: 'pending',
+    },
+    rawTimestampFields: { createdAt: proposalCreatedIso },
+    requestTimeFields: ['updatedAt'],
+    currentDocumentExists: true,
+  });
+  assert.equal(
+    reviseProposal.status,
+    200,
+    `AUD-007: Provider revising and resubmitting withdrawn proposal must succeed: ${reviseProposal.body}`
+  );
 });
-
-
-
-
-
 

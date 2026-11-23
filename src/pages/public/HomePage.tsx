@@ -324,15 +324,17 @@ export const HomePage: React.FC = () => {
             <Navigation className="w-4 h-4 text-amber-700 shrink-0" />
             <span className="truncate">{t.nearMeToggle}</span>
           </button>
-          <a
-            href={supportWhatsAppUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[44px] text-xs font-semibold text-white bg-emerald-700 rounded-lg active:bg-emerald-800"
-          >
-            <MessageCircle className="w-4 h-4 shrink-0" />
-            <span className="truncate">{isAr ? 'واتساب سريع' : 'WhatsApp Rapide'}</span>
-          </a>
+          {supportWhatsAppUrl && (
+            <a
+              href={supportWhatsAppUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[44px] text-xs font-semibold text-white bg-emerald-700 rounded-lg active:bg-emerald-800"
+            >
+              <MessageCircle className="w-4 h-4 shrink-0" />
+              <span className="truncate">{isAr ? 'واتساب سريع' : 'WhatsApp Rapide'}</span>
+            </a>
+          )}
         </div>
       </div>
     </>
