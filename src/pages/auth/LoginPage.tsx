@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React, { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, CheckCircle2, LogIn, Mail, ShieldCheck } from 'lucide-react';
@@ -55,9 +56,7 @@ export const LoginPage: React.FC = () => {
       } else {
         await requestPasswordReset(check.normalizedEmail);
         setNotice(
-          isAr
-            ? 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.'
-            : 'Un lien de réinitialisation du mot de passe a été envoyé à votre e-mail.'
+          uiText(isAr).auth.unLienDeReinitialisationDuMot
         );
       }
     } catch (err) {
@@ -108,7 +107,7 @@ export const LoginPage: React.FC = () => {
 
         <div className="relative flex items-center justify-center text-[11px] text-slate-400">
           <span className="bg-white px-2 relative z-10">
-            {isAr ? 'أو بالبريد الإلكتروني' : 'ou par adresse e-mail'}
+            {uiText(isAr).auth.ouParAdresseEMail}
           </span>
           <span className="absolute inset-x-0 h-px bg-slate-200" />
         </div>
@@ -116,7 +115,7 @@ export const LoginPage: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
             <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700">
-              {isAr ? 'البريد الإلكتروني' : 'Adresse e-mail'}
+              {uiText(isAr).auth.adresseEMail}
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-400 absolute top-2.5 start-3 pointer-events-none" />
@@ -140,14 +139,14 @@ export const LoginPage: React.FC = () => {
                   htmlFor="login-password"
                   className="block text-xs font-semibold text-slate-700"
                 >
-                  {isAr ? 'كلمة المرور' : 'Mot de passe'}
+                  {uiText(isAr).auth.motDePasse}
                 </label>
                 <button
                   type="button"
                   onClick={() => setMode('reset')}
                   className="text-[11px] text-emerald-700 hover:underline cursor-pointer"
                 >
-                  {isAr ? 'نسيت كلمة المرور؟' : 'Mot de passe oublié ?'}
+                  {uiText(isAr).auth.motDePasseOublie}
                 </button>
               </div>
               <input
@@ -168,12 +167,8 @@ export const LoginPage: React.FC = () => {
             className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors disabled:opacity-60 cursor-pointer"
           >
             {mode === 'signin'
-              ? isAr
-                ? 'تسجيل الدخول'
-                : 'Se connecter'
-              : isAr
-              ? 'إرسال رابط الاستعادة'
-              : 'Envoyer le lien de réinitialisation'}
+              ? uiText(isAr).auth.seConnecter
+              : uiText(isAr).auth.envoyerLeLienDeReinitialisation}
           </button>
 
           {mode === 'reset' && (
@@ -182,19 +177,19 @@ export const LoginPage: React.FC = () => {
               onClick={() => setMode('signin')}
               className="w-full text-xs text-slate-600 hover:text-slate-900 cursor-pointer"
             >
-              {isAr ? 'العودة لتسجيل الدخول' : 'Retour à la connexion'}
+              {uiText(isAr).auth.retourALaConnexion}
             </button>
           )}
         </form>
 
         <div className="pt-3 border-t border-slate-100 text-center text-xs text-slate-600 space-y-2">
           <p>
-            {isAr ? 'ليس لديك حساب بعد؟' : 'Pas encore de compte ?'}{' '}
+            {uiText(isAr).auth.pasEncoreDeCompte}{' '}
             <Link
               to={ROUTE_PATHS.REGISTER}
               className="font-semibold text-emerald-700 hover:underline"
             >
-              {isAr ? 'إنشاء حساب' : 'Créer un compte'}
+              {uiText(isAr).common.creerUnCompte}
             </Link>
           </p>
           <p className="inline-flex items-center gap-1 text-[11px] text-slate-500">

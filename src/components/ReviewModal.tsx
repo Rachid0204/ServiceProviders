@@ -1,3 +1,4 @@
+import { uiText } from '../i18n/uiCopy';
 import React, { useState } from 'react';
 import { X, Star, CheckCircle2, ChevronDown, ChevronUp, Camera } from 'lucide-react';
 import type {
@@ -61,9 +62,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
       setPhotoError(
         err instanceof Error
           ? err.message
-          : isAr
-          ? 'تعذر رفع الصورة.'
-          : 'Impossible de téléverser la photo.'
+          : uiText(isAr).common.impossibleDeTeleverserLaPhoto
       );
     } finally {
       setIsUploadingPhoto(false);
@@ -82,9 +81,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
         booking.id,
         rating,
         comment.trim() ||
-          (isAr
-            ? 'تدخل سريع وعمل متقن للغاية. شكراً جزيلاً للمعلم!'
-            : 'Intervention rapide et travail très soigné. Merci Maâlem !'),
+          (uiText(isAr).booking.interventionRapideEtTravailTresSoigne),
         categoriesPayload,
         photoUrls.length > 0 ? photoUrls : undefined
       );
@@ -159,9 +156,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
               className="w-full px-3.5 py-2.5 bg-slate-50 hover:bg-slate-100 flex items-center justify-between text-xs font-semibold text-slate-700 cursor-pointer"
             >
               <span>
-                {isAr
-                  ? 'معايير التقييم التفصيلية (اختياري)'
-                  : 'Critères détaillés (optionnel)'}
+                {uiText(isAr).booking.criteresDetaillesOptionnel}
               </span>
               {showOptionalCategories ? (
                 <ChevronUp className="w-4 h-4 text-slate-500" />
@@ -175,19 +170,19 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
                 {[
                   {
                     id: 'punctuality',
-                    label: isAr ? 'الالتزام بالموعد' : 'Ponctualité',
+                    label: uiText(isAr).booking.ponctualite,
                     val: punctuality,
                     setter: setPunctuality,
                   },
                   {
                     id: 'quality',
-                    label: isAr ? 'جودة الإنجاز' : 'Qualité du travail',
+                    label: uiText(isAr).booking.qualiteDuTravail,
                     val: quality,
                     setter: setQuality,
                   },
                   {
                     id: 'value',
-                    label: isAr ? 'احترام التسعيرة' : 'Respect du devis MAD',
+                    label: uiText(isAr).booking.respectDuDevisMad,
                     val: value,
                     setter: setValue,
                   },
@@ -245,7 +240,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
                 }`}
               >
                 <Camera className="w-3.5 h-3.5 text-emerald-700" />
-                <span>{isUploadingPhoto ? '...' : isAr ? 'صورة' : 'Photo'}</span>
+                <span>{isUploadingPhoto ? '...' : uiText(isAr).booking.photo}</span>
                 <input
                   type="file"
                   accept="image/*"

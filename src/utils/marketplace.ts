@@ -192,7 +192,7 @@ export interface VettedProvider {
   diplomaFr: string;
   diplomaAr: string;
   completedJobs: number;
-  responseMinutes: number;
+  responseMinutes?: number | null;
   phone: string;
   location: ProviderLocation;
   reviews: ProviderReview[];

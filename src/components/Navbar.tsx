@@ -1,3 +1,4 @@
+import { uiText } from '../i18n/uiCopy';
 import React, { useState, useEffect, useRef } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -82,23 +83,17 @@ export const Navbar: React.FC = () => {
     userProfile?.fullName ||
     firebaseUser?.displayName ||
     firebaseUser?.email?.split('@')[0] ||
-    (isAr ? 'حسابي' : 'Mon Compte');
+    (uiText(isAr).publicUi.monCompte);
 
   const firstName = displayName.split(' ')[0];
   const initials = getInitials(displayName);
 
   const roleBadgeLabel =
     effectiveRole === 'both'
-      ? isAr
-        ? 'حساب مزدوج'
-        : 'Client & Maâlem'
+      ? uiText(isAr).publicUi.clientMaalem
       : effectiveRole === 'provider'
-      ? isAr
-        ? 'معلم / مقدم خدمة'
-        : 'Maâlem'
-      : isAr
-      ? 'زبون'
-      : 'Client';
+      ? uiText(isAr).publicUi.maalem
+      : uiText(isAr).common.client;
 
   // Close menus on route change
   useEffect(() => {
@@ -176,7 +171,7 @@ export const Navbar: React.FC = () => {
                 to={`${ROUTE_PATHS.HOME}#how-it-works`}
                 className="hover:text-slate-900 transition-colors whitespace-nowrap shrink-0"
               >
-                {isAr ? 'كيف تعمل المنصة' : 'Comment ça marche'}
+                {uiText(isAr).publicUi.commentCaMarche}
               </Link>
             </>
           ) : !isVerified ? (
@@ -184,7 +179,7 @@ export const Navbar: React.FC = () => {
               to={ROUTE_PATHS.VERIFY_EMAIL}
               className="text-xs font-medium text-amber-700 hover:underline"
             >
-              {isAr ? 'في انتظار تفعيل البريد الإلكتروني' : 'Vérification e-mail en attente'}
+              {uiText(isAr).publicUi.verificationEMailEnAttente}
             </Link>
           ) : isPureProvider ? (
             /* Pure Maâlem Navigation: ZERO "Explorer other Maâlems" link! */
@@ -199,7 +194,7 @@ export const Navbar: React.FC = () => {
                   }`
                 }
               >
-                <span>{isAr ? 'طلبات الزبناء' : 'Offres Clients'}</span>
+                <span>{uiText(isAr).publicUi.offresClients}</span>
                 {openJobsCount > 0 && (
                   <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 tabular-nums">
                     {openJobsCount}
@@ -207,7 +202,7 @@ export const Navbar: React.FC = () => {
                 )}
               </NavLink>
               <NavLink to={ROUTE_PATHS.PROVIDER_MISSIONS} className={navLinkClass}>
-                <span>{isAr ? 'مهامي' : 'Mes Missions'}</span>
+                <span>{uiText(isAr).publicUi.mesMissions}</span>
                 {providerPendingCount > 0 && (
                   <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-900 tabular-nums">
                     {providerPendingCount}
@@ -215,7 +210,7 @@ export const Navbar: React.FC = () => {
                 )}
               </NavLink>
               <NavLink to={ROUTE_PATHS.PROVIDER_CARD} className={navLinkClass}>
-                {isAr ? 'بطاقتي المهنية' : 'Ma Fiche Maâlem'}
+                {uiText(isAr).publicUi.maFicheMaalem}
               </NavLink>
               <NavLink to={ROUTE_PATHS.PROVIDER_SERVICES} className={navLinkClass}>
                 {t.providerServicesTab}
@@ -227,7 +222,7 @@ export const Navbar: React.FC = () => {
                 {t.providerVerificationTab}
               </NavLink>
               <NavLink to={ROUTE_PATHS.PROVIDER_EARNINGS} className={navLinkClass}>
-                {isAr ? 'الأرباح' : 'Revenus'}
+                {uiText(isAr).publicUi.revenus}
               </NavLink>
               {hasAdminAccess && (
                 <NavLink to={ROUTE_PATHS.ADMIN_DASHBOARD} className={navLinkClass}>
@@ -240,12 +235,12 @@ export const Navbar: React.FC = () => {
             <>
               {canExplore && (
                 <NavLink to={ROUTE_PATHS.SERVICES} className={navLinkClass}>
-                  {isAr ? 'استكشف المعلمين' : 'Explorer les Maâlems'}
+                  {uiText(isAr).common.explorerLesMaalems}
                 </NavLink>
               )}
               {isClientCapable && (
                 <NavLink to={ROUTE_PATHS.CUSTOMER_DASHBOARD} className={navLinkClass}>
-                  <span>{isAr ? 'فضاء الزبون' : 'Espace Client'}</span>
+                  <span>{uiText(isAr).publicUi.espaceClient}</span>
                   {clientActiveCount > 0 && (
                     <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 tabular-nums">
                       {clientActiveCount}
@@ -288,7 +283,7 @@ export const Navbar: React.FC = () => {
               className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>{isAr ? 'نشر طلب' : 'Publier un besoin'}</span>
+              <span>{uiText(isAr).publicUi.publierUnBesoin}</span>
             </button>
           )}
 
@@ -423,13 +418,13 @@ export const Navbar: React.FC = () => {
                 className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
               >
                 <LogIn className="w-3.5 h-3.5 text-emerald-700" />
-                <span>{isAr ? 'تسجيل الدخول' : 'Connexion'}</span>
+                <span>{uiText(isAr).common.connexion}</span>
               </Link>
               <Link
                 to={`${ROUTE_PATHS.REGISTER}?role=provider`}
                 className="px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 transition-colors whitespace-nowrap shrink-0"
               >
-                {isAr ? 'انضم كمعلم' : 'Devenir Maâlem'}
+                {uiText(isAr).publicUi.devenirMaalem}
               </Link>
             </>
           ) : (
@@ -491,7 +486,7 @@ export const Navbar: React.FC = () => {
                         >
                           <span className="inline-flex items-center gap-2.5">
                             <LayoutDashboard className="w-4 h-4 text-emerald-700" />
-                            <span>{isAr ? 'فضاء الزبون' : 'Espace Client'}</span>
+                            <span>{uiText(isAr).publicUi.espaceClient}</span>
                           </span>
                           {clientActiveCount > 0 && (
                             <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 tabular-nums">
@@ -527,12 +522,8 @@ export const Navbar: React.FC = () => {
                         <UserIcon className="w-4 h-4 text-slate-500" />
                         <span>
                           {isPureProvider
-                            ? isAr
-                              ? 'الإعدادات والحساب المزدوج'
-                              : 'Paramètres & Compte Double'
-                            : isAr
-                            ? 'ملفي الشخصي والأمان'
-                            : 'Mon Profil & Sécurité'}
+                            ? uiText(isAr).publicUi.parametresCompteDouble
+                            : uiText(isAr).publicUi.monProfilSecurite}
                         </span>
                       </Link>
 
@@ -606,7 +597,7 @@ export const Navbar: React.FC = () => {
                 to={`${ROUTE_PATHS.HOME}#how-it-works`}
                 className="block w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-700 hover:bg-slate-50"
               >
-                {isAr ? 'كيف تعمل المنصة' : 'Comment ça marche'}
+                {uiText(isAr).publicUi.commentCaMarche}
               </Link>
               <div className="pt-2 border-t border-slate-100 grid grid-cols-2 gap-2">
                 <button
@@ -617,13 +608,13 @@ export const Navbar: React.FC = () => {
                   }}
                   className="px-3 py-2.5 text-xs font-semibold text-slate-800 bg-slate-100 rounded-lg hover:bg-slate-200 cursor-pointer"
                 >
-                  {isAr ? 'تسجيل الدخول' : 'Connexion'}
+                  {uiText(isAr).common.connexion}
                 </button>
                 <Link
                   to={`${ROUTE_PATHS.REGISTER}?role=provider`}
                   className="px-3 py-2.5 text-center text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800"
                 >
-                  {isAr ? 'انضم كمعلم' : 'Devenir Maâlem'}
+                  {uiText(isAr).publicUi.devenirMaalem}
                 </Link>
               </div>
             </>
@@ -634,28 +625,28 @@ export const Navbar: React.FC = () => {
                 className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
               >
                 <Briefcase className="w-4 h-4 text-emerald-700" />
-                <span>{isAr ? 'طلبات الزبناء المنشورة' : 'Offres Clients'}</span>
+                <span>{uiText(isAr).publicUi.offresClients2}</span>
               </Link>
               <Link
                 to={ROUTE_PATHS.PROVIDER_MISSIONS}
                 className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
               >
                 <Wrench className="w-4 h-4 text-amber-700" />
-                <span>{isAr ? 'مهامي' : 'Mes Missions'}</span>
+                <span>{uiText(isAr).publicUi.mesMissions}</span>
               </Link>
               <Link
                 to={ROUTE_PATHS.PROVIDER_CARD}
                 className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
               >
                 <IdCard className="w-4 h-4 text-emerald-700" />
-                <span>{isAr ? 'بطاقتي المهنية' : 'Ma Fiche Maâlem'}</span>
+                <span>{uiText(isAr).publicUi.maFicheMaalem}</span>
               </Link>
               <Link
                 to={ROUTE_PATHS.PROVIDER_EARNINGS}
                 className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
               >
                 <Wallet className="w-4 h-4 text-slate-600" />
-                <span>{isAr ? 'الأرباح والسحب' : 'Revenus & Retraits'}</span>
+                <span>{uiText(isAr).publicUi.revenusRetraits}</span>
               </Link>
               <Link
                 to={ROUTE_PATHS.MESSAGES}
@@ -690,7 +681,7 @@ export const Navbar: React.FC = () => {
                 className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
               >
                 <UserIcon className="w-4 h-4 text-slate-500" />
-                <span>{isAr ? 'الإعدادات والحساب المزدوج' : 'Paramètres & Compte Double'}</span>
+                <span>{uiText(isAr).publicUi.parametresCompteDouble}</span>
               </Link>
               <div className="pt-2 border-t border-slate-100">
                 <button
@@ -714,7 +705,7 @@ export const Navbar: React.FC = () => {
                   className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
                 >
                   <Compass className="w-4 h-4 text-emerald-700" />
-                  <span>{isAr ? 'استكشف المعلمين' : 'Explorer les Maâlems'}</span>
+                  <span>{uiText(isAr).common.explorerLesMaalems}</span>
                 </Link>
               )}
               {isClientCapable && (
@@ -724,7 +715,7 @@ export const Navbar: React.FC = () => {
                 >
                   <span className="inline-flex items-center gap-2.5">
                     <LayoutDashboard className="w-4 h-4 text-emerald-700" />
-                    <span>{isAr ? 'فضاء الزبون' : 'Espace Client'}</span>
+                    <span>{uiText(isAr).publicUi.espaceClient}</span>
                   </span>
                   {clientActiveCount > 0 && (
                     <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800">
@@ -743,7 +734,7 @@ export const Navbar: React.FC = () => {
                   className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 flex items-center gap-2.5 cursor-pointer"
                 >
                   <Plus className="w-4 h-4 text-emerald-700" />
-                  <span>{isAr ? 'نشر طلب خدمة جديد' : 'Publier un besoin'}</span>
+                  <span>{uiText(isAr).common.publierUnBesoin}</span>
                 </button>
               )}
               {isDoubleAccount && (
@@ -792,7 +783,7 @@ export const Navbar: React.FC = () => {
                 className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
               >
                 <UserIcon className="w-4 h-4 text-slate-500" />
-                <span>{isAr ? 'ملفي الشخصي والأمان' : 'Mon Profil & Sécurité'}</span>
+                <span>{uiText(isAr).publicUi.monProfilSecurite}</span>
               </Link>
               {hasAdminAccess && (
                 <Link

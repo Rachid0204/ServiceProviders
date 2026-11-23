@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -21,6 +22,7 @@ import {
   limit,
   onSnapshot,
   doc,
+  getDoc,
   setDoc,
   serverTimestamp,
   type Timestamp,
@@ -34,6 +36,9 @@ import {
   isSafeImageUrl,
   type BookingRecord,
   type ChatMessageRecord,
+  type MoroccanCity,
+  type ServiceCategory,
+  type TimeSlot,
   type UserRole,
 } from '../../utils/marketplace';
 import { uploadMarketplacePhoto, revokePreviewObjectUrl } from '../../utils/storageUpload';
@@ -57,28 +62,28 @@ function getStatusBadge(status: BookingRecord['status'], isAr: boolean) {
   switch (status) {
     case 'pending':
       return {
-        label: isAr ? 'في الانتظار' : 'En attente',
+        label: uiText(isAr).messages.enAttente,
         cls: 'bg-amber-50 text-amber-800 border-amber-200',
       };
     case 'accepted':
       return {
-        label: isAr ? 'مقبول' : 'Confirmée',
+        label: uiText(isAr).messages.confirmee,
         cls: 'bg-sky-50 text-sky-800 border-sky-200',
       };
     case 'in_progress':
       return {
-        label: isAr ? 'قيد الإنجاز' : 'En cours',
+        label: uiText(isAr).messages.enCours,
         cls: 'bg-indigo-50 text-indigo-800 border-indigo-200',
       };
     case 'completed':
     case 'reviewed':
       return {
-        label: isAr ? 'مكتمل' : 'Terminée',
+        label: uiText(isAr).messages.terminee,
         cls: 'bg-emerald-50 text-emerald-800 border-emerald-200',
       };
     default:
       return {
-        label: isAr ? 'ملغى' : 'Annulée',
+        label: uiText(isAr).messages.annulee,
         cls: 'bg-slate-100 text-slate-600 border-slate-200',
       };
   }
@@ -94,6 +99,7 @@ export const MessagesInboxPage: React.FC = () => {
     isAr,
     firebaseUser,
     isVerified,
+    hasAdminAccess,
     userProfile,
     bookings,
     chatThreads,
@@ -109,6 +115,7 @@ export const MessagesInboxPage: React.FC = () => {
   const [messageLimit, setMessageLimit] = useState(50);
   const [firestoreMessages, setFirestoreMessages] = useState<ChatMessageRecord[]>([]);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [inspectedAdminBooking, setInspectedAdminBooking] = useState<BookingRecord | null>(null);
 
   const [draftText, setDraftText] = useState('');
   const [photoUrl, setPhotoUrl] = useState('');
@@ -124,6 +131,55 @@ export const MessagesInboxPage: React.FC = () => {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const currentUid = firebaseUser?.uid ?? '';
+
+  // Allow verified administrators inspecting a disputed booking to open its message history read-only (AUD-014)
+  useEffect(() => {
+    let active = true;
+    if (!routeBookingId || !hasAdminAccess || !firebaseUser || !isVerified) {
+      setInspectedAdminBooking(null);
+      return;
+    }
+    if (bookings.some((b) => b.id === routeBookingId)) {
+      setInspectedAdminBooking(null);
+      return;
+    }
+    void getDoc(doc(db, 'bookings', routeBookingId))
+      .then((snap) => {
+        if (!active || !snap.exists()) {
+          if (active) setInspectedAdminBooking(null);
+          return;
+        }
+        const data = snap.data();
+        setInspectedAdminBooking({
+          id: snap.id,
+          bookingRef: String(data.bookingRef || snap.id.slice(0, 8).toUpperCase()),
+          clientId: String(data.clientId || ''),
+          clientName: String(data.clientName || 'Client'),
+          clientPhone: String(data.clientPhone || ''),
+          providerId: String(data.providerId || ''),
+          providerName: String(data.providerName || 'Maâlem'),
+          providerPhone: String(data.providerPhone || ''),
+          category: (data.category as ServiceCategory) || 'Plomberie',
+          serviceType: String(data.serviceType || ''),
+          city: (data.city as MoroccanCity) || 'Casablanca',
+          neighborhood: String(data.neighborhood || ''),
+          addressPin: String(data.addressPin || ''),
+          description: String(data.description || ''),
+          preferredDate: String(data.preferredDate || ''),
+          preferredTimeSlot: (data.preferredTimeSlot as TimeSlot) || '09:00 - 12:00',
+          paymentMethod: data.paymentMethod === 'cmi_escrow' ? 'cmi_escrow' : 'cash_on_completion',
+          estimatedMad: Number(data.estimatedMad || 0),
+          status: (data.status as BookingRecord['status']) || 'pending',
+          createdAtIso: new Date().toISOString().slice(0, 10),
+        });
+      })
+      .catch(() => {
+        if (active) setInspectedAdminBooking(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [routeBookingId, hasAdminAccess, firebaseUser, isVerified, bookings]);
 
   // Sort conversations by latest message timestamp descending, then booking date
   const sortedBookings = useMemo(() => {
@@ -155,10 +211,20 @@ export const MessagesInboxPage: React.FC = () => {
 
   const selectedBooking = useMemo(() => {
     if (routeBookingId) {
-      return bookings.find((b) => b.id === routeBookingId) ?? null;
+      return (
+        bookings.find((b) => b.id === routeBookingId) ??
+        (inspectedAdminBooking?.id === routeBookingId ? inspectedAdminBooking : null)
+      );
     }
     return sortedBookings[0] ?? null;
-  }, [routeBookingId, bookings, sortedBookings]);
+  }, [routeBookingId, bookings, inspectedAdminBooking, sortedBookings]);
+
+  const isReadOnlyAdminView = Boolean(
+    selectedBooking &&
+      hasAdminAccess &&
+      selectedBooking.clientId !== currentUid &&
+      selectedBooking.providerId !== currentUid
+  );
 
   const selectedMeta = selectedBooking ? conversationsByBookingId[selectedBooking.id] : undefined;
   const isBlocked = Boolean(selectedMeta?.blockedByUid);
@@ -226,9 +292,7 @@ export const MessagesInboxPage: React.FC = () => {
       (err) => {
         reportFirestoreError(err, OperationType.LIST, `chats/${selectedBooking.id}/messages`);
         setThreadError(
-          isAr
-            ? 'تعذر تحميل الرسائل في الوقت الفعلي.'
-            : 'Impossible de charger les messages en temps réel.'
+          uiText(isAr).messages.impossibleDeChargerLesMessagesEn
         );
       }
     );
@@ -285,9 +349,7 @@ export const MessagesInboxPage: React.FC = () => {
       setThreadError(
         err instanceof Error
           ? err.message
-          : isAr
-          ? 'تعذر رفع الصورة.'
-          : 'Impossible de téléverser la photo.'
+          : uiText(isAr).common.impossibleDeTeleverserLaPhoto
       );
     } finally {
       setIsUploadingPhoto(false);
@@ -316,7 +378,7 @@ export const MessagesInboxPage: React.FC = () => {
     )
       .trim()
       .slice(0, 80);
-    const finalText = trimmed || (isAr ? '📷 صورة مرفقة' : '📷 Photo jointe');
+    const finalText = trimmed || (uiText(isAr).messages.photoJointe);
 
     try {
       if (isLiveThread) {
@@ -368,7 +430,7 @@ export const MessagesInboxPage: React.FC = () => {
     } catch (err) {
       reportFirestoreError(err, OperationType.CREATE, `chats/${selectedBooking.id}/messages/${msgId}`);
       setThreadError(
-        isAr ? 'تعذر إرسال الرسالة. يرجى المحاولة مجدداً.' : 'Impossible d’envoyer le message.'
+        uiText(isAr).messages.impossibleDEnvoyerLeMessage
       );
     } finally {
       setIsSending(false);
@@ -386,9 +448,7 @@ export const MessagesInboxPage: React.FC = () => {
       setReportFeedback(t.messagesReportSuccess);
     } catch {
       setThreadError(
-        isAr
-          ? 'يرجى إدخال تفاصيل كافية للإبلاغ (5 أحرف على الأقل).'
-          : 'Veuillez préciser au moins 5 caractères pour votre signalement.'
+        uiText(isAr).messages.veuillezPreciserAuMoins5Caracteres
       );
     } finally {
       setIsSubmittingReport(false);
@@ -486,7 +546,7 @@ export const MessagesInboxPage: React.FC = () => {
                           </span>
                           {isUnread && (
                             <span
-                              aria-label={isAr ? 'غير مقروء' : 'Non lu'}
+                              aria-label={uiText(isAr).messages.nonLu}
                               className="w-2 h-2 rounded-full bg-emerald-600 shrink-0"
                             />
                           )}
@@ -534,7 +594,7 @@ export const MessagesInboxPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => navigate(ROUTE_PATHS.MESSAGES)}
-                    aria-label={isAr ? 'رجوع' : 'Retour'}
+                    aria-label={uiText(isAr).messages.retour}
                     className="md:hidden p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 cursor-pointer"
                   >
                     <ArrowLeft className="w-4 h-4" />
@@ -658,7 +718,7 @@ export const MessagesInboxPage: React.FC = () => {
                             >
                               <img
                                 src={msg.photoUrl}
-                                alt={isAr ? 'صورة مرفقة' : 'Photo jointe'}
+                                alt={uiText(isAr).messages.photoJointe2}
                                 className="rounded-lg max-h-56 w-auto object-cover border border-black/10"
                               />
                             </a>
@@ -682,7 +742,11 @@ export const MessagesInboxPage: React.FC = () => {
               </div>
 
               {/* Composer */}
-              {isBlocked ? (
+              {isReadOnlyAdminView ? (
+                <div className="p-4 border-t border-slate-200 bg-slate-50 text-xs text-slate-700 font-medium">
+                  {uiText(isAr).messages.modeAuditAdministrateurLectureSeuleHistorique}
+                </div>
+              ) : isBlocked ? (
                 <div className="p-4 border-t border-slate-200 bg-amber-50 text-xs text-amber-900 flex items-center justify-between gap-3">
                   <span>{t.messagesBlockedNotice}</span>
                   {isBlockedByMe && (
@@ -707,7 +771,7 @@ export const MessagesInboxPage: React.FC = () => {
                   {photoUrl && (
                     <div className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-900">
                       <ImageIcon className="w-3.5 h-3.5" />
-                      <span>{isAr ? 'صورة جاهزة للإرسال' : 'Photo prête à être envoyée'}</span>
+                      <span>{uiText(isAr).messages.photoPreteAEtreEnvoyee}</span>
                       <button
                         type="button"
                         onClick={() => setPhotoUrl('')}
@@ -798,16 +862,16 @@ export const MessagesInboxPage: React.FC = () => {
                   className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg bg-white"
                 >
                   <option value="Comportement inapproprié">
-                    {isAr ? 'سلوك غير لائق' : 'Comportement inapproprié'}
+                    {uiText(isAr).messages.comportementInapproprie}
                   </option>
                   <option value="Spam ou sollicitation">
-                    {isAr ? 'رسائل مزعجة أو احتيال' : 'Spam ou tentative de fraude'}
+                    {uiText(isAr).messages.spamOuTentativeDeFraude}
                   </option>
                   <option value="Absence au rendez-vous">
-                    {isAr ? 'عدم الالتزام بالموعد' : 'Absence ou non-respect du rendez-vous'}
+                    {uiText(isAr).messages.absenceOuNonRespectDuRendez}
                   </option>
                   <option value="Autre motif">
-                    {isAr ? 'سبب آخر' : 'Autre motif'}
+                    {uiText(isAr).common.autreMotif}
                   </option>
                 </select>
               </div>

@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
@@ -21,32 +22,32 @@ function getDisputeStatusStyle(status: DisputeStatus, isAr: boolean) {
   switch (status) {
     case 'open':
       return {
-        label: isAr ? 'مفتوح' : 'Ouvert',
+        label: uiText(isAr).disputes.ouvert,
         cls: 'bg-amber-50 text-amber-800 border-amber-200',
       };
     case 'under_review':
       return {
-        label: isAr ? 'قيد الدراسة' : 'En cours d’examen',
+        label: uiText(isAr).disputes.enCoursDExamen,
         cls: 'bg-sky-50 text-sky-800 border-sky-200',
       };
     case 'waiting_for_client':
       return {
-        label: isAr ? 'في انتظار رد الزبون' : 'En attente du client',
+        label: uiText(isAr).disputes.enAttenteDuClient,
         cls: 'bg-purple-50 text-purple-800 border-purple-200',
       };
     case 'waiting_for_provider':
       return {
-        label: isAr ? 'في انتظار رد المعلم' : 'En attente du Maâlem',
+        label: uiText(isAr).disputes.enAttenteDuMaalem,
         cls: 'bg-purple-50 text-purple-800 border-purple-200',
       };
     case 'resolved':
       return {
-        label: isAr ? 'تم الحل' : 'Résolu',
+        label: uiText(isAr).disputes.resolu,
         cls: 'bg-emerald-50 text-emerald-800 border-emerald-200',
       };
     case 'closed':
       return {
-        label: isAr ? 'مغلق' : 'Clôturé',
+        label: uiText(isAr).disputes.cloture,
         cls: 'bg-slate-100 text-slate-600 border-slate-200',
       };
   }
@@ -55,17 +56,17 @@ function getDisputeStatusStyle(status: DisputeStatus, isAr: boolean) {
 function getReasonLabel(reason: DisputeReason, isAr: boolean): string {
   switch (reason) {
     case 'quality_issue':
-      return isAr ? 'جودة العمل غير مطابقة' : 'Qualité du travail non conforme';
+      return uiText(isAr).disputes.qualiteDuTravailNonConforme;
     case 'no_show':
-      return isAr ? 'عدم الحضور في الموعد' : 'Absence au rendez-vous (No-show)';
+      return uiText(isAr).disputes.absenceAuRendezVousNoShow;
     case 'pricing_mismatch':
-      return isAr ? 'اختلاف في التسعيرة المتفق عليها' : 'Écart par rapport au devis / tarif convenu';
+      return uiText(isAr).disputes.ecartParRapportAuDevisTarif;
     case 'property_damage':
-      return isAr ? 'ضرر مادي أثناء التدخل' : 'Dommage matériel constaté';
+      return uiText(isAr).disputes.dommageMaterielConstate;
     case 'payment_issue':
-      return isAr ? 'مشكل في الأداء أو الوصل' : 'Incident de règlement ou reçu';
+      return uiText(isAr).disputes.incidentDeReglementOuRecu;
     default:
-      return isAr ? 'سبب آخر' : 'Autre motif';
+      return uiText(isAr).common.autreMotif;
   }
 }
 
@@ -115,9 +116,7 @@ export const DisputesPage: React.FC = () => {
       setErrorMsg(
         err instanceof Error
           ? err.message
-          : isAr
-          ? 'تعذر رفع الدليل.'
-          : 'Impossible de téléverser le justificatif.'
+          : uiText(isAr).disputes.impossibleDeTeleverserLeJustificatif
       );
     } finally {
       setIsUploading(false);
@@ -133,7 +132,7 @@ export const DisputesPage: React.FC = () => {
     const booking = eligibleBookings.find((b) => b.id === selectedBookingId);
     if (!booking) {
       setErrorMsg(
-        isAr ? 'يرجى اختيار حجز صالح.' : 'Veuillez sélectionner une réservation existante.'
+        uiText(isAr).disputes.veuillezSelectionnerUneReservationExistante
       );
       return;
     }
@@ -153,9 +152,7 @@ export const DisputesPage: React.FC = () => {
       setErrorMsg(
         err instanceof Error
           ? err.message
-          : isAr
-          ? 'تعذر إرسال ملف النزاع.'
-          : 'Impossible d’ouvrir le litige.'
+          : uiText(isAr).disputes.impossibleDOuvrirLeLitige
       );
     } finally {
       setIsSubmitting(false);
@@ -202,7 +199,7 @@ export const DisputesPage: React.FC = () => {
           >
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {isAr ? 'الحجز المعني' : 'Réservation concernée'}
+                {uiText(isAr).disputes.reservationConcernee}
               </label>
               <select
                 value={selectedBookingId}
@@ -212,7 +209,7 @@ export const DisputesPage: React.FC = () => {
               >
                 {eligibleBookings.length === 0 ? (
                   <option value="">
-                    {isAr ? 'لا توجد حجوزات مؤهلة' : 'Aucune réservation disponible'}
+                    {uiText(isAr).disputes.aucuneReservationDisponible}
                   </option>
                 ) : (
                   eligibleBookings.map((b) => (
@@ -226,7 +223,7 @@ export const DisputesPage: React.FC = () => {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {isAr ? 'سبب النزاع' : 'Motif du litige'}
+                {uiText(isAr).disputes.motifDuLitige}
               </label>
               <select
                 value={reason}
@@ -243,7 +240,7 @@ export const DisputesPage: React.FC = () => {
 
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1">
-                {isAr ? 'وصف تفصيلي للواقعة' : 'Description détaillée'}
+                {uiText(isAr).disputes.descriptionDetaillee}
               </label>
               <textarea
                 rows={4}
@@ -253,9 +250,7 @@ export const DisputesPage: React.FC = () => {
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder={
-                  isAr
-                    ? 'اشرح بالتفصيل ما حدث مع ذكر التواريخ والتفاصيل...'
-                    : 'Expliquez précisément la situation (dates, travaux constatés, écarts éventuels)...'
+                  uiText(isAr).disputes.expliquezPrecisementLaSituationDatesTravaux
                 }
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
               />
@@ -272,7 +267,7 @@ export const DisputesPage: React.FC = () => {
                   }`}
                 >
                   <Camera className="w-3.5 h-3.5 text-emerald-700" />
-                  <span>{isUploading ? '...' : isAr ? 'إضافة صورة' : 'Joindre photo'}</span>
+                  <span>{isUploading ? '...' : uiText(isAr).disputes.joindrePhoto}</span>
                   <input
                     type="file"
                     accept="image/*"
@@ -321,7 +316,7 @@ export const DisputesPage: React.FC = () => {
         <section className="lg:col-span-7 bg-white border border-slate-200 rounded-2xl shadow-xs overflow-hidden">
           <div className="px-5 py-3.5 border-b border-slate-200 bg-slate-50/70 flex items-center justify-between">
             <span className="text-sm font-bold text-slate-900">
-              {isAr ? 'ملفات النزاع الخاصة بي' : 'Mes dossiers de médiation'} ({disputes.length})
+              {uiText(isAr).disputes.mesDossiersDeMediation} ({disputes.length})
             </span>
           </div>
 
@@ -377,7 +372,7 @@ export const DisputesPage: React.FC = () => {
                     {d.resolutionSummary && (
                       <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900">
                         <span className="font-semibold">
-                          {isAr ? 'قرار الوساطة: ' : 'Décision de médiation : '}
+                          {uiText(isAr).disputes.decisionDeMediation}
                         </span>
                         <span>{d.resolutionSummary}</span>
                       </div>

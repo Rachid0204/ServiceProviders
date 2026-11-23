@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React from 'react';
 import { ArrowLeft, ArrowRight, ShieldCheck, LogIn } from 'lucide-react';
 import type { User } from 'firebase/auth';
@@ -60,7 +61,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
           </div>
           <div className="space-y-1.5">
             <h1 className="text-xl font-bold text-slate-900">
-              {isAr ? 'سجّل الدخول لإدارة ملفك الشخصي' : 'Connectez-vous pour gérer votre profil'}
+              {uiText(isAr).profile.connectezVousPourGererVotreProfil}
             </h1>
             <p className="text-sm text-slate-600 max-w-md mx-auto">
               {t.localPreviewNotice}
@@ -73,14 +74,14 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
               className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 transition-colors cursor-pointer"
             >
               <LogIn className="w-4 h-4" />
-              <span>{isAr ? 'تسجيل الدخول / إنشاء حساب' : 'Connexion / Inscription'}</span>
+              <span>{uiText(isAr).profile.connexionInscription}</span>
             </button>
             <button
               type="button"
               onClick={onBack}
               className="px-5 py-2.5 text-sm font-semibold text-slate-700 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
             >
-              {isAr ? 'العودة للرئيسية' : 'Retour à l’accueil'}
+              {uiText(isAr).profile.retourALAccueil}
             </button>
           </div>
         </div>
@@ -99,12 +100,8 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
           <BackIcon className="w-4 h-4" />
           <span>
             {isPureProvider
-              ? isAr
-                ? 'العودة إلى فضاء المعلم'
-                : 'Retour à mon Espace Maâlem'
-              : isAr
-              ? 'العودة إلى لوحة التحكم'
-              : 'Retour à mon tableau de bord'}
+              ? uiText(isAr).profile.retourAMonEspaceMaalem
+              : uiText(isAr).profile.retourAMonTableauDeBord}
           </span>
         </button>
       </div>

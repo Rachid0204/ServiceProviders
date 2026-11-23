@@ -1,3 +1,4 @@
+import { uiText, interpolateCopy } from '../../i18n/uiCopy';
 import React, { useState, useMemo } from 'react';
 import {
   Search,
@@ -69,11 +70,11 @@ export const AdminUsersSection: React.FC<AdminUsersSectionProps> = ({
           <Search className="w-4 h-4 text-slate-400 absolute top-2.5 start-3 pointer-events-none" />
           <input
             type="search"
-            aria-label={isAr ? 'بحث في المستخدمين...' : 'Rechercher un utilisateur...'}
+            aria-label={uiText(isAr).admin.rechercherUnUtilisateur}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={
-              isAr ? 'الاسم، الهاتف +212، المدينة أو الحي...' : 'Nom, +212, ville ou quartier...'
+              uiText(isAr).admin.nom212VilleOuQuartier
             }
             className="w-full ps-9 pe-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
           />
@@ -96,20 +97,12 @@ export const AdminUsersSection: React.FC<AdminUsersSectionProps> = ({
               }`}
             >
               {r === 'ALL'
-                ? isAr
-                  ? `الكل (${users.length})`
-                  : `Tous (${users.length})`
+                ? interpolateCopy(uiText(isAr).admin.tous, { v0: users.length })
                 : r === 'client'
-                ? isAr
-                  ? 'الزبناء'
-                  : 'Clients'
+                ? uiText(isAr).admin.clients
                 : r === 'provider'
-                ? isAr
-                  ? 'المعلمون'
-                  : 'Maâlems'
-                : isAr
-                ? 'مزدوج (Both)'
-                : 'Double Rôle'}
+                ? uiText(isAr).admin.maalems
+                : uiText(isAr).admin.doubleRole}
             </button>
           ))}
         </div>
@@ -120,19 +113,19 @@ export const AdminUsersSection: React.FC<AdminUsersSectionProps> = ({
           <table className="w-full text-start border-collapse">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold text-slate-600">
-                <th className="py-3 px-4 text-start">{isAr ? 'المستخدم' : 'Utilisateur'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'الدور' : 'Rôle'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'الهاتف' : 'Téléphone'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'المدينة والحي' : 'Localisation'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'التوثيق' : 'Vérification CIN'}</th>
-                <th className="py-3 px-4 text-end">{isAr ? 'إجراء' : 'Action'}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.utilisateur}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.role}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.telephone}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.localisation}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.verificationCin}</th>
+                <th className="py-3 px-4 text-end">{uiText(isAr).admin.action}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-10 px-4 text-center text-slate-500">
-                    {isAr ? 'لا يوجد مستخدمون مطابقون.' : 'Aucun utilisateur trouvé.'}
+                    {uiText(isAr).admin.aucunUtilisateurTrouve}
                   </td>
                 </tr>
               ) : (
@@ -145,7 +138,7 @@ export const AdminUsersSection: React.FC<AdminUsersSectionProps> = ({
                           <span className="font-bold text-slate-900">{u.fullName}</span>
                           {isSuspended && (
                             <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 text-rose-800">
-                              {isAr ? 'معلق' : 'Suspendu'}
+                              {uiText(isAr).admin.suspendu}
                             </span>
                           )}
                         </div>
@@ -153,20 +146,18 @@ export const AdminUsersSection: React.FC<AdminUsersSectionProps> = ({
                       </td>
                       <td className="py-3 px-4 text-slate-700 font-medium whitespace-nowrap">
                         {u.role === 'both'
-                          ? `${isAr ? 'زبون ومعلم' : 'Client & Maâlem'}${
+                          ? `${uiText(isAr).admin.clientMaalem}${
                               u.specialty && u.specialty !== 'none'
                                 ? ` · ${t.categories[u.specialty]}`
                                 : ''
                             }`
                           : u.role === 'provider'
-                          ? `${isAr ? 'معلم' : 'Maâlem'}${
+                          ? `${uiText(isAr).common.maalem}${
                               u.specialty && u.specialty !== 'none'
                                 ? ` · ${t.categories[u.specialty]}`
                                 : ''
                             }`
-                          : isAr
-                          ? 'زبون'
-                          : 'Client'}
+                          : uiText(isAr).common.client}
                       </td>
                       <td className="py-3 px-4 font-mono-tabular text-slate-700 whitespace-nowrap" dir="ltr">
                         {u.phone}
@@ -178,10 +169,10 @@ export const AdminUsersSection: React.FC<AdminUsersSectionProps> = ({
                         {u.verifiedBadge ? (
                           <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
                             <ShieldCheck className="w-3.5 h-3.5" />
-                            <span>{isAr ? 'موثق' : 'Vérifié'}</span>
+                            <span>{uiText(isAr).admin.verifie}</span>
                           </span>
                         ) : (
-                          <span className="text-slate-500">{isAr ? 'غير موثق' : 'Standard'}</span>
+                          <span className="text-slate-500">{uiText(isAr).admin.standard}</span>
                         )}
                       </td>
                       <td className="py-3 px-4 text-end whitespace-nowrap">
@@ -192,12 +183,8 @@ export const AdminUsersSection: React.FC<AdminUsersSectionProps> = ({
                             className="px-3 py-1.5 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
                           >
                             {u.verifiedBadge
-                              ? isAr
-                                ? 'إلغاء الشارة'
-                                : 'Retirer badge'
-                              : isAr
-                              ? 'تفعيل التوثيق'
-                              : 'Vérifier CIN'}
+                              ? uiText(isAr).admin.retirerBadge
+                              : uiText(isAr).admin.verifierCin}
                           </button>
                           {onToggleUserSuspension && (
                             <button
@@ -210,12 +197,8 @@ export const AdminUsersSection: React.FC<AdminUsersSectionProps> = ({
                               }`}
                             >
                               {isSuspended
-                                ? isAr
-                                  ? 'إعادة التفعيل'
-                                  : 'Réactiver'
-                                : isAr
-                                ? 'تعليق'
-                                : 'Suspendre'}
+                                ? uiText(isAr).admin.reactiver
+                                : uiText(isAr).admin.suspendre}
                             </button>
                           )}
                         </div>
@@ -277,24 +260,24 @@ export const AdminReviewsSection: React.FC<AdminReviewsSectionProps> = ({
           <Search className="w-4 h-4 text-slate-400 absolute top-2.5 start-3 pointer-events-none" />
           <input
             type="search"
-            aria-label={isAr ? 'بحث في التقييمات...' : 'Rechercher un avis...'}
+            aria-label={uiText(isAr).admin.rechercherUnAvis}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={
-              isAr ? 'ابحث في نص التعليق، الزبون أو المعلم...' : 'Commentaire, client ou Maâlem...'
+              uiText(isAr).admin.commentaireClientOuMaalem
             }
             className="w-full ps-9 pe-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
           />
         </div>
 
         <select
-          aria-label={isAr ? 'تصفية حسب النجوم' : 'Filtrer par note'}
+          aria-label={uiText(isAr).admin.filtrerParNote}
           value={minStars}
           onChange={(e) => setMinStars(Number(e.target.value))}
           className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
         >
           <option value={0}>
-            {isAr ? `جميع التقييمات (${reviews.length})` : `Toutes les notes (${reviews.length})`}
+            {interpolateCopy(uiText(isAr).admin.toutesLesNotes, { v0: reviews.length })}
           </option>
           {[5, 4, 3, 2, 1].map((s) => (
             <option key={s} value={s}>
@@ -309,19 +292,19 @@ export const AdminReviewsSection: React.FC<AdminReviewsSectionProps> = ({
           <table className="w-full text-start border-collapse">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold text-slate-600">
-                <th className="py-3 px-4 text-start">{isAr ? 'التاريخ' : 'Date'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'الزبون' : 'Client'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'المعلم' : 'Maâlem'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'النقطة' : 'Note'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'التعليق' : 'Commentaire'}</th>
-                <th className="py-3 px-4 text-end">{isAr ? 'مراقبة' : 'Modération'}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.date}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.client}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.maalem}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.note2}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.commentaire}</th>
+                <th className="py-3 px-4 text-end">{uiText(isAr).admin.moderation}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="py-10 px-4 text-center text-slate-500">
-                    {isAr ? 'لا توجد تقييمات لعرضها.' : 'Aucun avis client à modérer.'}
+                    {uiText(isAr).admin.aucunAvisClientAModerer}
                   </td>
                 </tr>
               ) : (
@@ -355,11 +338,11 @@ export const AdminReviewsSection: React.FC<AdminReviewsSectionProps> = ({
                       <button
                         type="button"
                         onClick={() => onDeleteReview(r)}
-                        aria-label={`${isAr ? 'حذف تقييم' : 'Supprimer avis'} ${r.authorName}`}
+                        aria-label={`${uiText(isAr).admin.supprimerAvis} ${r.authorName}`}
                         className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
-                        <span>{isAr ? 'حذف' : 'Supprimer'}</span>
+                        <span>{uiText(isAr).common.supprimer}</span>
                       </button>
                     </td>
                   </tr>
@@ -394,13 +377,13 @@ export const AdminWithdrawalsSection: React.FC<AdminWithdrawalsSectionProps> = (
   const getStatusLabel = (st: WithdrawalStatus) => {
     switch (st) {
       case 'pending':
-        return isAr ? 'قيد المراجعة' : 'En attente';
+        return uiText(isAr).admin.enAttente;
       case 'approved':
-        return isAr ? 'تم التحويل' : 'Approuvé';
+        return uiText(isAr).admin.approuve;
       case 'frozen':
-        return isAr ? 'مجمد للمراقبة' : 'Gelé (KYC/Litige)';
+        return uiText(isAr).admin.geleKycLitige;
       case 'rejected':
-        return isAr ? 'مرفوض' : 'Rejeté';
+        return uiText(isAr).admin.rejete;
     }
   };
 
@@ -410,13 +393,11 @@ export const AdminWithdrawalsSection: React.FC<AdminWithdrawalsSectionProps> = (
         <div className="flex items-center gap-2">
           <Landmark className="w-4 h-4 text-emerald-700" />
           <h2 className="text-sm font-bold text-slate-900">
-            {isAr
-              ? 'طلبات سحب الأرباح والتحويلات البنكية (RIB المغرب)'
-              : 'Demandes de Retrait & Virements Bancaires (RIB Maroc)'}
+            {uiText(isAr).admin.demandesDeRetraitVirementsBancairesRib}
           </h2>
         </div>
         <span className="text-xs font-mono-tabular text-slate-500">
-          {withdrawals.length} {isAr ? 'طلبات' : 'demandes'}
+          {withdrawals.length} {uiText(isAr).admin.demandes}
         </span>
       </div>
 
@@ -424,21 +405,19 @@ export const AdminWithdrawalsSection: React.FC<AdminWithdrawalsSectionProps> = (
         <table className="w-full text-start border-collapse">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold text-slate-600">
-              <th className="py-3 px-4 text-start">{isAr ? 'المرجع والتاريخ' : 'Réf & Date'}</th>
-              <th className="py-3 px-4 text-start">{isAr ? 'المعلم والمدينة' : 'Maâlem & Ville'}</th>
-              <th className="py-3 px-4 text-start">{isAr ? 'البنك و RIB' : 'Banque & RIB'}</th>
-              <th className="py-3 px-4 text-end">{isAr ? 'المبلغ (MAD)' : 'Montant (MAD)'}</th>
-              <th className="py-3 px-4 text-start">{isAr ? 'الحالة' : 'Statut'}</th>
-              <th className="py-3 px-4 text-end">{isAr ? 'إجراءات' : 'Actions'}</th>
+              <th className="py-3 px-4 text-start">{uiText(isAr).admin.refDate}</th>
+              <th className="py-3 px-4 text-start">{uiText(isAr).admin.maalemVille}</th>
+              <th className="py-3 px-4 text-start">{uiText(isAr).admin.banqueRib}</th>
+              <th className="py-3 px-4 text-end">{uiText(isAr).admin.montantMad}</th>
+              <th className="py-3 px-4 text-start">{uiText(isAr).admin.statut}</th>
+              <th className="py-3 px-4 text-end">{uiText(isAr).admin.actions}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs">
             {withdrawals.length === 0 ? (
               <tr>
                 <td colSpan={6} className="py-10 px-4 text-center text-slate-500">
-                  {isAr
-                    ? 'لا توجد طلبات سحب مسجلة حالياً.'
-                    : 'Aucune demande de retrait enregistrée pour le moment.'}
+                  {uiText(isAr).admin.aucuneDemandeDeRetraitEnregistreePour}
                 </td>
               </tr>
             ) : (
@@ -490,7 +469,7 @@ export const AdminWithdrawalsSection: React.FC<AdminWithdrawalsSectionProps> = (
                       className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 disabled:opacity-40 rounded-lg cursor-pointer"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>{isAr ? 'موافقة' : 'Approuver'}</span>
+                      <span>{uiText(isAr).admin.approuver}</span>
                     </button>
                     <button
                       type="button"
@@ -499,7 +478,7 @@ export const AdminWithdrawalsSection: React.FC<AdminWithdrawalsSectionProps> = (
                       className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 disabled:opacity-40 rounded-lg cursor-pointer"
                     >
                       <Snowflake className="w-3.5 h-3.5" />
-                      <span>{isAr ? 'تجميد' : 'Geler'}</span>
+                      <span>{uiText(isAr).admin.geler}</span>
                     </button>
                     <button
                       type="button"
@@ -508,7 +487,7 @@ export const AdminWithdrawalsSection: React.FC<AdminWithdrawalsSectionProps> = (
                       className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 disabled:opacity-40 rounded-lg cursor-pointer"
                     >
                       <XCircle className="w-3.5 h-3.5" />
-                      <span>{isAr ? 'رفض' : 'Rejeter'}</span>
+                      <span>{uiText(isAr).admin.rejeter}</span>
                     </button>
                   </div>
                 </td>
@@ -580,14 +559,10 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
           <Settings className="w-5 h-5 text-emerald-700" />
           <div>
             <h2 className="text-base font-bold text-slate-900">
-              {isAr
-                ? 'إعدادات النظام وقواعد الضمان المالي (CMI Escrow)'
-                : 'Paramètres Système & Règles Séquestre CMI'}
+              {uiText(isAr).admin.parametresSystemeReglesSequestreCmi}
             </h2>
             <p className="text-xs text-slate-500">
-              {isAr
-                ? `آخر تحديث بواسطة ${settings.updatedByEmail} (${settings.updatedAtIso})`
-                : `Dernière mise à jour par ${settings.updatedByEmail} (${settings.updatedAtIso})`}
+              {interpolateCopy(uiText(isAr).admin.derniereMiseAJourPar, { v0: settings.updatedByEmail, v1: settings.updatedAtIso })}
             </p>
           </div>
         </div>
@@ -610,22 +585,14 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
         <div className="space-y-0.5">
           <div className="font-semibold">
             {appCheckStatus.active
-              ? isAr
-                ? 'Firebase App Check : مفعّل (reCAPTCHA v3)'
-                : 'Firebase App Check : Actif (reCAPTCHA v3)'
+              ? uiText(isAr).admin.firebaseAppCheckActifRecaptchaV3
               : appCheckStatus.siteKeyPresent
-              ? isAr
-                ? 'Firebase App Check : مفتاح reCAPTCHA موجود (في انتظار التهيئة)'
-                : 'Firebase App Check : Clé reCAPTCHA détectée (initialisation en attente)'
-              : isAr
-              ? 'Firebase App Check : غير مهيأ في هذه البيئة'
-              : 'Firebase App Check : Non configuré (VITE_FIREBASE_RECAPTCHA_SITE_KEY absente)'}
+              ? uiText(isAr).admin.firebaseAppCheckCleRecaptchaDetectee
+              : uiText(isAr).admin.firebaseAppCheckNonConfigureVite}
           </div>
           {!appCheckStatus.active && (
             <p className="text-[11px] opacity-90">
-              {isAr
-                ? 'لتفعيل الحماية ضد الاستخراج الآلي للبيانات، أضف المتغير VITE_FIREBASE_RECAPTCHA_SITE_KEY في إعدادات Vercel وفعّل App Check Enforcement في لوحة Firebase.'
-                : 'Pour protéger Firestore contre le scraping automatisé, provisionnez VITE_FIREBASE_RECAPTCHA_SITE_KEY sur Vercel puis activez l’enforcement dans la console Firebase.'}
+              {uiText(isAr).admin.pourProtegerFirestoreContreLeScraping}
             </p>
           )}
         </div>
@@ -638,7 +605,7 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
               htmlFor="setting-platform-fee"
               className="block font-semibold text-slate-700 mb-1"
             >
-              {isAr ? 'نسبة عمولة المنصة (%)' : 'Commission Plateforme (%)'}
+              {uiText(isAr).admin.commissionPlateforme}
             </label>
             <input
               id="setting-platform-fee"
@@ -656,7 +623,7 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
               htmlFor="setting-min-withdrawal"
               className="block font-semibold text-slate-700 mb-1"
             >
-              {isAr ? 'الحد الأدنى للسحب البنكي (MAD)' : 'Seuil minimum de retrait (MAD)'}
+              {uiText(isAr).admin.seuilMinimumDeRetraitMad}
             </label>
             <input
               id="setting-min-withdrawal"
@@ -676,7 +643,7 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
             htmlFor="setting-support-phone"
             className="block font-semibold text-slate-700 mb-1"
           >
-            {isAr ? 'رقم واتساب خدمة الزبناء (+212)' : 'Numéro WhatsApp Support (+212)'}
+            {uiText(isAr).admin.numeroWhatsappSupport212}
           </label>
           <input
             id="setting-support-phone"
@@ -697,9 +664,7 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
               className="w-4 h-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
             />
             <span className="font-medium text-slate-800">
-              {isAr
-                ? 'استرجاع تلقائي 100% لضمان CMI عند اعتذار أو إلغاء المعلم'
-                : 'Remboursement automatique CMI (100%) en cas d’annulation par le Maâlem'}
+              {uiText(isAr).admin.remboursementAutomatiqueCmi100EnCas}
             </span>
           </label>
 
@@ -711,9 +676,7 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
               className="w-4 h-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
             />
             <span className="font-medium text-slate-800">
-              {isAr
-                ? 'إلزامية توثيق البطاقة الوطنية (CIN) قبل تحويل أرباح الضمان'
-                : 'Exiger le badge CIN vérifié pour débloquer les virements bancaires RIB'}
+              {uiText(isAr).admin.exigerLeBadgeCinVerifiePour}
             </span>
           </label>
         </div>
@@ -726,7 +689,7 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
           >
             <Save className="w-4 h-4" />
             <span>
-              {isAr ? 'حفظ إعدادات النظام' : 'Enregistrer les paramètres'}
+              {uiText(isAr).admin.enregistrerLesParametres}
             </span>
           </button>
         </div>
@@ -770,13 +733,11 @@ export const AdminAuditSection: React.FC<AdminAuditSectionProps> = ({ lang, logs
         <div className="flex items-center gap-2">
           <History className="w-4 h-4 text-emerald-700" />
           <h2 className="text-sm font-bold text-slate-900">
-            {isAr
-              ? 'سجل التدقيق غير القابل للتعديل (adminLogs)'
-              : 'Journal d’audit administratif immuable (adminLogs)'}
+            {uiText(isAr).admin.journalDAuditAdministratifImmuableAdminlogs}
           </h2>
         </div>
         <span className="text-xs font-mono-tabular text-slate-500">
-          {logs.length} {isAr ? 'سجلات' : 'entrées'}
+          {logs.length} {uiText(isAr).admin.entrees}
         </span>
       </div>
 
@@ -784,18 +745,18 @@ export const AdminAuditSection: React.FC<AdminAuditSectionProps> = ({ lang, logs
         <table className="w-full text-start border-collapse">
           <thead>
             <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold text-slate-600">
-              <th className="py-3 px-4 text-start">{isAr ? 'التاريخ والوقت' : 'Horodatage'}</th>
-              <th className="py-3 px-4 text-start">{isAr ? 'نوع الإجراء' : 'Action'}</th>
-              <th className="py-3 px-4 text-start">{isAr ? 'الهدف' : 'Cible'}</th>
-              <th className="py-3 px-4 text-start">{isAr ? 'التفاصيل' : 'Résumé'}</th>
-              <th className="py-3 px-4 text-start">{isAr ? 'المشرف' : 'Administrateur'}</th>
+              <th className="py-3 px-4 text-start">{uiText(isAr).admin.horodatage}</th>
+              <th className="py-3 px-4 text-start">{uiText(isAr).admin.action2}</th>
+              <th className="py-3 px-4 text-start">{uiText(isAr).admin.cible}</th>
+              <th className="py-3 px-4 text-start">{uiText(isAr).admin.resume}</th>
+              <th className="py-3 px-4 text-start">{uiText(isAr).admin.administrateur}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 text-xs">
             {logs.length === 0 ? (
               <tr>
                 <td colSpan={5} className="py-10 px-4 text-center text-slate-500">
-                  {isAr ? 'لا توجد عمليات مسجلة بعد.' : 'Aucune action enregistrée.'}
+                  {uiText(isAr).admin.aucuneActionEnregistree}
                 </td>
               </tr>
             ) : (

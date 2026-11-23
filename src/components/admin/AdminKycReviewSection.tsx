@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React, { useState, useMemo } from 'react';
 import {
   ShieldCheck,
@@ -29,27 +30,27 @@ function getKycBadge(status: KycVerificationStatus, isAr: boolean) {
   switch (status) {
     case 'verified':
       return {
-        label: isAr ? 'موثق' : 'Vérifié',
+        label: uiText(isAr).admin.verifie,
         cls: 'bg-emerald-50 text-emerald-800 border-emerald-200',
       };
     case 'under_review':
       return {
-        label: isAr ? 'قيد المراجعة' : 'En cours d’examen',
+        label: uiText(isAr).admin.enCoursDExamen,
         cls: 'bg-sky-50 text-sky-800 border-sky-200',
       };
     case 'rejected':
       return {
-        label: isAr ? 'مرفوض' : 'Rejeté',
+        label: uiText(isAr).admin.rejete,
         cls: 'bg-rose-50 text-rose-800 border-rose-200',
       };
     case 'resubmission_required':
       return {
-        label: isAr ? 'إعادة الإرسال مطلوبة' : 'Pièces à renvoyer',
+        label: uiText(isAr).admin.piecesARenvoyer,
         cls: 'bg-amber-50 text-amber-800 border-amber-200',
       };
     default:
       return {
-        label: isAr ? 'مُودع للتحقق' : 'Soumis',
+        label: uiText(isAr).admin.soumis,
         cls: 'bg-amber-50 text-amber-800 border-amber-200',
       };
   }
@@ -107,14 +108,10 @@ export const AdminKycReviewSection: React.FC<AdminKycReviewSectionProps> = ({
         <Lock className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
         <div>
           <span className="font-bold">
-            {isAr
-              ? 'حماية المعطيات الشخصية (القانون 09-08 / CNDP): '
-              : 'Conformité Loi 09-08 / CNDP : '}
+            {uiText(isAr).admin.conformiteLoi0908Cndp}
           </span>
           <span>
-            {isAr
-              ? 'كل معاينة لوثائق البطاقة الوطنية أو الشهادات تُسجل تلقائياً في سجل التدقيق الأمني.'
-              : 'Chaque consultation d’une pièce CIN ou d’un diplôme privé est automatiquement journalisée dans le journal d’audit.'}
+            {uiText(isAr).admin.chaqueConsultationDUnePieceCin}
           </span>
         </div>
       </div>
@@ -147,9 +144,7 @@ export const AdminKycReviewSection: React.FC<AdminKycReviewSectionProps> = ({
         <div className="bg-white border border-slate-200 rounded-xl p-10 text-center text-xs text-slate-500 space-y-2">
           <ShieldCheck className="w-8 h-8 text-slate-300 mx-auto" />
           <p>
-            {isAr
-              ? 'لا توجد ملفات بطاقة وطنية في هذه الفئة حالياً.'
-              : 'Aucun dossier KYC privé dans cette catégorie pour le moment.'}
+            {uiText(isAr).admin.aucunDossierKycPriveDansCette}
           </p>
         </div>
       ) : (
@@ -158,13 +153,13 @@ export const AdminKycReviewSection: React.FC<AdminKycReviewSectionProps> = ({
             const badge = getKycBadge(record.status, isAr);
             const isBusy = busyUid === record.uid;
             const docLinks = [
-              { label: isAr ? 'البطاقة الوطنية (الوجه)' : 'CIN Recto', url: record.cinFrontUrl },
-              { label: isAr ? 'البطاقة الوطنية (الظهر)' : 'CIN Verso', url: record.cinBackUrl },
+              { label: uiText(isAr).admin.cinRecto, url: record.cinFrontUrl },
+              { label: uiText(isAr).admin.cinVerso, url: record.cinBackUrl },
               ...(record.certificateUrl
-                ? [{ label: isAr ? 'شهادة / دبلوم' : 'Diplôme / Certificat', url: record.certificateUrl }]
+                ? [{ label: uiText(isAr).admin.diplomeCertificat, url: record.certificateUrl }]
                 : []),
               ...(record.businessLicenseUrl
-                ? [{ label: isAr ? 'رخصة مهنية' : 'Patente / Licence', url: record.businessLicenseUrl }]
+                ? [{ label: uiText(isAr).admin.patenteLicence, url: record.businessLicenseUrl }]
                 : []),
             ];
 
@@ -184,7 +179,7 @@ export const AdminKycReviewSection: React.FC<AdminKycReviewSectionProps> = ({
                     </div>
                     {record.submittedAtIso && (
                       <div className="text-[11px] text-slate-500 mt-1">
-                        {isAr ? 'تاريخ الإيداع: ' : 'Déposé le : '}
+                        {uiText(isAr).admin.deposeLe}
                         {record.submittedAtIso}
                       </div>
                     )}
@@ -222,9 +217,7 @@ export const AdminKycReviewSection: React.FC<AdminKycReviewSectionProps> = ({
                       setReasonByUid((prev) => ({ ...prev, [record.uid]: e.target.value }))
                     }
                     placeholder={
-                      isAr
-                        ? 'ملاحظة أو سبب الرفض / طلب إعادة الإرسال (اختياري)...'
-                        : 'Motif de rejet ou commentaire de vérification (optionnel)...'
+                      uiText(isAr).admin.motifDeRejetOuCommentaireDe
                     }
                     className="flex-1 px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
                   />
@@ -238,7 +231,7 @@ export const AdminKycReviewSection: React.FC<AdminKycReviewSectionProps> = ({
                       className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg disabled:opacity-50 cursor-pointer"
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>{isAr ? 'موافقة وتوثيق' : 'Approuver CIN'}</span>
+                      <span>{uiText(isAr).admin.approuverCin2}</span>
                     </button>
                     <button
                       type="button"
@@ -249,7 +242,7 @@ export const AdminKycReviewSection: React.FC<AdminKycReviewSectionProps> = ({
                       className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg disabled:opacity-50 cursor-pointer"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
-                      <span>{isAr ? 'طلب إعادة إرسال' : 'Redemander'}</span>
+                      <span>{uiText(isAr).admin.redemander}</span>
                     </button>
                     <button
                       type="button"
@@ -260,7 +253,7 @@ export const AdminKycReviewSection: React.FC<AdminKycReviewSectionProps> = ({
                       className="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg disabled:opacity-50 cursor-pointer"
                     >
                       <XCircle className="w-3.5 h-3.5" />
-                      <span>{isAr ? 'رفض' : 'Rejeter'}</span>
+                      <span>{uiText(isAr).admin.rejeter}</span>
                     </button>
                   </div>
                 </div>

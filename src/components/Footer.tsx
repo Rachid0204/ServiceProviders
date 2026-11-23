@@ -1,3 +1,4 @@
+import { uiText } from '../i18n/uiCopy';
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
@@ -24,7 +25,7 @@ export const Footer: React.FC = () => {
 
             <div className="space-y-2.5">
               <div className="font-bold text-slate-900">
-                {isAr ? 'الخدمات الرئيسية' : 'Métiers & Services'}
+                {uiText(isAr).publicUi.metiersServices}
               </div>
               <ul className="space-y-1.5 text-slate-600">
                 {SERVICE_CATEGORIES.map((cat) => (
@@ -42,7 +43,7 @@ export const Footer: React.FC = () => {
 
             <div className="space-y-2.5">
               <div className="font-bold text-slate-900">
-                {isAr ? 'المدن المغطاة' : 'Villes desservies'}
+                {uiText(isAr).publicUi.villesDesservies}
               </div>
               <ul className="space-y-1.5 text-slate-600">
                 {MOROCCAN_CITIES.map((city) => (
@@ -60,7 +61,7 @@ export const Footer: React.FC = () => {
 
             <div className="space-y-2.5">
               <div className="font-bold text-slate-900">
-                {isAr ? 'الحساب والدعم' : 'Espaces & Support'}
+                {uiText(isAr).publicUi.espacesSupport}
               </div>
               <ul className="space-y-1.5 text-slate-600">
                 <li>
@@ -68,7 +69,7 @@ export const Footer: React.FC = () => {
                     to={firebaseUser ? ROUTE_PATHS.CUSTOMER_DASHBOARD : ROUTE_PATHS.LOGIN}
                     className="hover:text-emerald-700 hover:underline"
                   >
-                    {isAr ? 'فضاء الزبون' : 'Espace Client'}
+                    {uiText(isAr).publicUi.espaceClient}
                   </Link>
                 </li>
                 <li>
@@ -91,7 +92,7 @@ export const Footer: React.FC = () => {
                       rel="noopener noreferrer"
                       className="hover:text-emerald-700 hover:underline"
                     >
-                      {isAr ? 'دعم واتساب المباشر' : 'Support WhatsApp'}
+                      {uiText(isAr).publicUi.supportWhatsapp}
                     </a>
                   </li>
                 )}
@@ -112,14 +113,14 @@ export const Footer: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs text-slate-600">
             <div>
               <span className="font-bold text-slate-900">{t.brandName}</span> —{' '}
-              {isAr ? 'فضاء المعلمين ومقدمي الخدمات المعتمدين' : 'Espace Pro Maâlems — Maroc'}
+              {uiText(isAr).publicUi.espaceProMaalemsMaroc}
             </div>
             <div className="flex flex-wrap items-center gap-4">
               <Link
                 to={ROUTE_PATHS.CUSTOMER_PROFILE}
                 className="hover:text-emerald-700 hover:underline"
               >
-                {isAr ? 'تفعيل الحساب المزدوج' : 'Activer un compte double (Client & Maâlem)'}
+                {uiText(isAr).publicUi.activerUnCompteDoubleClientMaalem}
               </Link>
               {supportWhatsAppUrl && (
                 <a
@@ -128,7 +129,7 @@ export const Footer: React.FC = () => {
                   rel="noopener noreferrer"
                   className="hover:text-emerald-700 hover:underline"
                 >
-                  {isAr ? 'دعم واتساب للمعلمين' : 'Support Maâlems WhatsApp'}
+                  {uiText(isAr).publicUi.supportMaalemsWhatsapp}
                 </a>
               )}
             </div>
@@ -139,18 +140,16 @@ export const Footer: React.FC = () => {
           <div className="flex flex-wrap items-center gap-4">
             <span>{t.footerRights}</span>
             <Link to={ROUTE_PATHS.TERMS} className="hover:text-emerald-700 hover:underline">
-              {isAr ? 'شروط الاستخدام' : 'CGU'}
+              {uiText(isAr).common.cgu}
             </Link>
             <Link to={ROUTE_PATHS.PRIVACY} className="hover:text-emerald-700 hover:underline">
-              {isAr ? 'الخصوصية (قانون 09-08)' : 'Confidentialité (Loi 09-08)'}
+              {uiText(isAr).common.confidentialiteLoi0908}
             </Link>
           </div>
           <span className="inline-flex items-center gap-1.5 text-emerald-700 font-medium">
             <ShieldCheck className="w-4 h-4" />
             <span>
-              {isAr
-                ? 'منصة مغربية موثوقة — التحقق من الهوية والشفافية في الأثمنة'
-                : 'Plateforme marocaine vérifiée — Identité contrôlée & tarifs transparents'}
+              {uiText(isAr).publicUi.plateformeMarocaineVerifieeIdentiteControleeTarifs}
             </span>
           </span>
         </div>

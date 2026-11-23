@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React, { useState } from 'react';
 import {
   Plus,
@@ -33,15 +34,15 @@ interface ProviderServicesManagerProps {
 export function getPricingModelLabel(model: ServicePricingModel, isAr: boolean): string {
   switch (model) {
     case 'fixed':
-      return isAr ? 'سعر محدد (ثابت)' : 'Forfait fixe';
+      return uiText(isAr).provider.forfaitFixe;
     case 'hourly':
-      return isAr ? 'بالساعة' : 'Tarif horaire';
+      return uiText(isAr).provider.tarifHoraire;
     case 'starting_from':
-      return isAr ? 'ابتداءً من' : 'À partir de';
+      return uiText(isAr).provider.aPartirDe;
     case 'quote_required':
-      return isAr ? 'حسب عرض الثمن' : 'Sur devis';
+      return uiText(isAr).provider.surDevis;
     case 'callout_plus_work':
-      return isAr ? 'التنقل + اليد العاملة' : 'Déplacement + main-d’œuvre';
+      return uiText(isAr).provider.deplacementMainDUvre;
   }
 }
 
@@ -89,9 +90,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
         setTitleAr('');
         setDescriptionFr('');
         setSuccessMsg(
-          isAr
-            ? 'تم نشر الخدمة بنجاح في ملفك المهني!'
-            : 'Service publié avec succès sur votre fiche Maâlem !'
+          uiText(isAr).provider.servicePublieAvecSuccesSurVotre
         );
       }
     } finally {
@@ -104,9 +103,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
       {!hasProviderProfile && (
         <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900">
           <span>
-            {isAr
-              ? 'يرجى حفظ بطاقتك المهنية أولاً قبل نشر خدماتك التفصيلية.'
-              : 'Enregistrez d’abord votre Fiche Maâlem avant de publier des services détaillés.'}
+            {uiText(isAr).provider.enregistrezDAbordVotreFicheMaalem}
           </span>
           {onGoToCardSetup && (
             <button
@@ -114,7 +111,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
               onClick={onGoToCardSetup}
               className="px-3.5 py-2 rounded-lg bg-amber-700 text-white font-semibold hover:bg-amber-800 shrink-0 cursor-pointer"
             >
-              {isAr ? 'إعداد بطاقتي' : 'Compléter ma Fiche'}
+              {uiText(isAr).provider.completerMaFiche}
             </button>
           )}
         </div>
@@ -128,7 +125,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
         <div className="flex items-center gap-2">
           <Plus className="w-5 h-5 text-emerald-700" />
           <h2 className="text-base font-bold text-slate-900">
-            {isAr ? 'إضافة خدمة جديدة إلى قائمتك' : 'Publier une prestation sur votre catalogue'}
+            {uiText(isAr).provider.publierUnePrestationSurVotreCatalogue}
           </h2>
         </div>
 
@@ -148,7 +145,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-1">
             <label className="block text-xs font-semibold text-slate-700">
-              {isAr ? 'الفئة المهنية' : 'Catégorie'}
+              {uiText(isAr).provider.categorie}
             </label>
             <select
               value={category}
@@ -165,7 +162,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
 
           <div className="space-y-1">
             <label className="block text-xs font-semibold text-slate-700">
-              {isAr ? 'نموذج التسعير' : 'Modèle de tarification'}
+              {uiText(isAr).provider.modeleDeTarification}
             </label>
             <select
               value={pricingModel}
@@ -182,7 +179,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
 
           <div className="space-y-1">
             <label className="block text-xs font-semibold text-slate-700">
-              {isAr ? 'عنوان الخدمة (فرنسية / عام)' : 'Intitulé du service'}
+              {uiText(isAr).provider.intituleDuService}
             </label>
             <input
               type="text"
@@ -192,9 +189,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
               value={titleFr}
               onChange={(e) => setTitleFr(e.target.value)}
               placeholder={
-                isAr
-                  ? 'مثال: تركيب أو إصلاح سخان الماء'
-                  : 'Ex: Installation & détartrage chauffe-eau électrique'
+                uiText(isAr).provider.exInstallationDetartrageChauffeEauElectrique
               }
               className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-emerald-600"
             />
@@ -202,7 +197,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
 
           <div className="space-y-1">
             <label className="block text-xs font-semibold text-slate-700">
-              {isAr ? 'العنوان بالعربية (اختياري)' : 'Intitulé en arabe (optionnel)'}
+              {uiText(isAr).provider.intituleEnArabeOptionnel}
             </label>
             <input
               type="text"
@@ -218,7 +213,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
           <div className="grid grid-cols-3 gap-2 md:col-span-2">
             <div className="space-y-1">
               <label className="block text-xs font-semibold text-slate-700">
-                {isAr ? 'السعر (د.م.)' : 'Tarif (MAD)'}
+                {uiText(isAr).provider.tarifMad}
               </label>
               <input
                 type="number"
@@ -232,7 +227,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
             </div>
             <div className="space-y-1">
               <label className="block text-xs font-semibold text-slate-700">
-                {isAr ? 'واجب التنقل (د.م.)' : 'Déplacement (MAD)'}
+                {uiText(isAr).provider.deplacementMad}
               </label>
               <input
                 type="number"
@@ -245,7 +240,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
             </div>
             <div className="space-y-1">
               <label className="block text-xs font-semibold text-slate-700">
-                {isAr ? 'المدة التقديرية (دقيقة)' : 'Durée estimée (min)'}
+                {uiText(isAr).provider.dureeEstimeeMin}
               </label>
               <input
                 type="number"
@@ -261,7 +256,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
 
           <div className="md:col-span-2 space-y-1">
             <label className="block text-xs font-semibold text-slate-700">
-              {isAr ? 'وصف تفصيلي لما تشمله الخدمة' : 'Description détaillée de la prestation'}
+              {uiText(isAr).provider.descriptionDetailleeDeLaPrestation}
             </label>
             <textarea
               rows={3}
@@ -271,9 +266,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
               value={descriptionFr}
               onChange={(e) => setDescriptionFr(e.target.value)}
               placeholder={
-                isAr
-                  ? 'اشرح مراحل العمل، الضمان، وما إذا كانت قطع الغيار مشمولة أم لا...'
-                  : 'Précisez les étapes incluses, le matériel utilisé et les éventuelles garanties...'
+                uiText(isAr).provider.precisezLesEtapesInclusesLeMateriel
               }
               className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-emerald-600"
             />
@@ -288,12 +281,8 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
           <Plus className="w-4 h-4" />
           <span>
             {isSaving
-              ? isAr
-                ? 'جاري النشر...'
-                : 'Publication...'
-              : isAr
-              ? 'نشر الخدمة'
-              : 'Publier ce service'}
+              ? uiText(isAr).common.publication
+              : uiText(isAr).provider.publierCeService}
           </span>
         </button>
       </form>
@@ -302,19 +291,17 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
       <div className="bg-white border border-slate-200 rounded-2xl p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-bold text-slate-900">
-            {isAr ? 'الخدمات المنشورة' : 'Vos services publiés'} ({services.length})
+            {uiText(isAr).provider.vosServicesPublies} ({services.length})
           </h3>
         </div>
 
         {loading ? (
-          <p className="text-xs text-slate-500">{isAr ? 'جاري التحميل...' : 'Chargement...'}</p>
+          <p className="text-xs text-slate-500">{uiText(isAr).provider.chargement}</p>
         ) : services.length === 0 ? (
           <div className="p-8 text-center rounded-xl bg-slate-50 border border-dashed border-slate-200 space-y-2">
             <Wrench className="w-7 h-7 text-slate-400 mx-auto" />
             <p className="text-xs text-slate-600">
-              {isAr
-                ? 'لم تنشر أي خدمة مفصلة بعد. أضف خدماتك أعلاه لجذب المزيد من الزبناء!'
-                : 'Aucun service détaillé publié pour le moment. Ajoutez vos prestations ci-dessus pour apparaître sur votre profil public.'}
+              {uiText(isAr).provider.aucunServiceDetaillePubliePourLe}
             </p>
           </div>
         ) : (
@@ -353,7 +340,7 @@ export const ProviderServicesManager: React.FC<ProviderServicesManagerProps> = (
                       onClick={() => {
                         void deleteService(srv.id);
                       }}
-                      title={isAr ? 'حذف' : 'Supprimer'}
+                      title={uiText(isAr).common.supprimer}
                       className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />

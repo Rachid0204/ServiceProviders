@@ -38,14 +38,16 @@ vi.mock('../firebase', () => ({
 
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
+  collectionGroup: vi.fn((_db, name: string) => ({ collectionGroup: name })),
   doc: vi.fn((_db, ...segments: string[]) => ({ path: segments.join('/') })),
-  query: vi.fn(),
-  where: vi.fn(),
+  query: vi.fn((...args: unknown[]) => ({ queryArgs: args })),
+  where: vi.fn((...args: unknown[]) => ({ whereArgs: args })),
   orderBy: vi.fn(),
-  limit: vi.fn(),
+  limit: vi.fn((n: number) => ({ limit: n })),
+  startAfter: vi.fn((cursor: unknown) => ({ startAfter: cursor })),
   onSnapshot: vi.fn(() => () => {}),
-  getDoc: vi.fn(),
-  getDocs: vi.fn(),
+  getDoc: vi.fn().mockResolvedValue({ exists: () => false, data: () => undefined }),
+  getDocs: vi.fn().mockResolvedValue({ docs: [] }),
   runTransaction: vi.fn(),
   setDoc: vi.fn().mockResolvedValue(undefined),
   updateDoc: vi.fn(),
@@ -91,6 +93,9 @@ function createArabicContext(
     supportWhatsAppUrl: 'https://wa.me/212661428910',
     allProviders: VETTED_PROVIDERS,
     firestoreProviders: VETTED_PROVIDERS,
+    hasMoreProviders: false,
+    isLoadingMoreProviders: false,
+    loadMoreProviders: vi.fn().mockResolvedValue(undefined),
     ownProvider: null,
     favoriteProviderIds: [],
     toggleFavoriteProvider: vi.fn().mockResolvedValue(undefined),
@@ -152,12 +157,8 @@ function createArabicContext(
     setAuthModalIntent: vi.fn(),
     isPostJobModalOpen: false,
     setIsPostJobModalOpen: vi.fn(),
-    detailProvider: null,
-    setDetailProvider: vi.fn(),
     bookingProvider: null,
     setBookingProvider: vi.fn(),
-    activeChatBooking: null,
-    setActiveChatBooking: vi.fn(),
     detailBooking: null,
     setDetailBooking: vi.fn(),
     cancellingBooking: null,
@@ -696,5 +697,165 @@ describe('Phase 7 Production Readiness: Arabic RTL, Landmarks & Critical Journey
     );
     expect(screen.getByTestId('admin-app-check-status')).toHaveTextContent(/Firebase App Check/i);
   });
+
+  it('AUD-017: recursively verifies 100% FR/AR key parity and non-empty values across all structured TRANSLATIONS.ui namespaces', () => {
+    const frNamespaces = Object.keys(TRANSLATIONS.fr.ui).sort();
+    const arNamespaces = Object.keys(TRANSLATIONS.ar.ui).sort();
+    expect(frNamespaces).toEqual(arNamespaces);
+    expect(frNamespaces.length).toBeGreaterThanOrEqual(10);
+
+    for (const ns of frNamespaces) {
+      const frDict = TRANSLATIONS.fr.ui[ns as keyof typeof TRANSLATIONS.fr.ui] as Record<
+        string,
+        string
+      >;
+      const arDict = TRANSLATIONS.ar.ui[ns as keyof typeof TRANSLATIONS.ar.ui] as Record<
+        string,
+        string
+      >;
+      const frNsKeys = Object.keys(frDict).sort();
+      const arNsKeys = Object.keys(arDict).sort();
+      expect(frNsKeys).toEqual(arNsKeys);
+      for (const key of frNsKeys) {
+        expect(frDict[key].trim().length).toBeGreaterThan(0);
+        expect(arDict[key].trim().length).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it('AUD-019: useProviders paginates via getDocs(limit(24)), mapFirestoreProviderDoc omits unmeasured responseMinutes, and useJobPosts batch-loads proposals via collectionGroup', async () => {
+    const { collectionGroup, getDoc, getDocs, limit, onSnapshot } = await import(
+      'firebase/firestore'
+    );
+    const { PROVIDERS_PAGE_SIZE, mapFirestoreProviderDoc, useProviders } = await import(
+      '../hooks/useProviders'
+    );
+    const { useJobPosts } = await import('../hooks/useJobPosts');
+    const { ProviderCard } = await import('../components/ProviderCard');
+
+    expect(PROVIDERS_PAGE_SIZE).toBe(24);
+
+    // 1. mapFirestoreProviderDoc does NOT invent a static 20-minute response time when unmeasured
+    const unmeasured = mapFirestoreProviderDoc('prov-unmeasured', {
+      fullNameFr: 'Maâlem Youssef',
+      fullNameAr: 'المعلم يوسف',
+      category: 'Plomberie',
+      hourlyRateMAD: 150,
+      phone: '+212661234567',
+      location: { lat: 33.58, lng: -7.63, city: 'Casablanca', quartier: 'Maârif' },
+    });
+    expect(unmeasured.responseMinutes).toBeUndefined();
+
+    // ProviderCard hides response-time pill when responseMinutes is unmeasured
+    const { container: cardContainer, unmount: unmountCard } = render(
+      <ProviderCard
+        provider={unmeasured}
+        lang="fr"
+        t={TRANSLATIONS.fr}
+        onViewDetails={vi.fn()}
+        onBookProvider={vi.fn()}
+      />
+    );
+    expect(cardContainer.textContent).not.toContain('~20 min');
+    unmountCard();
+
+    // 2. useProviders uses getDocs with limit(24) instead of onSnapshot(limit(200))
+    const getDocsMock = vi.mocked(getDocs);
+    const limitMock = vi.mocked(limit);
+    const onSnapshotMock = vi.mocked(onSnapshot);
+    getDocsMock.mockReset();
+    limitMock.mockClear();
+    onSnapshotMock.mockClear();
+    getDocsMock.mockResolvedValue({
+      docs: Array.from({ length: 24 }, (_, idx) => ({
+        id: `p-${idx}`,
+        data: () => ({
+          fullNameFr: `Maâlem ${idx}`,
+          fullNameAr: `معلم ${idx}`,
+          category: 'Plomberie',
+          hourlyRateMAD: 150,
+          phone: '+212661234567',
+          location: { lat: 33.58, lng: -7.63, city: 'Casablanca', quartier: 'Maârif' },
+        }),
+      })),
+    } as never);
+
+    let providersApi: ReturnType<typeof useProviders> | null = null;
+    const ProvidersHarness: React.FC = () => {
+      providersApi = useProviders(null, null, TRANSLATIONS.fr);
+      return (
+        <div data-testid="prov-count">
+          {providersApi.firestoreProviders.length}:{String(providersApi.hasMoreProviders)}
+        </div>
+      );
+    };
+    const { unmount: unmountProviders } = render(<ProvidersHarness />);
+    await waitFor(() => {
+      expect(screen.getByTestId('prov-count')).toHaveTextContent('24:true');
+    });
+    expect(limitMock).toHaveBeenCalledWith(24);
+    expect(limitMock).not.toHaveBeenCalledWith(200);
+    expect(onSnapshotMock).not.toHaveBeenCalled();
+    unmountProviders();
+
+    // 3. useJobPosts loads a provider's submitted proposals in a single collectionGroup('proposals') query (no N+1 getDoc loop)
+    const collectionGroupMock = vi.mocked(collectionGroup);
+    const getDocMock = vi.mocked(getDoc);
+    collectionGroupMock.mockClear();
+    getDocMock.mockClear();
+    getDocsMock.mockReset();
+    getDocsMock.mockResolvedValue({
+      docs: [
+        {
+          id: 'prov-cg',
+          data: () => ({
+            jobId: 'job-99',
+            clientId: 'client-9',
+            providerId: 'prov-cg',
+            providerName: 'Maâlem Batch',
+            providerPhone: '+212661234567',
+            providerCategory: 'Plomberie',
+            providerCity: 'Casablanca',
+            proposedPriceMad: 300,
+            estimatedDuration: '2h',
+            message: 'Disponible demain matin.',
+            status: 'pending',
+          }),
+        },
+      ],
+    } as never);
+
+    const provUser = { uid: 'prov-cg', email: 'prov@test.ma', emailVerified: true } as unknown as User;
+    const provProfile: UserProfileRecord = {
+      uid: 'prov-cg',
+      role: 'provider',
+      fullName: 'Maâlem Batch',
+      phone: '+212661234567',
+      city: 'Casablanca',
+      neighborhood: 'Maârif',
+      languagePref: 'fr',
+      verifiedBadge: true,
+    };
+    const ownProv = { ...unmeasured, id: 'prov-cg', uid: 'prov-cg' };
+
+    const JobsHarness: React.FC = () => {
+      const api = useJobPosts({
+        firebaseUser: provUser,
+        authReady: true,
+        isVerified: true,
+        userProfile: provProfile,
+        ownProvider: ownProv,
+        lang: 'fr',
+      });
+      return <div data-testid="cg-prop">{api.myProposalsByJobId['job-99']?.status ?? 'none'}</div>;
+    };
+    render(<JobsHarness />);
+    await waitFor(() => {
+      expect(screen.getByTestId('cg-prop')).toHaveTextContent('pending');
+    });
+    expect(collectionGroupMock).toHaveBeenCalledWith(expect.anything(), 'proposals');
+    expect(getDocMock).not.toHaveBeenCalled();
+  });
 });
+
 

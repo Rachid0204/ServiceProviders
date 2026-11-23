@@ -5,7 +5,11 @@ import {
   type ProviderTab,
 } from '../../components/dashboards/ProviderDashboard';
 import { useMarketplace } from '../../app/providers/MarketplaceContext';
-import { getPathForProviderTab, getProviderTabFromPathname } from '../../app/routePaths';
+import {
+  buildMessageThreadPath,
+  getPathForProviderTab,
+  getProviderTabFromPathname,
+} from '../../app/routePaths';
 
 export const ProviderDashboardPage: React.FC = () => {
   const location = useLocation();
@@ -30,7 +34,6 @@ export const ProviderDashboardPage: React.FC = () => {
     toggleProviderAvailability,
     saveFullProviderCard,
     setAuthModalIntent,
-    setActiveChatBooking,
     setDetailBooking,
     setCancellingBooking,
     updateBookingStatus,
@@ -65,7 +68,7 @@ export const ProviderDashboardPage: React.FC = () => {
       onToggleProviderAvailability={toggleProviderAvailability}
       onSaveFullProviderCard={saveFullProviderCard}
       onOpenAuth={() => setAuthModalIntent('provider')}
-      onOpenChat={setActiveChatBooking}
+      onOpenChat={(b) => navigate(buildMessageThreadPath(b.id))}
       onOpenBookingDetail={setDetailBooking}
       onOpenCancel={setCancellingBooking}
       onUpdateBookingStatus={updateBookingStatus}

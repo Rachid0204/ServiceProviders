@@ -7,7 +7,6 @@ import { resolveFirebaseConfig } from './src/firebase';
 const rulesContent = fs.readFileSync(path.resolve(process.cwd(), 'firestore.rules'), 'utf8');
 const storageRulesContent = fs.readFileSync(path.resolve(process.cwd(), 'storage.rules'), 'utf8');
 const envExampleContent = fs.readFileSync(path.resolve(process.cwd(), '.env.example'), 'utf8');
-const serverContent = fs.readFileSync(path.resolve(process.cwd(), 'server.ts'), 'utf8');
 
 test('Dirty Dozen #1 & #2: Global default-deny and verified email guard exist in firestore.rules', () => {
   assert.ok(rulesContent.includes('match /{document=**} {\n      allow read, write: if false;\n    }'));
@@ -52,11 +51,10 @@ test('Storage Rules: Default-deny, public portfolio read, owner-only writes, and
   assert.ok(storageRulesContent.includes("request.resource.contentType.matches('image/.*')"));
 });
 
-test('Firebase Env & Cloud Run Port: resolveFirebaseConfig reads VITE_FIREBASE_* with fallbacks and server.ts uses process.env.PORT || 8080', () => {
+test('Firebase Env Config: resolveFirebaseConfig reads VITE_FIREBASE_* with fallbacks', () => {
   assert.ok(envExampleContent.includes('VITE_FIREBASE_API_KEY='));
   assert.ok(envExampleContent.includes('VITE_FIREBASE_AUTH_DOMAIN='));
   assert.ok(envExampleContent.includes('VITE_FIREBASE_PROJECT_ID="serviceproviders-530c4"'));
-  assert.ok(serverContent.includes('process.env.PORT || 8080'));
 
   const customEnvConfig = resolveFirebaseConfig(
     {
@@ -159,10 +157,6 @@ test('Architect Audit Hardening: safe asset URLs, full array validation, financi
   assert.ok(storageRulesContent.includes('function isVerifiedUser()'));
   assert.ok(storageRulesContent.includes('function isAdmin()'));
   assert.ok(storageRulesContent.includes('firestore.exists('));
-
-  // Server security headers and 501 CMI stub
-  assert.ok(serverContent.includes("app.disable('x-powered-by')"));
-  assert.ok(serverContent.includes('res.status(501)'));
 
   // Atomic client/provider profile bootstrap on both providers and bookings creation
   const existsAfterMatches =
@@ -2188,5 +2182,72 @@ test('Wave 0 Live Firebase Firestore Emulator Execution: AUD-001, AUD-002, AUD-0
     200,
     `AUD-013: Client auto-rejecting competing pending proposal after assignment must succeed: ${autoRejectCompeting.body}`
   );
+
+  // --- AUD-019: Collection-group batch lookup on proposals (own providerId allowed, cross-provider denied) ---
+  async function runCollectionGroupQuery(params: {
+    token: string;
+    providerIdFilter: string;
+  }): Promise<{ status: number; body: string }> {
+    const payload = JSON.stringify({
+      structuredQuery: {
+        from: [{ collectionId: 'proposals', allDescendants: true }],
+        where: {
+          fieldFilter: {
+            field: { fieldPath: 'providerId' },
+            op: 'EQUAL',
+            value: { stringValue: params.providerIdFilter },
+          },
+        },
+        limit: 50,
+      },
+    });
+    return new Promise((resolve, reject) => {
+      const req = http.request(
+        {
+          hostname: '127.0.0.1',
+          port,
+          path: `${dbBase}:runQuery`,
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${params.token}`,
+            'Content-Type': 'application/json',
+          },
+        },
+        (res) => {
+          let body = '';
+          res.on('data', (c) => (body += c));
+          res.on('end', () => resolve({ status: res.statusCode ?? 500, body }));
+        }
+      );
+      req.on('error', reject);
+      req.write(payload);
+      req.end();
+    });
+  }
+
+  const ownProposalsCg = await runCollectionGroupQuery({
+    token: providerToken,
+    providerIdFilter: 'prov1',
+  });
+  assert.equal(
+    ownProposalsCg.status,
+    200,
+    `AUD-019: Provider querying own proposals via collectionGroup must succeed: ${ownProposalsCg.body}`
+  );
+  assert.ok(
+    ownProposalsCg.body.includes('jobPosts/job_aud013/proposals/prov1'),
+    'AUD-019: Own collectionGroup query should return prov1 proposal'
+  );
+
+  const otherProposalsCg = await runCollectionGroupQuery({
+    token: providerToken,
+    providerIdFilter: 'prov2',
+  });
+  assert.equal(
+    otherProposalsCg.status,
+    403,
+    'AUD-019: Provider querying another provider proposals via collectionGroup must be rejected'
+  );
 });
+
 

@@ -68,6 +68,9 @@ export interface MarketplaceContextValue {
   supportWhatsAppUrl: string;
   allProviders: VettedProvider[];
   firestoreProviders: VettedProvider[];
+  hasMoreProviders: boolean;
+  isLoadingMoreProviders: boolean;
+  loadMoreProviders: () => Promise<void>;
   ownProvider: VettedProvider | null;
   favoriteProviderIds: string[];
   toggleFavoriteProvider: (providerId: string) => Promise<void>;
@@ -132,12 +135,8 @@ export interface MarketplaceContextValue {
   setAuthModalIntent: (intent: UserRole | null) => void;
   isPostJobModalOpen: boolean;
   setIsPostJobModalOpen: (open: boolean) => void;
-  detailProvider: VettedProvider | null;
-  setDetailProvider: (p: VettedProvider | null) => void;
   bookingProvider: VettedProvider | null;
   setBookingProvider: (p: VettedProvider | null) => void;
-  activeChatBooking: BookingRecord | null;
-  setActiveChatBooking: (b: BookingRecord | null) => void;
   detailBooking: BookingRecord | null;
   setDetailBooking: (b: BookingRecord | null) => void;
   cancellingBooking: BookingRecord | null;
@@ -207,6 +206,9 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const {
     allProviders,
     firestoreProviders,
+    hasMoreProviders,
+    isLoadingMoreProviders,
+    loadMoreProviders,
     toggleProviderAvailability,
     applyLocalReviewOverride,
     applyAdminProviderOverride,
@@ -305,9 +307,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Global modal state
   const [authModalIntent, setAuthModalIntent] = useState<UserRole | null>(null);
   const [isPostJobModalOpen, setIsPostJobModalOpen] = useState(false);
-  const [detailProvider, setDetailProvider] = useState<VettedProvider | null>(null);
   const [bookingProvider, setBookingProvider] = useState<VettedProvider | null>(null);
-  const [activeChatBooking, setActiveChatBooking] = useState<BookingRecord | null>(null);
   const [detailBooking, setDetailBooking] = useState<BookingRecord | null>(null);
   const [cancellingBooking, setCancellingBooking] = useState<BookingRecord | null>(null);
   const [reschedulingBooking, setReschedulingBooking] = useState<BookingRecord | null>(null);
@@ -317,7 +317,6 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   useEffect(() => {
     setIsPostJobModalOpen(false);
     setBookingProvider(null);
-    setActiveChatBooking(null);
     setDetailBooking(null);
     setCancellingBooking(null);
     setReschedulingBooking(null);
@@ -470,6 +469,9 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       supportWhatsAppUrl,
       allProviders,
       firestoreProviders,
+      hasMoreProviders,
+      isLoadingMoreProviders,
+      loadMoreProviders,
       ownProvider,
       favoriteProviderIds,
       toggleFavoriteProvider,
@@ -522,12 +524,8 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       setAuthModalIntent,
       isPostJobModalOpen,
       setIsPostJobModalOpen,
-      detailProvider,
-      setDetailProvider,
       bookingProvider,
       setBookingProvider,
-      activeChatBooking,
-      setActiveChatBooking,
       detailBooking,
       setDetailBooking,
       cancellingBooking,
@@ -568,6 +566,9 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       supportWhatsAppUrl,
       allProviders,
       firestoreProviders,
+      hasMoreProviders,
+      isLoadingMoreProviders,
+      loadMoreProviders,
       ownProvider,
       favoriteProviderIds,
       toggleFavoriteProvider,
@@ -618,9 +619,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       openDispute,
       authModalIntent,
       isPostJobModalOpen,
-      detailProvider,
       bookingProvider,
-      activeChatBooking,
       detailBooking,
       cancellingBooking,
       reschedulingBooking,

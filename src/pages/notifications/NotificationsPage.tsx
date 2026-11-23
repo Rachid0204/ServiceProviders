@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -218,7 +219,7 @@ export const NotificationsPage: React.FC = () => {
                         onClick={() => {
                           void markNotificationRead(notif.id);
                         }}
-                        aria-label={isAr ? 'تحديد كمقروء' : 'Marquer comme lu'}
+                        aria-label={uiText(isAr).notifications.marquerCommeLu}
                         className="p-1.5 text-emerald-700 hover:bg-emerald-100 rounded-lg cursor-pointer"
                       >
                         <Check className="w-4 h-4" />
@@ -229,7 +230,7 @@ export const NotificationsPage: React.FC = () => {
                       onClick={() => {
                         void deleteNotification(notif.id);
                       }}
-                      aria-label={isAr ? 'حذف الإشعار' : 'Supprimer la notification'}
+                      aria-label={uiText(isAr).notifications.supprimerLaNotification}
                       className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />

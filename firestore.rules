@@ -1366,6 +1366,15 @@ service cloud.firestore {
       }
     }
 
+    // Collection-group list access for providers batch-reading their own submitted proposals (AUD-019)
+    match /{path=**}/proposals/{providerId} {
+      allow list: if isVerifiedUser() && (
+        resource.data.providerId == request.auth.uid ||
+        resource.data.clientId == request.auth.uid ||
+        isAdmin()
+      );
+    }
+
     // 23. Validation Blueprint: ProviderService (/services/{serviceId})
     function isValidProviderService(data) {
       return data.keys().hasAll([

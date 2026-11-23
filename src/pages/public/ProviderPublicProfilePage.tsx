@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
@@ -19,6 +20,8 @@ import {
 } from 'lucide-react';
 import {
   collection,
+  doc,
+  getDoc,
   query,
   where,
   limit,
@@ -33,10 +36,12 @@ import {
   isSafeImageUrl,
   maskMoroccanPhone,
   type ProviderReview,
+  type VettedProvider,
   type WeekdayKey,
 } from '../../utils/marketplace';
 import { useMarketplace } from '../../app/providers/MarketplaceContext';
 import { ROUTE_PATHS, buildServiceCategoryPath } from '../../app/routePaths';
+import { mapFirestoreProviderDoc } from '../../hooks/useProviders';
 import { useProviderServices } from '../../hooks/useProviderServices';
 import { useProviderAvailability } from '../../hooks/useProviderAvailability';
 import { submitReviewModerationReport } from '../../hooks/useDisputes';
@@ -80,11 +85,34 @@ export const ProviderPublicProfilePage: React.FC = () => {
   const [liveReviews, setLiveReviews] = useState<ProviderReview[]>([]);
   const [reportedReviewFeedback, setReportedReviewFeedback] = useState<string | null>(null);
   const [contactRevealed, setContactRevealed] = useState(false);
+  const [fetchedProvider, setFetchedProvider] = useState<VettedProvider | null>(null);
 
-  const provider = useMemo(
+  const cachedProvider = useMemo(
     () => (id ? allProviders.find((p) => p.id === id || p.uid === id) ?? null : null),
     [allProviders, id]
   );
+
+  // Targeted single-document fetch if user directly opens /providers/:id beyond the paginated first page (AUD-019)
+  useEffect(() => {
+    let active = true;
+    if (!id || cachedProvider) {
+      setFetchedProvider(null);
+      return;
+    }
+    void getDoc(doc(db, 'providers', id))
+      .then((snap) => {
+        if (!active) return;
+        setFetchedProvider(snap.exists() ? mapFirestoreProviderDoc(snap.id, snap.data()) : null);
+      })
+      .catch(() => {
+        if (active) setFetchedProvider(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [id, cachedProvider]);
+
+  const provider = cachedProvider ?? fetchedProvider;
 
   const { services: providerServices } = useProviderServices(provider?.id, lang);
   const { schedule: providerSchedule } = useProviderAvailability(provider?.id, lang);
@@ -300,12 +328,14 @@ export const ProviderPublicProfilePage: React.FC = () => {
                     ({provider.reviewCount} {t.reviewsLabel})
                   </span>
                 </span>
-                <span className="inline-flex items-center gap-1 tabular-nums">
-                  <Clock className="w-4 h-4 text-slate-400" />
-                  <span>
-                    {t.responseTime} {provider.responseMinutes} {t.minutesUnit}
+                {typeof provider.responseMinutes === 'number' && provider.responseMinutes > 0 && (
+                  <span className="inline-flex items-center gap-1 tabular-nums">
+                    <Clock className="w-4 h-4 text-slate-400" />
+                    <span>
+                      {t.responseTime} {provider.responseMinutes} {t.minutesUnit}
+                    </span>
                   </span>
-                </span>
+                )}
               </div>
 
               <p className="text-sm text-slate-700 leading-relaxed">{displayBio}</p>
@@ -380,11 +410,11 @@ export const ProviderPublicProfilePage: React.FC = () => {
                     type="button"
                     data-testid="reveal-provider-phone-btn"
                     onClick={() => setContactRevealed(true)}
-                    aria-label={`${isAr ? 'إظهار رقم هاتف' : 'Afficher le numéro de'} ${displayName}`}
+                    aria-label={`${uiText(isAr).publicUi.afficherLeNumeroDe} ${displayName}`}
                     className="inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-slate-800 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
                   >
                     <Phone className="w-4 h-4 text-emerald-700" />
-                    <span>{isAr ? 'إظهار رقم التواصل' : 'Afficher le contact'}</span>
+                    <span>{uiText(isAr).publicUi.afficherLeContact}</span>
                     <span className="font-mono-tabular text-slate-500 text-xs" dir="ltr">
                       {maskedPhone}
                     </span>
@@ -424,7 +454,7 @@ export const ProviderPublicProfilePage: React.FC = () => {
           <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Tag className="w-5 h-5 text-emerald-700" />
             <span>
-              {isAr ? 'قائمة الخدمات والأسعار' : 'Catalogue des Prestations & Tarifs'} (
+              {uiText(isAr).publicUi.catalogueDesPrestationsTarifs} (
               {activeServices.length})
             </span>
           </h2>
@@ -521,9 +551,7 @@ export const ProviderPublicProfilePage: React.FC = () => {
           )}
           {displayedReviews.length === 0 ? (
             <p className="text-xs text-slate-500">
-              {isAr
-                ? 'لا توجد تقييمات بعد لهذا المعلم.'
-                : 'Aucun avis client publié pour le moment.'}
+              {uiText(isAr).publicUi.aucunAvisClientPubliePourLe}
             </p>
           ) : (
             <div className="space-y-3">

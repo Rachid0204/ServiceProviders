@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React, { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertCircle, Layers, Mail, UserCheck, Wrench } from 'lucide-react';
@@ -89,17 +90,17 @@ export const RegisterPage: React.FC = () => {
               {
                 role: 'client' as const,
                 icon: UserCheck,
-                label: isAr ? 'زبون' : 'Client',
+                label: uiText(isAr).common.client,
               },
               {
                 role: 'provider' as const,
                 icon: Wrench,
-                label: isAr ? 'معلم' : 'Maâlem',
+                label: uiText(isAr).common.maalem,
               },
               {
                 role: 'both' as const,
                 icon: Layers,
-                label: isAr ? 'حساب مزدوج' : 'Les deux',
+                label: uiText(isAr).auth.lesDeux,
               },
             ] as const
           ).map(({ role, icon: Icon, label }) => (
@@ -146,14 +147,14 @@ export const RegisterPage: React.FC = () => {
               to={ROUTE_PATHS.TERMS}
               className="text-emerald-700 font-semibold hover:underline"
             >
-              {isAr ? 'شروط الاستخدام' : 'CGU'}
+              {uiText(isAr).common.cgu}
             </Link>{' '}
             ·{' '}
             <Link
               to={ROUTE_PATHS.PRIVACY}
               className="text-emerald-700 font-semibold hover:underline"
             >
-              {isAr ? 'الخصوصية (قانون 09-08)' : 'Confidentialité (Loi 09-08)'}
+              {uiText(isAr).common.confidentialiteLoi0908}
             </Link>
           </span>
         </label>
@@ -171,7 +172,7 @@ export const RegisterPage: React.FC = () => {
 
         <div className="relative flex items-center justify-center text-[11px] text-slate-400">
           <span className="bg-white px-2 relative z-10">
-            {isAr ? 'أو بالبريد الإلكتروني' : 'ou par adresse e-mail'}
+            {uiText(isAr).auth.ouParAdresseEMail}
           </span>
           <span className="absolute inset-x-0 h-px bg-slate-200" />
         </div>
@@ -179,7 +180,7 @@ export const RegisterPage: React.FC = () => {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-1">
             <label htmlFor="reg-email" className="block text-xs font-semibold text-slate-700">
-              {isAr ? 'البريد الإلكتروني' : 'Adresse e-mail'}
+              {uiText(isAr).auth.adresseEMail}
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-400 absolute top-2.5 start-3 pointer-events-none" />
@@ -198,7 +199,7 @@ export const RegisterPage: React.FC = () => {
 
           <div className="space-y-1">
             <label htmlFor="reg-password" className="block text-xs font-semibold text-slate-700">
-              {isAr ? 'كلمة المرور (8 أحرف على الأقل)' : 'Mot de passe (8 caractères minimum)'}
+              {uiText(isAr).auth.motDePasse8CaracteresMinimum}
             </label>
             <input
               id="reg-password"
@@ -216,14 +217,14 @@ export const RegisterPage: React.FC = () => {
             disabled={isSubmitting}
             className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors disabled:opacity-60 cursor-pointer"
           >
-            {isAr ? 'إنشاء الحساب' : 'Créer mon compte'}
+            {uiText(isAr).auth.creerMonCompte}
           </button>
         </form>
 
         <div className="pt-3 border-t border-slate-100 text-center text-xs text-slate-600">
-          {isAr ? 'لديك حساب مسبقاً؟' : 'Déjà inscrit ?'}{' '}
+          {uiText(isAr).auth.dejaInscrit}{' '}
           <Link to={ROUTE_PATHS.LOGIN} className="font-semibold text-emerald-700 hover:underline">
-            {isAr ? 'تسجيل الدخول' : 'Connexion'}
+            {uiText(isAr).common.connexion}
           </Link>
         </div>
       </div>

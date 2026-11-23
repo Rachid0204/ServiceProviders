@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React from 'react';
 import { ArrowRight, ArrowLeft, ShieldCheck, CreditCard, Star } from 'lucide-react';
 import {
@@ -47,13 +48,13 @@ export const AdminOverviewSection: React.FC<AdminOverviewSectionProps> = ({
       <div className="bg-white border border-slate-200 rounded-xl grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4">
         <div className="p-5 space-y-1.5">
           <div className="text-xs font-medium text-slate-500">
-            {isAr ? 'إجمالي حجم المعاملات (GMV)' : 'Volume brut d’affaires (GMV)'}
+            {uiText(isAr).admin.volumeBrutDAffairesGmv}
           </div>
           <div className="text-2xl font-bold tabular-nums text-slate-900">
             {formatMadCurrency(analytics.totalGmvMad, lang)}
           </div>
           <div className="text-xs text-slate-600 tabular-nums">
-            {isAr ? 'مُحصّل:' : 'Encaissé :'}{' '}
+            {uiText(isAr).admin.encaisse}{' '}
             <span className="font-semibold text-emerald-700">
               {formatMadCurrency(analytics.settledRevenueMad, lang)}
             </span>
@@ -62,34 +63,34 @@ export const AdminOverviewSection: React.FC<AdminOverviewSectionProps> = ({
 
         <div className="p-5 space-y-1.5 border-t sm:border-t-0 sm:border-s border-slate-200">
           <div className="text-xs font-medium text-slate-500">
-            {isAr ? 'ضمان CMI المحجوز (Escrow)' : 'Séquestre CMI bloqué'}
+            {uiText(isAr).admin.sequestreCmiBloque}
           </div>
           <div className="text-2xl font-bold tabular-nums text-amber-700">
             {formatMadCurrency(analytics.escrowHeldMad, lang)}
           </div>
           <div className="text-xs text-slate-600 tabular-nums">
             {analytics.escrowHeldCount}{' '}
-            {isAr ? 'حجوزات بانتظار الصرف' : 'dossiers en attente de libération'}
+            {uiText(isAr).admin.dossiersEnAttenteDeLiberation}
           </div>
         </div>
 
         <div className="p-5 space-y-1.5 border-t xl:border-t-0 xl:border-s border-slate-200">
           <div className="text-xs font-medium text-slate-500">
-            {isAr ? 'معدل إنجاز الطلبات' : 'Taux d’achèvement missions'}
+            {uiText(isAr).admin.tauxDAchevementMissions}
           </div>
           <div className="text-2xl font-bold tabular-nums text-slate-900">
             {analytics.completionRatePct}%
           </div>
           <div className="text-xs text-slate-600 tabular-nums">
-            {analytics.completedBookingsCount} {isAr ? 'مكتملة' : 'terminées'} ·{' '}
-            {analytics.activeBookingsCount} {isAr ? 'نشطة' : 'actives'} ·{' '}
-            {analytics.cancelledBookingsCount} {isAr ? 'ملغاة' : 'annulées'}
+            {analytics.completedBookingsCount} {uiText(isAr).admin.terminees} ·{' '}
+            {analytics.activeBookingsCount} {uiText(isAr).admin.actives} ·{' '}
+            {analytics.cancelledBookingsCount} {uiText(isAr).admin.annulees}
           </div>
         </div>
 
         <div className="p-5 space-y-1.5 border-t sm:border-s xl:border-t-0 border-slate-200">
           <div className="text-xs font-medium text-slate-500">
-            {isAr ? 'المعلمون الموثقون (CIN)' : 'Maâlems vérifiés (CIN)'}
+            {uiText(isAr).admin.maalemsVerifiesCin}
           </div>
           <div className="text-2xl font-bold tabular-nums text-emerald-700">
             {analytics.verifiedProvidersCount} / {analytics.totalProvidersCount}
@@ -98,11 +99,11 @@ export const AdminOverviewSection: React.FC<AdminOverviewSectionProps> = ({
             {analytics.pendingCinCount > 0 ? (
               <span className="font-semibold text-amber-700">
                 {analytics.pendingCinCount}{' '}
-                {isAr ? 'ملفات CIN قيد المراجعة' : 'dossiers CIN en attente'}
+                {uiText(isAr).admin.dossiersCinEnAttente}
               </span>
             ) : (
               <span className="text-emerald-700 font-medium">
-                {isAr ? 'جميع الملفات موثقة' : 'File CIN à jour'}
+                {uiText(isAr).admin.fileCinAJour}
               </span>
             )}{' '}
             ·{' '}
@@ -120,16 +121,14 @@ export const AdminOverviewSection: React.FC<AdminOverviewSectionProps> = ({
           <div className="flex items-center justify-between gap-4 pb-3 border-b border-slate-100">
             <div>
               <h2 className="text-sm font-bold text-slate-900">
-                {isAr ? 'توزيع حجم المعاملات حسب الحرفة' : 'Répartition GMV & activité par métier'}
+                {uiText(isAr).admin.repartitionGmvActiviteParMetier}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                {isAr
-                  ? 'الحجوزات غير الملغاة بالدرهم المغربي وعدد الحرفيين بكل تخصص'
-                  : 'Revenus engagés (hors annulations) en MAD et couverture artisans'}
+                {uiText(isAr).admin.revenusEngagesHorsAnnulationsEnMad}
               </p>
             </div>
             <span className="text-xs font-mono-tabular text-slate-500 whitespace-nowrap">
-              {analytics.totalProvidersCount} {isAr ? 'معلم' : 'Maâlems'}
+              {analytics.totalProvidersCount} {uiText(isAr).common.maalems}
             </span>
           </div>
 
@@ -147,11 +146,11 @@ export const AdminOverviewSection: React.FC<AdminOverviewSectionProps> = ({
                     </div>
                     <div className="flex items-center gap-2 text-slate-600 tabular-nums shrink-0">
                       <span>
-                        {item.providersCount} {isAr ? 'معلم' : 'Maâlems'}
+                        {item.providersCount} {uiText(isAr).common.maalems}
                       </span>
                       <span aria-hidden="true">·</span>
                       <span>
-                        {item.bookingsCount} {isAr ? 'طلب' : 'missions'}
+                        {item.bookingsCount} {uiText(isAr).admin.missions}
                       </span>
                       <span aria-hidden="true">·</span>
                       <span className="font-bold text-slate-900 min-w-[74px] text-end">
@@ -175,12 +174,10 @@ export const AdminOverviewSection: React.FC<AdminOverviewSectionProps> = ({
           <div className="flex items-center justify-between gap-4 pb-3 border-b border-slate-100">
             <div>
               <h2 className="text-sm font-bold text-slate-900">
-                {isAr ? 'التغطية الجغرافية حسب المدينة' : 'Couverture nationale par ville'}
+                {uiText(isAr).admin.couvertureNationaleParVille}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                {isAr
-                  ? 'عدد المعلمين والطلبات النشطة في المدن المغربية الست'
-                  : 'Offre Maâlems et demande active sur les 6 pôles urbains'}
+                {uiText(isAr).admin.offreMaalemsEtDemandeActiveSur}
               </p>
             </div>
           </div>
@@ -198,8 +195,8 @@ export const AdminOverviewSection: React.FC<AdminOverviewSectionProps> = ({
                       {t.cities[cityItem.city]}
                     </span>
                     <span className="text-slate-600 tabular-nums">
-                      {cityItem.providersCount} {isAr ? 'معلم' : 'Maâlems'} ·{' '}
-                      {cityItem.bookingsCount} {isAr ? 'طلب' : 'cmd'} ·{' '}
+                      {cityItem.providersCount} {uiText(isAr).common.maalems} ·{' '}
+                      {cityItem.bookingsCount} {uiText(isAr).admin.cmd} ·{' '}
                       <strong className="text-slate-900">
                         {formatMadCurrency(cityItem.revenueMad, lang)}
                       </strong>
@@ -225,12 +222,10 @@ export const AdminOverviewSection: React.FC<AdminOverviewSectionProps> = ({
           <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
               <h2 className="text-sm font-bold text-slate-900">
-                {isAr ? 'ملفات التحقق من البطاقة الوطنية (CIN)' : 'File de vérification CIN'}
+                {uiText(isAr).admin.fileDeVerificationCin}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                {isAr
-                  ? 'المعلمون الجدد بانتظار المصادقة لتفعيل شارة الثقة'
-                  : 'Nouveaux prestataires en attente de validation du badge CIN'}
+                {uiText(isAr).admin.nouveauxPrestatairesEnAttenteDeValidation}
               </p>
             </div>
             <button
@@ -238,16 +233,14 @@ export const AdminOverviewSection: React.FC<AdminOverviewSectionProps> = ({
               onClick={() => onNavigateSection('providers')}
               className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline whitespace-nowrap shrink-0 cursor-pointer"
             >
-              <span>{isAr ? 'عرض الكل' : 'Tout voir'}</span>
+              <span>{uiText(isAr).admin.toutVoir}</span>
               <ArrowIcon className="w-3.5 h-3.5" />
             </button>
           </div>
 
           {pendingProviders.length === 0 ? (
             <p className="text-xs text-slate-500 py-4">
-              {isAr
-                ? 'لا توجد ملفات بطاقة وطنية قيد الانتظار حالياً.'
-                : 'Aucun dossier CIN en attente de validation.'}
+              {uiText(isAr).admin.aucunDossierCinEnAttenteDe}
             </p>
           ) : (
             <div className="divide-y divide-slate-100">
@@ -272,7 +265,7 @@ export const AdminOverviewSection: React.FC<AdminOverviewSectionProps> = ({
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                   >
                     <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>{isAr ? 'توثيق CIN' : 'Approuver CIN'}</span>
+                    <span>{uiText(isAr).admin.approuverCin}</span>
                   </button>
                 </div>
               ))}
@@ -285,12 +278,10 @@ export const AdminOverviewSection: React.FC<AdminOverviewSectionProps> = ({
           <div className="flex items-center justify-between gap-3 pb-3 border-b border-slate-100">
             <div>
               <h2 className="text-sm font-bold text-slate-900">
-                {isAr ? 'مبالغ ضمان CMI الجاهزة للصرف' : 'Séquestres CMI en attente de libération'}
+                {uiText(isAr).admin.sequestresCmiEnAttenteDeLiberation}
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                {isAr
-                  ? 'صرف المستحقات للمعلم بعد التأكد من إتمام الخدمة بنجاح'
-                  : 'Libérez les fonds CMI vers le Maâlem après validation de la prestation'}
+                {uiText(isAr).admin.liberezLesFondsCmiVersLe}
               </p>
             </div>
             <button
@@ -298,15 +289,13 @@ export const AdminOverviewSection: React.FC<AdminOverviewSectionProps> = ({
               onClick={() => onNavigateSection('bookings')}
               className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline whitespace-nowrap shrink-0 cursor-pointer"
             >
-              <span>{isAr ? 'السجل المالي' : 'Registre CMI'}</span>
+              <span>{uiText(isAr).admin.registreCmi}</span>
               <ArrowIcon className="w-3.5 h-3.5" />
             </button>
           </div>
 
           <p className="text-xs text-slate-500 py-4">
-            {isAr
-              ? 'بوابة الدفع الإلكتروني CMI غير مفعلة حالياً (يعتمد الدفع نقداً عند انتهاء الخدمة COD بعمولة 0%).'
-              : 'La passerelle CMI est désactivée (règlement en espèces à la fin de la prestation COD · 0% frais).'}
+            {uiText(isAr).admin.laPasserelleCmiEstDesactiveeReglement}
           </p>
         </div>
       </div>

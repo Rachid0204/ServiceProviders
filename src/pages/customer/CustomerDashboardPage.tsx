@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ClientDashboard } from '../../components/dashboards/ClientDashboard';
 import { useMarketplace } from '../../app/providers/MarketplaceContext';
-import { ROUTE_PATHS } from '../../app/routePaths';
+import { ROUTE_PATHS, buildMessageThreadPath } from '../../app/routePaths';
 
 export const CustomerDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -24,7 +24,6 @@ export const CustomerDashboardPage: React.FC = () => {
     acceptProposalAndCreateBooking,
     handleSaveProfile,
     setAuthModalIntent,
-    setActiveChatBooking,
     setDetailBooking,
     setReschedulingBooking,
     setCancellingBooking,
@@ -52,7 +51,7 @@ export const CustomerDashboardPage: React.FC = () => {
       onQuickSaveClientProfile={handleSaveProfile}
       onExploreProviders={() => navigate(ROUTE_PATHS.SERVICES)}
       onOpenAuth={() => setAuthModalIntent('client')}
-      onOpenChat={setActiveChatBooking}
+      onOpenChat={(b) => navigate(buildMessageThreadPath(b.id))}
       onOpenBookingDetail={setDetailBooking}
       onOpenReschedule={setReschedulingBooking}
       onOpenCancel={setCancellingBooking}

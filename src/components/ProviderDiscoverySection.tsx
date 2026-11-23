@@ -1,3 +1,4 @@
+import { uiText } from '../i18n/uiCopy';
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
@@ -73,6 +74,9 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
     t,
     isAr,
     allProviders,
+    hasMoreProviders,
+    isLoadingMoreProviders,
+    loadMoreProviders,
     userProfile,
     favoriteProviderIds,
     toggleFavoriteProvider,
@@ -193,7 +197,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
           setInternalCoords({
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
-            label: isAr ? 'موقعي عبر GPS' : 'Ma position GPS',
+            label: uiText(isAr).publicUi.maPositionGps,
           });
         },
         () => {
@@ -652,7 +656,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                   <Suspense
                     fallback={
                       <div className="w-full h-full rounded-xl border border-slate-200 bg-slate-100 animate-pulse flex items-center justify-center text-xs text-slate-500">
-                        {isAr ? 'جاري تحميل الخريطة...' : 'Chargement de la carte...'}
+                        {uiText(isAr).publicUi.chargementDeLaCarte}
                       </div>
                     }
                   >
@@ -702,6 +706,23 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                   {t.paginationNext}
                 </button>
               </nav>
+            )}
+            {hasMoreProviders && (
+              <div className="flex justify-center pt-1">
+                <button
+                  type="button"
+                  data-testid="load-more-providers-btn"
+                  disabled={isLoadingMoreProviders}
+                  onClick={() => {
+                    void loadMoreProviders();
+                  }}
+                  className="px-5 py-2.5 text-xs font-semibold rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 disabled:opacity-50 transition-colors cursor-pointer"
+                >
+                  {isLoadingMoreProviders
+                    ? uiText(isAr).publicUi.chargement
+                    : uiText(isAr).publicUi.chargerPlusDeMaalems}
+                </button>
+              </div>
             )}
           </div>
         )}

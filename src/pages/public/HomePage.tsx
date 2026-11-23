@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
@@ -55,7 +56,7 @@ export const HomePage: React.FC = () => {
           setUserCoords({
             lat: pos.coords.latitude,
             lng: pos.coords.longitude,
-            label: isAr ? 'موقعي عبر GPS' : 'Ma position GPS',
+            label: uiText(isAr).publicUi.maPositionGps,
           });
         },
         () => {
@@ -121,7 +122,7 @@ export const HomePage: React.FC = () => {
                   className="inline-flex items-center gap-2 px-5 py-3 text-sm font-semibold text-emerald-900 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors whitespace-nowrap cursor-pointer"
                 >
                   <Plus className="w-4 h-4 text-emerald-700" />
-                  <span>{isAr ? 'نشر طلب خدمة (تلقي عروض)' : 'Publier un besoin'}</span>
+                  <span>{uiText(isAr).publicUi.publierUnBesoin2}</span>
                 </button>
                 <button
                   type="button"
@@ -155,9 +156,7 @@ export const HomePage: React.FC = () => {
                     <span>{t.verifiedCinLabel}</span>
                   </div>
                   <p className="text-sm font-semibold mt-1">
-                    {isAr
-                      ? 'تشخيص دقيق، التزام بالمواعيد، وتسعير واضح بالدرهم المغربي'
-                      : 'Diagnostic précis, ponctualité et devis transparent en Dirhams (MAD)'}
+                    {uiText(isAr).publicUi.diagnosticPrecisPonctualiteEtDevisTransparent}
                   </p>
                 </div>
               </div>
@@ -174,7 +173,7 @@ export const HomePage: React.FC = () => {
             </div>
             <div>
               <div className="text-xl font-bold tabular-nums text-slate-900">
-                {allProviders.length} {isAr ? 'معلم' : 'Maâlems'}
+                {allProviders.length} {uiText(isAr).common.maalems}
               </div>
               <div className="text-xs text-slate-600 mt-1">{t.trustMetric2Label}</div>
             </div>
@@ -269,18 +268,14 @@ export const HomePage: React.FC = () => {
               <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-300">
                 <Wrench className="w-4 h-4" />
                 <span>
-                  {isAr ? 'للصناع والحرفيين المعتمدين' : 'Artisans & Maâlems qualifiés'}
+                  {uiText(isAr).publicUi.artisansMaalemsQualifies}
                 </span>
               </div>
               <h2 className="text-xl sm:text-2xl font-bold tracking-tight">
-                {isAr
-                  ? 'هل أنت معلم أو مقدم خدمة محترف في المغرب؟'
-                  : 'Vous êtes un Maâlem qualifié ? Développez votre clientèle locale.'}
+                {uiText(isAr).publicUi.vousEtesUnMaalemQualifieDeveloppez}
               </h2>
               <p className="text-sm text-slate-300 leading-relaxed">
-                {isAr
-                  ? 'انضم مجاناً إلى شبكة مول الخدمة، تصفح طلبات الزبناء المنشورة، وقدّم عروضك مباشرة في مدينتك.'
-                  : 'Rejoignez gratuitement Moul L’Khedma, consultez les offres publiées par les clients dans votre ville et envoyez vos devis en direct.'}
+                {uiText(isAr).publicUi.rejoignezGratuitementMoulLKhedmaConsultez}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3 shrink-0">
@@ -295,9 +290,7 @@ export const HomePage: React.FC = () => {
                 <span>
                   {firebaseUser
                     ? t.providerDashboardTab
-                    : isAr
-                    ? 'إنشاء حساب معلم مجاناً'
-                    : 'Rejoindre en tant que Maâlem'}
+                    : uiText(isAr).publicUi.rejoindreEnTantQueMaalem}
                 </span>
                 <ArrowIcon className="w-4 h-4" />
               </Link>
@@ -309,7 +302,7 @@ export const HomePage: React.FC = () => {
       {/* Mobile Sticky First-Contact & Near-Me Action Bar */}
       <div
         role="region"
-        aria-label={isAr ? 'إجراءات سريعة للهاتف' : 'Actions rapides mobile'}
+        aria-label={uiText(isAr).publicUi.actionsRapidesMobile}
         className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 backdrop-blur-sm border-t border-slate-200 px-3 py-2.5 shadow-lg"
       >
         <div className="grid grid-cols-2 gap-2.5 max-w-md mx-auto">
@@ -332,7 +325,7 @@ export const HomePage: React.FC = () => {
               className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[44px] text-xs font-semibold text-white bg-emerald-700 rounded-lg active:bg-emerald-800"
             >
               <MessageCircle className="w-4 h-4 shrink-0" />
-              <span className="truncate">{isAr ? 'واتساب سريع' : 'WhatsApp Rapide'}</span>
+              <span className="truncate">{uiText(isAr).publicUi.whatsappRapide}</span>
             </a>
           )}
         </div>
