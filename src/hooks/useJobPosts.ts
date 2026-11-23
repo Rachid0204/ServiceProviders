@@ -37,6 +37,7 @@ import {
   type VettedProvider,
 } from '../utils/marketplace';
 import { buildBootstrapClientProfile } from '../utils/authHelpers';
+import { dispatchUserNotification } from './useNotifications';
 
 function formatIsoDate(ts: unknown): string {
   if (ts && typeof ts === 'object' && 'toDate' in ts) {
@@ -427,6 +428,17 @@ export function useJobPosts(params: {
             createdAtIso: new Date().toISOString().slice(0, 10),
           },
         }));
+
+        void dispatchUserNotification({
+          recipientUserId: job.clientId,
+          actorUserId: firebaseUser.uid,
+          type: 'quote_received',
+          titleFr: `Nouveau devis reçu (${finalPriceMad} DH)`,
+          titleAr: `عرض ثمن جديد (${finalPriceMad} د.م.)`,
+          bodyFr: `${providerName} a envoyé un devis pour « ${job.title} ».`,
+          bodyAr: `أرسل ${providerName} عرض ثمن لطلبك « ${job.title} ».`,
+          linkPath: '/dashboard',
+        });
       } catch (err) {
         handleFirestoreError(err, OperationType.CREATE, path);
       }
@@ -468,6 +480,16 @@ export function useJobPosts(params: {
         await updateDoc(doc(db, 'jobPosts', jobId, 'proposals', providerId), {
           status: 'rejected',
           updatedAt: serverTimestamp(),
+        });
+        void dispatchUserNotification({
+          recipientUserId: providerId,
+          actorUserId: firebaseUser.uid,
+          type: 'quote_rejected',
+          titleFr: 'Devis non retenu',
+          titleAr: 'لم يتم اختيار عرضك',
+          bodyFr: 'Le client a décliné votre devis. Consultez d’autres demandes ouvertes dans votre ville.',
+          bodyAr: 'رفض الزبون عرض الثمن المقدم. يمكنك تصفح طلبات أخرى متاحة في مدينتك.',
+          linkPath: '/provider/jobs',
         });
       } catch (err) {
         reportFirestoreError(err, OperationType.UPDATE, path);
@@ -588,6 +610,17 @@ export function useJobPosts(params: {
             preferredTimeSlot: job.preferredTimeSlot,
             createdAt: serverTimestamp(),
           });
+        });
+
+        void dispatchUserNotification({
+          recipientUserId: proposal.providerId,
+          actorUserId: firebaseUser.uid,
+          type: 'quote_accepted',
+          titleFr: `Devis accepté ! (${bookingRef})`,
+          titleAr: `تم قبول عرضك! (${bookingRef})`,
+          bodyFr: `${job.clientName} a accepté votre devis de ${proposal.proposedPriceMad} DH pour « ${job.title} ».`,
+          bodyAr: `قبل ${job.clientName} عرضك بقيمة ${proposal.proposedPriceMad} د.م. لطلب « ${job.title} ».`,
+          linkPath: '/provider/missions',
         });
 
         return bookingRef;

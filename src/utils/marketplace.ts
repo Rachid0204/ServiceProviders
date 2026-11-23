@@ -1044,6 +1044,95 @@ export function isProviderSlotAvailable(
   return dayCfg.slots.includes(timeSlot);
 }
 
+// --- Phase 4: Messaging Inbox & Notifications Contracts ---
+
+export interface ConversationMetadataRecord {
+  bookingId: string;
+  clientId: string;
+  providerId: string;
+  lastMessageText: string;
+  lastSenderId: string;
+  lastMessageAtMs: number;
+  clientLastReadAtMs?: number;
+  providerLastReadAtMs?: number;
+  blockedByUid?: string;
+}
+
+export type NotificationType =
+  | 'booking_created'
+  | 'booking_status'
+  | 'quote_received'
+  | 'quote_accepted'
+  | 'quote_rejected'
+  | 'message_received'
+  | 'review_received'
+  | 'kyc_updated'
+  | 'system';
+
+export interface NotificationRecord {
+  id: string;
+  userId: string;
+  actorId: string;
+  type: NotificationType;
+  titleFr: string;
+  titleAr: string;
+  bodyFr: string;
+  bodyAr: string;
+  linkPath: string;
+  isRead: boolean;
+  createdAtIso: string;
+}
+
+export interface NotificationPreferencesRecord {
+  uid: string;
+  inAppEnabled: boolean;
+  emailEnabled: boolean;
+  smsWhatsAppEnabled: boolean;
+  bookingUpdates: boolean;
+  quotationUpdates: boolean;
+  chatMessages: boolean;
+  marketingUpdates: boolean;
+}
+
+export function createDefaultNotificationPreferences(uid = ''): NotificationPreferencesRecord {
+  return {
+    uid,
+    inAppEnabled: true,
+    emailEnabled: true,
+    smsWhatsAppEnabled: true,
+    bookingUpdates: true,
+    quotationUpdates: true,
+    chatMessages: true,
+    marketingUpdates: false,
+  };
+}
+
+/**
+ * Determines whether a conversation has unread messages for the given participant UID.
+ */
+export function isConversationUnreadForUser(
+  meta: ConversationMetadataRecord | null | undefined,
+  uid: string
+): boolean {
+  if (!meta || !uid || meta.lastMessageAtMs <= 0) return false;
+  if (meta.lastSenderId === uid) return false;
+  const lastReadMs =
+    uid === meta.clientId
+      ? meta.clientLastReadAtMs ?? 0
+      : uid === meta.providerId
+      ? meta.providerLastReadAtMs ?? 0
+      : 0;
+  return meta.lastMessageAtMs > lastReadMs;
+}
+
+/**
+ * Sanitizes notification deep-link paths so notifications only navigate to safe internal routes.
+ */
+export function sanitizeNotificationLinkPath(raw: string | undefined): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/dashboard';
+  return raw.slice(0, 160);
+}
+
 export const CATEGORY_SUGGESTED_SKILLS: Record<ServiceCategory, string[]> = {
   Plomberie: [
     'Détection de fuite sans casse',

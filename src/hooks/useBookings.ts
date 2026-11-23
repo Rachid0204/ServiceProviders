@@ -40,6 +40,7 @@ import {
   type VettedProvider,
 } from '../utils/marketplace';
 import { buildBootstrapClientProfile, isVerifiedAuthUser } from '../utils/authHelpers';
+import { dispatchUserNotification } from './useNotifications';
 
 function mapFirestoreBooking(id: string, data: DocumentData): BookingRecord {
   let createdAtIso = new Date().toISOString().slice(0, 10);
@@ -325,6 +326,18 @@ export function useBookings(params: {
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, path);
     }
+
+    void dispatchUserNotification({
+      recipientUserId: payload.provider.id,
+      actorUserId: firebaseUser.uid,
+      type: 'booking_created',
+      titleFr: `Nouvelle demande (${bookingRef})`,
+      titleAr: `طلب حجز جديد (${bookingRef})`,
+      bodyFr: `${payload.clientName} demande une intervention (${payload.serviceType}) à ${payload.neighborhood}.`,
+      bodyAr: `طلب ${payload.clientName} تدخلاً (${payload.serviceType}) في حي ${payload.neighborhood}.`,
+      linkPath: '/provider/missions',
+    });
+
     return bookingRef;
   };
 
@@ -359,6 +372,33 @@ export function useBookings(params: {
       nextStatus
     );
 
+    const notifyStatusChange = () => {
+      const recipientIsClient = firebaseUser.uid === target.providerId;
+      const recipientUserId = recipientIsClient ? target.clientId : target.providerId;
+      const statusFr =
+        nextStatus === 'accepted'
+          ? 'confirmée'
+          : nextStatus === 'in_progress'
+          ? 'en cours'
+          : 'terminée';
+      const statusAr =
+        nextStatus === 'accepted'
+          ? 'مقبول'
+          : nextStatus === 'in_progress'
+          ? 'قيد الإنجاز'
+          : 'مكتمل';
+      void dispatchUserNotification({
+        recipientUserId,
+        actorUserId: firebaseUser.uid,
+        type: 'booking_status',
+        titleFr: `Réservation ${target.bookingRef} ${statusFr}`,
+        titleAr: `تحديث الحجز ${target.bookingRef}: ${statusAr}`,
+        bodyFr: `Le statut de votre intervention (${target.serviceType}) est désormais : ${statusFr}.`,
+        bodyAr: `أصبحت حالة طلب التدخل (${target.serviceType}) الآن: ${statusAr}.`,
+        linkPath: recipientIsClient ? '/dashboard' : '/provider/missions',
+      });
+    };
+
     const path = `bookings/${bookingId}`;
     try {
       const updatePayload: Record<string, unknown> = {
@@ -384,11 +424,13 @@ export function useBookings(params: {
             updatedAt: serverTimestamp(),
           });
           await batch.commit();
+          notifyStatusChange();
           return;
         }
       }
 
       await updateDoc(doc(db, 'bookings', bookingId), updatePayload);
+      notifyStatusChange();
     } catch (err) {
       reportFirestoreError(err, OperationType.UPDATE, path);
       setBookingActionError(
@@ -603,6 +645,17 @@ export function useBookings(params: {
         review: newReview,
       });
     }
+
+    void dispatchUserNotification({
+      recipientUserId: targetBooking.providerId,
+      actorUserId: firebaseUser.uid,
+      type: 'review_received',
+      titleFr: `Nouvel avis client (${safeRating}/5 ★)`,
+      titleAr: `تقييم زبون جديد (${safeRating}/5 ★)`,
+      bodyFr: `${targetBooking.clientName} a évalué votre intervention (${targetBooking.bookingRef}).`,
+      bodyAr: `قام ${targetBooking.clientName} بتقييم تدخلك (${targetBooking.bookingRef}).`,
+      linkPath: '/provider/missions',
+    });
   };
 
   const applyAdminBookingPatch = (bookingId: string, patch: AdminBookingPatch) => {

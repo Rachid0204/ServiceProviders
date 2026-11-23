@@ -586,3 +586,41 @@ test('Phase 3 Quotations, Anti-Double-Booking & Weekly Availability Calendar Hel
   assert.equal(isProviderSlotAvailable(schedule, '2026-11-24', '09:00 - 12:00'), false); // Blocked date
 });
 
+test('Phase 4 Messaging & Notifications Helpers: unread tracking, default preferences, and safe deep-link sanitization', async () => {
+  const {
+    createDefaultNotificationPreferences,
+    isConversationUnreadForUser,
+    sanitizeNotificationLinkPath,
+  } = await import('./marketplace');
+
+  // Default notification preferences keep marketing opt-out by default (Law 09-08)
+  const prefs = createDefaultNotificationPreferences('user-42');
+  assert.equal(prefs.uid, 'user-42');
+  assert.equal(prefs.inAppEnabled, true);
+  assert.equal(prefs.bookingUpdates, true);
+  assert.equal(prefs.marketingUpdates, false);
+
+  // Conversation unread logic
+  const meta = {
+    bookingId: 'bk-1',
+    clientId: 'client-1',
+    providerId: 'prov-1',
+    lastMessageText: 'Bonjour, je suis en route',
+    lastSenderId: 'prov-1',
+    lastMessageAtMs: 2000,
+    clientLastReadAtMs: 1000,
+    providerLastReadAtMs: 2000,
+  };
+  assert.equal(isConversationUnreadForUser(meta, 'client-1'), true);
+  assert.equal(isConversationUnreadForUser(meta, 'prov-1'), false);
+  assert.equal(isConversationUnreadForUser({ ...meta, clientLastReadAtMs: 2500 }, 'client-1'), false);
+  assert.equal(isConversationUnreadForUser(null, 'client-1'), false);
+
+  // Deep-link sanitization prevents external / protocol-relative redirects
+  assert.equal(sanitizeNotificationLinkPath('/messages/bk-1'), '/messages/bk-1');
+  assert.equal(sanitizeNotificationLinkPath('https://evil.example/phish'), '/dashboard');
+  assert.equal(sanitizeNotificationLinkPath('//evil.example'), '/dashboard');
+  assert.equal(sanitizeNotificationLinkPath(undefined), '/dashboard');
+});
+
+

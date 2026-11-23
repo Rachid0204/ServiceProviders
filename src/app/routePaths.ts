@@ -30,6 +30,11 @@ export const ROUTE_PATHS = {
   CUSTOMER_PROFILE: '/profile',
   CUSTOMER_ALT_PROFILE: '/customer/profile',
 
+  // Shared authenticated communication & alerts routes
+  MESSAGES: '/messages',
+  MESSAGES_THREAD: '/messages/:bookingId',
+  NOTIFICATIONS: '/notifications',
+
   // Provider routes
   PROVIDER_ROOT: '/provider',
   PROVIDER_DASHBOARD: '/provider/dashboard',
@@ -120,6 +125,10 @@ export function buildServiceCategoryPath(category: ServiceCategory): string {
 
 export function buildProviderDetailPath(providerId: string): string {
   return `/providers/${encodeURIComponent(providerId)}`;
+}
+
+export function buildMessageThreadPath(bookingId: string): string {
+  return `/messages/${encodeURIComponent(bookingId)}`;
 }
 
 export function getProviderTabFromPathname(pathname: string): ProviderTab {

@@ -206,6 +206,34 @@ export interface Translations {
   quoteExpiredBadge: string;
   rejectQuoteBtn: string;
   availabilityTitle: string;
+  navMessages: string;
+  navNotifications: string;
+  messagesInboxTitle: string;
+  messagesInboxSubtitle: string;
+  messagesSearchPlaceholder: string;
+  messagesEmptyList: string;
+  messagesSelectConversation: string;
+  messagesLoadOlderBtn: string;
+  messagesReadReceipt: string;
+  messagesBlockUserBtn: string;
+  messagesUnblockUserBtn: string;
+  messagesBlockedNotice: string;
+  messagesReportBtn: string;
+  messagesReportTitle: string;
+  messagesReportReasonLabel: string;
+  messagesReportDetailsLabel: string;
+  messagesReportSubmitBtn: string;
+  messagesReportSuccess: string;
+  notificationsTitle: string;
+  notificationsSubtitle: string;
+  notificationsTabAll: string;
+  notificationsTabUnread: string;
+  notificationsMarkAllRead: string;
+  notificationsEmpty: string;
+  notificationsViewAll: string;
+  notificationsPreferencesTitle: string;
+  notificationsPreferencesSubtitle: string;
+  notificationsPrefSaved: string;
   cities: Record<MoroccanCity, string>;
   categories: Record<ServiceCategory, string>;
 }
@@ -440,6 +468,39 @@ export const TRANSLATIONS: Record<LanguageCode, Translations> = {
     quoteExpiredBadge: 'Devis expiré',
     rejectQuoteBtn: 'Refuser',
     availabilityTitle: 'Horaires & Disponibilités hebdomadaires',
+    navMessages: 'Messages',
+    navNotifications: 'Notifications',
+    messagesInboxTitle: 'Messagerie',
+    messagesInboxSubtitle:
+      'Toutes vos conversations liées à vos réservations en temps réel.',
+    messagesSearchPlaceholder: 'Rechercher une conversation, un Maâlem ou une référence...',
+    messagesEmptyList:
+      'Aucune conversation active. Vos échanges apparaîtront ici dès votre première réservation.',
+    messagesSelectConversation: 'Sélectionnez une conversation pour afficher les messages.',
+    messagesLoadOlderBtn: 'Charger les anciens messages',
+    messagesReadReceipt: 'Vu',
+    messagesBlockUserBtn: 'Bloquer',
+    messagesUnblockUserBtn: 'Débloquer',
+    messagesBlockedNotice:
+      'Cette conversation est bloquée. Débloquez-la pour envoyer un nouveau message.',
+    messagesReportBtn: 'Signaler',
+    messagesReportTitle: 'Signaler cette conversation',
+    messagesReportReasonLabel: 'Motif du signalement',
+    messagesReportDetailsLabel: 'Détails complémentaires',
+    messagesReportSubmitBtn: 'Envoyer le signalement',
+    messagesReportSuccess: 'Signalement transmis à notre équipe de modération.',
+    notificationsTitle: 'Centre de notifications',
+    notificationsSubtitle:
+      'Suivez en temps réel vos réservations, devis reçus et nouveaux messages.',
+    notificationsTabAll: 'Toutes',
+    notificationsTabUnread: 'Non lues',
+    notificationsMarkAllRead: 'Tout marquer comme lu',
+    notificationsEmpty: 'Vous êtes à jour ! Aucune notification pour le moment.',
+    notificationsViewAll: 'Voir toutes les notifications',
+    notificationsPreferencesTitle: 'Préférences de notifications',
+    notificationsPreferencesSubtitle:
+      'Choisissez les canaux et alertes que vous souhaitez recevoir.',
+    notificationsPrefSaved: 'Préférences enregistrées.',
     cities: {
       Casablanca: 'Casablanca',
       Rabat: 'Rabat',
@@ -687,6 +748,38 @@ export const TRANSLATIONS: Record<LanguageCode, Translations> = {
     quoteExpiredBadge: 'عرض منتهي الصلاحية',
     rejectQuoteBtn: 'رفض العرض',
     availabilityTitle: 'أوقات العمل والأيام المتاحة أسبوعياً',
+    navMessages: 'الرسائل',
+    navNotifications: 'الإشعارات',
+    messagesInboxTitle: 'صندوق الرسائل',
+    messagesInboxSubtitle: 'جميع محادثاتك المرتبطة بحجوزاتك بشكل فوري وآمن.',
+    messagesSearchPlaceholder: 'ابحث عن محادثة، معلم أو رقم حجز...',
+    messagesEmptyList:
+      'لا توجد محادثات نشطة حالياً. ستظهر محادثاتك هنا فور تسجيل أول حجز.',
+    messagesSelectConversation: 'اختر محادثة لعرض الرسائل.',
+    messagesLoadOlderBtn: 'تحميل الرسائل السابقة',
+    messagesReadReceipt: 'تمت القراءة',
+    messagesBlockUserBtn: 'حظر',
+    messagesUnblockUserBtn: 'إلغاء الحظر',
+    messagesBlockedNotice:
+      'هذه المحادثة محظورة حالياً. قم بإلغاء الحظر لإرسال رسالة جديدة.',
+    messagesReportBtn: 'إبلاغ',
+    messagesReportTitle: 'الإبلاغ عن هذه المحادثة',
+    messagesReportReasonLabel: 'سبب الإبلاغ',
+    messagesReportDetailsLabel: 'تفاصيل إضافية',
+    messagesReportSubmitBtn: 'إرسال البلاغ',
+    messagesReportSuccess: 'تم إرسال البلاغ بنجاح إلى فريق المراقبة.',
+    notificationsTitle: 'مركز الإشعارات',
+    notificationsSubtitle:
+      'تابع بشكل فوري تحديثات حجوزاتك، عروض الأثمنة والرسائل الجديدة.',
+    notificationsTabAll: 'الكل',
+    notificationsTabUnread: 'غير المقروءة',
+    notificationsMarkAllRead: 'تحديد الكل كمقروء',
+    notificationsEmpty: 'أنت مطلع على كل شيء! لا توجد إشعارات حالياً.',
+    notificationsViewAll: 'عرض جميع الإشعارات',
+    notificationsPreferencesTitle: 'تفضيلات الإشعارات',
+    notificationsPreferencesSubtitle:
+      'اختر القنوات والتنبيهات التي ترغب في تلقيها.',
+    notificationsPrefSaved: 'تم حفظ التفضيلات بنجاح.',
     cities: {
       Casablanca: 'الدار البيضاء',
       Rabat: 'الرباط',
