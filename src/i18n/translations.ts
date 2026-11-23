@@ -1,4 +1,13 @@
 import type { LanguageCode, MoroccanCity, ServiceCategory } from '../utils/marketplace';
+import {
+  UI_COPY_FR,
+  UI_COPY_AR,
+  uiText,
+  interpolateCopy,
+  type UiCopyDictionary,
+} from './uiCopy';
+
+export { UI_COPY_FR, UI_COPY_AR, uiText, interpolateCopy, type UiCopyDictionary };
 
 export interface Translations {
   brandName: string;
@@ -250,6 +259,7 @@ export interface Translations {
   paymentCmiComingSoonBadge: string;
   cities: Record<MoroccanCity, string>;
   categories: Record<ServiceCategory, string>;
+  ui: UiCopyDictionary;
 }
 
 export const TRANSLATIONS: Record<LanguageCode, Translations> = {
@@ -552,6 +562,7 @@ export const TRANSLATIONS: Record<LanguageCode, Translations> = {
       Déménagement: 'Déménagement & Transport',
       Maçonnerie: 'Maçonnerie, Carrelage & Plâtre',
     },
+    ui: UI_COPY_FR,
   },
   ar: {
     brandName: 'مول الخدمة',
@@ -846,5 +857,6 @@ export const TRANSLATIONS: Record<LanguageCode, Translations> = {
       Déménagement: 'النقل والرحيل (Déménagement)',
       Maçonnerie: 'البناء والزليج والجبص (Maçonnerie)',
     },
+    ui: UI_COPY_AR,
   },
 };

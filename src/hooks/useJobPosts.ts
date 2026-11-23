@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   collection,
+  collectionGroup,
   query,
   where,
   limit,
@@ -215,41 +216,42 @@ export function useJobPosts(params: {
     };
   }, [authReady, firebaseUser, isVerified]);
 
-  // For signed-in Maâlems, check which open jobs they already sent a proposal on (using deterministic doc ID == uid)
+  // For signed-in Maâlems, batch-load all of their own submitted proposals in a single collection-group query (AUD-019)
   useEffect(() => {
-    if (!firebaseUser || !isVerified || !ownProvider || openJobPosts.length === 0) {
+    if (!authReady || !firebaseUser || !isVerified || !ownProvider) {
+      setMyProposalsByJobId({});
       return;
     }
     let active = true;
-    const checkMyProposals = async () => {
-      const candidateJobs = openJobPosts.filter((j) => j.clientId !== firebaseUser.uid);
-      const entries = await Promise.all(
-        candidateJobs.map(async (job) => {
-          try {
-            const snap = await getDoc(
-              doc(db, 'jobPosts', job.id, 'proposals', firebaseUser.uid)
-            );
-            if (snap.exists()) {
-              return [job.id, mapFirestoreProposal(snap.id, snap.data())] as const;
-            }
-          } catch {
-            // ignore missing/denied
+    const loadMyProposalsBatch = async () => {
+      try {
+        const snap = await getDocs(
+          query(
+            collectionGroup(db, 'proposals'),
+            where('providerId', '==', firebaseUser.uid),
+            limit(100)
+          )
+        );
+        if (!active) return;
+        const nextMap: Record<string, JobProposalRecord> = {};
+        for (const docSnap of snap.docs) {
+          const parsed = mapFirestoreProposal(docSnap.id, docSnap.data());
+          if (parsed.jobId) {
+            nextMap[parsed.jobId] = parsed;
           }
-          return null;
-        })
-      );
-      if (!active) return;
-      const nextMap: Record<string, JobProposalRecord> = {};
-      for (const entry of entries) {
-        if (entry) nextMap[entry[0]] = entry[1];
+        }
+        setMyProposalsByJobId(nextMap);
+      } catch (err) {
+        if (active) {
+          reportFirestoreError(err, OperationType.LIST, 'proposals(collectionGroup)');
+        }
       }
-      setMyProposalsByJobId((prev) => ({ ...prev, ...nextMap }));
     };
-    void checkMyProposals();
+    void loadMyProposalsBatch();
     return () => {
       active = false;
     };
-  }, [firebaseUser?.uid, isVerified, ownProvider?.uid, openJobPosts]);
+  }, [authReady, firebaseUser?.uid, isVerified, ownProvider?.uid]);
 
   const createJobPost = useCallback(
     async (payload: CreateJobPostPayload): Promise<string> => {

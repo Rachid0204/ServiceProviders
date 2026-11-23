@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React, { useState, useEffect } from 'react';
 import {
   Calendar,
@@ -125,9 +126,7 @@ export const ProviderAvailabilityCalendar: React.FC<ProviderAvailabilityCalendar
     const ok = await saveAvailability(draft);
     if (ok) {
       setSavedNotice(
-        isAr
-          ? 'تم تحديث جدول المواعيد بنجاح!'
-          : 'Vos horaires et disponibilités ont été enregistrés !'
+        uiText(isAr).provider.vosHorairesEtDisponibilitesOntEte
       );
     }
   };
@@ -142,9 +141,7 @@ export const ProviderAvailabilityCalendar: React.FC<ProviderAvailabilityCalendar
               <span>{t.availabilityTitle}</span>
             </h2>
             <p className="text-xs text-slate-600">
-              {isAr
-                ? 'حدد أيام وساعات عملك ليتمكن الزبناء من حجز مواعيد مناسبة بدون تضارب.'
-                : 'Définissez vos jours d’intervention et créneaux horaires pour éviter les doublons de réservation.'}
+              {uiText(isAr).provider.definissezVosJoursDInterventionEt}
             </p>
           </div>
           <button
@@ -158,12 +155,8 @@ export const ProviderAvailabilityCalendar: React.FC<ProviderAvailabilityCalendar
             <Save className="w-4 h-4" />
             <span>
               {saving
-                ? isAr
-                  ? 'جاري الحفظ...'
-                  : 'Enregistrement...'
-                : isAr
-                ? 'حفظ الجدول'
-                : 'Enregistrer mon agenda'}
+                ? uiText(isAr).provider.enregistrement
+                : uiText(isAr).provider.enregistrerMonAgenda}
             </span>
           </button>
         </div>
@@ -187,12 +180,10 @@ export const ProviderAvailabilityCalendar: React.FC<ProviderAvailabilityCalendar
             <Zap className="w-4 h-4 text-amber-700 shrink-0" />
             <div>
               <div className="font-bold text-slate-900">
-                {isAr ? 'قبول التدخلات الاستعجالية في نفس اليوم' : 'Accepter les urgences le jour même'}
+                {uiText(isAr).provider.accepterLesUrgencesLeJourMeme}
               </div>
               <div className="text-slate-600">
-                {isAr
-                  ? 'يظهر للزبناء أنك متاح للحالات المستعجلة.'
-                  : 'Indique aux clients que vous répondez aux dépannages urgents sous 2h.'}
+                {uiText(isAr).provider.indiqueAuxClientsQueVousRepondez}
               </div>
             </div>
           </div>
@@ -254,7 +245,7 @@ export const ProviderAvailabilityCalendar: React.FC<ProviderAvailabilityCalendar
         {/* Blocked Dates / Vacations */}
         <div className="space-y-3 pt-2">
           <h3 className="text-xs font-bold text-slate-900">
-            {isAr ? 'أيام العطلة أو عدم التوفر الاستثنائية' : 'Dates bloquées / Congés exceptionnels'}
+            {uiText(isAr).provider.datesBloqueesCongesExceptionnels}
           </h3>
           <div className="flex flex-wrap items-center gap-2">
             <input
@@ -270,7 +261,7 @@ export const ProviderAvailabilityCalendar: React.FC<ProviderAvailabilityCalendar
               className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>{isAr ? 'حظر هذا التاريخ' : 'Bloquer cette date'}</span>
+              <span>{uiText(isAr).provider.bloquerCetteDate}</span>
             </button>
           </div>
           {draft.blockedDates.length > 0 && (

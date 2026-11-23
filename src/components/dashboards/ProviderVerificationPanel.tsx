@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React, { useState } from 'react';
 import {
   ShieldCheck,
@@ -65,9 +66,7 @@ export const ProviderVerificationPanel: React.FC<ProviderVerificationPanelProps>
       setUploadError(
         err instanceof Error
           ? err.message
-          : isAr
-          ? 'تعذر رفع الوثيقة.'
-          : 'Erreur lors du téléversement du justificatif.'
+          : uiText(isAr).provider.erreurLorsDuTeleversementDuJustificatif
       );
     } finally {
       setUploadingKind(null);
@@ -87,9 +86,7 @@ export const ProviderVerificationPanel: React.FC<ProviderVerificationPanelProps>
     });
     if (ok) {
       setSuccessMsg(
-        isAr
-          ? 'تم إرسال ملف التوثيق بنجاح! سيقوم فريق مول الخدمة بمراجعته بسرية تامة.'
-          : 'Dossier CIN envoyé avec succès ! Notre équipe de vérification examinera vos pièces sous 24h à 48h.'
+        uiText(isAr).provider.dossierCinEnvoyeAvecSuccesNotre
       );
     }
   };
@@ -100,32 +97,32 @@ export const ProviderVerificationPanel: React.FC<ProviderVerificationPanelProps>
     verified: {
       bg: 'bg-emerald-50 border-emerald-200 text-emerald-900',
       icon: ShieldCheck,
-      label: isAr ? 'هوية موثقة (CIN Vérifiée)' : 'Identité vérifiée (Badge CIN actif)',
+      label: uiText(isAr).provider.identiteVerifieeBadgeCinActif,
     },
     submitted: {
       bg: 'bg-amber-50 border-amber-200 text-amber-900',
       icon: Clock,
-      label: isAr ? 'تم الإرسال — قيد المراجعة' : 'Dossier soumis — En cours de vérification',
+      label: uiText(isAr).provider.dossierSoumisEnCoursDeVerification,
     },
     under_review: {
       bg: 'bg-amber-50 border-amber-200 text-amber-900',
       icon: Clock,
-      label: isAr ? 'قيد الفحص من الإدارة' : 'En cours d’examen par un administrateur',
+      label: uiText(isAr).provider.enCoursDExamenParUn,
     },
     rejected: {
       bg: 'bg-rose-50 border-rose-200 text-rose-900',
       icon: ShieldAlert,
-      label: isAr ? 'مرفوض — يرجى إعادة الإرسال' : 'Dossier refusé — Resoumission requise',
+      label: uiText(isAr).provider.dossierRefuseResoumissionRequise,
     },
     resubmission_required: {
       bg: 'bg-rose-50 border-rose-200 text-rose-900',
       icon: ShieldAlert,
-      label: isAr ? 'مطلوب استكمال الوثائق' : 'Pièces complémentaires demandées',
+      label: uiText(isAr).provider.piecesComplementairesDemandees,
     },
     not_submitted: {
       bg: 'bg-slate-50 border-slate-200 text-slate-800',
       icon: ShieldAlert,
-      label: isAr ? 'لم يتم تقديم ملف البطاقة الوطنية بعد' : 'Vérification CIN non soumise',
+      label: uiText(isAr).provider.verificationCinNonSoumise,
     },
   }[status];
 
@@ -140,12 +137,12 @@ export const ProviderVerificationPanel: React.FC<ProviderVerificationPanelProps>
           <div className="font-bold text-sm">{statusConfig.label}</div>
           {kycDoc?.cinNumberMasked && (
             <div>
-              {isAr ? 'رقم البطاقة المسجل:' : 'Numéro CIN masqué :'} <strong>{kycDoc.cinNumberMasked}</strong>
+              {uiText(isAr).provider.numeroCinMasque} <strong>{kycDoc.cinNumberMasked}</strong>
             </div>
           )}
           {kycDoc?.rejectionReason && (
             <p className="font-semibold text-rose-800">
-              {isAr ? 'ملاحظة الإدارة:' : 'Motif :'} {kycDoc.rejectionReason}
+              {uiText(isAr).provider.motif} {kycDoc.rejectionReason}
             </p>
           )}
         </div>
@@ -155,9 +152,7 @@ export const ProviderVerificationPanel: React.FC<ProviderVerificationPanelProps>
       <div className="p-4 rounded-xl bg-slate-900 text-slate-100 text-xs flex items-start gap-3">
         <Lock className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
         <p className="leading-relaxed">
-          {isAr
-            ? 'حماية الخصوصية (القانون 09-08 / CNDP): يتم تخزين صور البطاقة الوطنية والشهادات في مساحة خاصة مشفرة لا يمكن لأي زبون أو معلم آخر الاطلاع عليها. تبقى مرئية فقط لفريق التوثيق المعتمد.'
-            : 'Confidentialité (Loi 09-08 / CNDP) : Vos justificatifs CIN et diplômes sont stockés dans un coffre privé inaccessible au public. Seuls les administrateurs habilités peuvent les consulter pour valider votre badge de confiance.'}
+          {uiText(isAr).provider.confidentialiteLoi0908CndpVos}
         </p>
       </div>
 
@@ -167,7 +162,7 @@ export const ProviderVerificationPanel: React.FC<ProviderVerificationPanelProps>
         className="bg-white border border-slate-200 rounded-2xl p-6 space-y-5"
       >
         <h2 className="text-base font-bold text-slate-900">
-          {isAr ? 'تقديم وثائق التحقق المهني' : 'Déposer mes justificatifs de vérification'}
+          {uiText(isAr).provider.deposerMesJustificatifsDeVerification}
         </h2>
 
         {(error || uploadError) && (
@@ -185,12 +180,12 @@ export const ProviderVerificationPanel: React.FC<ProviderVerificationPanelProps>
         )}
 
         {loading ? (
-          <p className="text-xs text-slate-500">{isAr ? 'جاري التحميل...' : 'Chargement...'}</p>
+          <p className="text-xs text-slate-500">{uiText(isAr).provider.chargement}</p>
         ) : (
           <>
             <div className="space-y-1">
               <label htmlFor="kyc-cin" className="block text-xs font-semibold text-slate-700">
-                {isAr ? 'رقم البطاقة الوطنية للتعريف (CIN)' : 'Numéro de Carte Nationale (CIN)'}
+                {uiText(isAr).provider.numeroDeCarteNationaleCin}
               </label>
               <input
                 id="kyc-cin"
@@ -203,9 +198,7 @@ export const ProviderVerificationPanel: React.FC<ProviderVerificationPanelProps>
                 className="w-full max-w-sm px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:ring-2 focus:ring-emerald-600"
               />
               <p className="text-[11px] text-slate-500">
-                {isAr
-                  ? 'يتم حفظ الرقم بصيغة مقنّعة لحماية بياناتك (مثال: BK-••••56).'
-                  : 'Stocké sous forme masquée dans votre dossier (ex: BK-••••56).'}
+                {uiText(isAr).provider.stockeSousFormeMasqueeDansVotre}
               </p>
             </div>
 
@@ -214,17 +207,17 @@ export const ProviderVerificationPanel: React.FC<ProviderVerificationPanelProps>
                 [
                   {
                     kind: 'cin_front' as const,
-                    label: isAr ? 'الواجهة الأمامية لـ CIN *' : 'CIN Recto (Face avant) *',
+                    label: uiText(isAr).provider.cinRectoFaceAvant,
                     uploaded: Boolean(effectiveFrontUrl),
                   },
                   {
                     kind: 'cin_back' as const,
-                    label: isAr ? 'الواجهة الخلفية لـ CIN *' : 'CIN Verso (Face arrière) *',
+                    label: uiText(isAr).provider.cinVersoFaceArriere,
                     uploaded: Boolean(effectiveBackUrl),
                   },
                   {
                     kind: 'certificate' as const,
-                    label: isAr ? 'دبلوم OFPPT/ISTA (اختياري)' : 'Diplôme / Certificat (optionnel)',
+                    label: uiText(isAr).provider.diplomeCertificatOptionnel,
                     uploaded: Boolean(effectiveCertUrl),
                   },
                 ] as const
@@ -245,13 +238,9 @@ export const ProviderVerificationPanel: React.FC<ProviderVerificationPanelProps>
                   <span className="text-xs font-semibold text-slate-800">{label}</span>
                   <span className="text-[11px] text-slate-500">
                     {uploadingKind === kind
-                      ? isAr
-                        ? 'جاري الرفع...'
-                        : 'Téléversement...'
+                      ? uiText(isAr).provider.televersement
                       : uploaded
-                      ? isAr
-                        ? 'تم الرفع (اضغط للتحديث)'
-                        : 'Fichier enregistré (cliquer pour remplacer)'
+                      ? uiText(isAr).provider.fichierEnregistreCliquerPourRemplacer
                       : 'JPG, PNG, WebP ou PDF (max 8 Mo)'}
                   </span>
                   <input
@@ -275,12 +264,8 @@ export const ProviderVerificationPanel: React.FC<ProviderVerificationPanelProps>
               <ShieldCheck className="w-4 h-4" />
               <span>
                 {submitting
-                  ? isAr
-                    ? 'جاري الإرسال...'
-                    : 'Envoi en cours...'
-                  : isAr
-                  ? 'إرسال ملف التوثيق للمراجعة'
-                  : 'Soumettre mon dossier pour vérification'}
+                  ? uiText(isAr).provider.envoiEnCours
+                  : uiText(isAr).provider.soumettreMonDossierPourVerification}
               </span>
             </button>
           </>

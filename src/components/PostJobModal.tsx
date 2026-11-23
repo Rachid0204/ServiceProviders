@@ -1,3 +1,4 @@
+import { uiText } from '../i18n/uiCopy';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
@@ -101,9 +102,7 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
       setPhotoError(
         err instanceof Error
           ? err.message
-          : isAr
-          ? 'تعذر رفع الصورة.'
-          : 'Impossible de téléverser la photo.'
+          : uiText(isAr).common.impossibleDeTeleverserLaPhoto
       );
     } finally {
       setIsUploadingPhoto(false);
@@ -139,9 +138,7 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
 
     if (preferredDate < todayIso) {
       setErrors({
-        preferredDate: isAr
-          ? 'يرجى اختيار تاريخ اليوم أو تاريخ مستقبلي.'
-          : 'Veuillez choisir une date égale ou postérieure à aujourd’hui.',
+        preferredDate: uiText(isAr).booking.veuillezChoisirUneDateEgaleOu,
       });
       return;
     }
@@ -185,15 +182,13 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
           <div>
             <div className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700">
               <Sparkles className="w-3.5 h-3.5" />
-              <span>{isAr ? 'استقبل عروض المعلمين المعتمدين' : 'Recevez des devis de Maâlems'}</span>
+              <span>{uiText(isAr).booking.recevezDesDevisDeMaalems}</span>
             </div>
             <h2 id="post-job-modal-title" className="text-lg sm:text-xl font-bold text-slate-900 mt-0.5">
-              {isAr ? 'نشر طلب خدمة جديد' : 'Publier un besoin / une mission'}
+              {uiText(isAr).booking.publierUnBesoinUneMission}
             </h2>
             <p className="text-xs text-slate-600 mt-0.5">
-              {isAr
-                ? 'صف الخدمة التي تحتاجها وميزانيتك، وسيتقدم المعلمون المؤهلون في مدينتك بعروضهم.'
-                : 'Décrivez votre besoin et votre budget : les Maâlems de votre ville vous enverront leurs devis directement dans votre espace.'}
+              {uiText(isAr).booking.decrivezVotreBesoinEtVotreBudget}
             </p>
           </div>
           <button
@@ -212,12 +207,10 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
               <CheckCircle2 className="w-6 h-6" />
             </div>
             <h3 className="text-lg font-bold text-slate-900">
-              {isAr ? 'تم نشر طلبك بنجاح!' : 'Votre annonce est en ligne !'}
+              {uiText(isAr).booking.votreAnnonceEstEnLigne}
             </h3>
             <p className="text-sm text-slate-600 max-w-md mx-auto">
-              {isAr
-                ? 'طلبك مرئي الآن للمعلمين المعتمدين. ستصلك العروض والأسعار مباشرة في قسم « طلباتي المنشورة ».'
-                : 'Votre besoin est désormais visible par les Maâlems vérifiés. Vous pourrez comparer leurs devis dans « Mes Besoins Publiés ».'}
+              {uiText(isAr).booking.votreBesoinEstDesormaisVisiblePar}
             </p>
             <div className="max-w-sm mx-auto p-4 bg-slate-50 border border-slate-200 rounded-xl text-xs space-y-1">
               <div className="font-mono-tabular font-bold text-emerald-800">{createdJobRef}</div>
@@ -234,7 +227,7 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
               onClick={onClose}
               className="px-6 py-2.5 text-xs font-semibold text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 cursor-pointer"
             >
-              {isAr ? 'عرض في لوحة التحكم' : 'Voir dans mon tableau de bord'}
+              {uiText(isAr).booking.voirDansMonTableauDeBord}
             </button>
           </div>
         ) : (
@@ -243,7 +236,7 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-12 gap-4">
               <div className="sm:col-span-7">
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {isAr ? 'عنوان الخدمة المطلوبة' : 'Titre du besoin'}{' '}
+                  {uiText(isAr).booking.titreDuBesoin}{' '}
                   <span className="text-rose-600">*</span>
                 </label>
                 <input
@@ -252,9 +245,7 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder={
-                    isAr
-                      ? 'مثال: إصلاح تسرب مياه في المطبخ وتركيب سخان'
-                      : 'Ex: Réparation fuite sous évier + pose mitigeur'
+                    uiText(isAr).booking.exReparationFuiteSousEvierPose
                   }
                   className="w-full px-3.5 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
                 />
@@ -263,7 +254,7 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
 
               <div className="sm:col-span-5">
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {isAr ? 'التخصص المطلوب' : 'Catégorie métier'}{' '}
+                  {uiText(isAr).booking.categorieMetier}{' '}
                   <span className="text-rose-600">*</span>
                 </label>
                 <select
@@ -320,7 +311,7 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {isAr ? 'الميزانية التقديرية (د.م.)' : 'Budget estimé (DH)'}{' '}
+                  {uiText(isAr).booking.budgetEstimeDh}{' '}
                   <span className="text-rose-600">*</span>
                 </label>
                 <input
@@ -341,7 +332,7 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
             {/* Urgency Selector */}
             <div>
               <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                {isAr ? 'درجة الاستعجال' : 'Niveau d’urgence'}
+                {uiText(isAr).booking.niveauDUrgence}
               </label>
               <div className="grid grid-cols-3 gap-2">
                 {(
@@ -444,12 +435,8 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
                   <Camera className="w-3.5 h-3.5 text-emerald-700" />
                   <span>
                     {isUploadingPhoto
-                      ? isAr
-                        ? 'جاري الرفع...'
-                        : 'Upload...'
-                      : isAr
-                      ? 'إضافة صورة'
-                      : 'Ajouter une photo'}
+                      ? uiText(isAr).common.upload
+                      : uiText(isAr).booking.ajouterUnePhoto}
                   </span>
                   <input
                     type="file"
@@ -481,7 +468,7 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
                     className="w-16 h-16 rounded-lg object-cover border border-slate-300"
                   />
                   <span className="text-xs text-emerald-700 font-medium">
-                    {isAr ? '✓ تم إرفاق الصورة' : '✓ Photo jointe'}
+                    {uiText(isAr).booking.photoJointe}
                   </span>
                 </div>
               )}
@@ -549,12 +536,8 @@ export const PostJobModal: React.FC<PostJobModalProps> = ({
                 className="px-5 py-2.5 text-xs font-semibold text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 disabled:opacity-60 cursor-pointer"
               >
                 {isSubmitting
-                  ? isAr
-                    ? 'جاري النشر...'
-                    : 'Publication...'
-                  : isAr
-                  ? 'نشر الطلب الآن'
-                  : 'Publier mon besoin'}
+                  ? uiText(isAr).common.publication
+                  : uiText(isAr).booking.publierMonBesoin}
               </button>
             </div>
           </form>

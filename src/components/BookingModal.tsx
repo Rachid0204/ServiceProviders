@@ -1,3 +1,4 @@
+import { uiText } from '../i18n/uiCopy';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   X,
@@ -149,9 +150,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       setPhotoError(
         err instanceof Error
           ? err.message
-          : lang === 'ar'
-          ? 'تعذر رفع الصورة.'
-          : 'Impossible de téléverser la photo.'
+          : uiText(lang).common.impossibleDeTeleverserLaPhoto
       );
     } finally {
       setIsUploadingPhoto(false);
@@ -163,7 +162,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     const fallbackPin = () => {
       setAddressPin(
         `${neighborhood || provider.location.quartier}, ${provider.location.city} — ${
-          lang === 'ar' ? 'العنوان بالتقريب' : 'Repère quartier'
+          uiText(lang).booking.repereQuartier
         }`
       );
     };
@@ -217,9 +216,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     if (preferredDate < todayIso) {
       setErrors({
         preferredDate:
-          lang === 'ar'
-            ? 'يرجى اختيار تاريخ اليوم أو تاريخ مستقبلي.'
-            : 'Veuillez choisir une date égale ou postérieure à aujourd’hui.',
+          uiText(lang).booking.veuillezChoisirUneDateEgaleOu,
       });
       return;
     }
@@ -362,14 +359,10 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             </div>
             <div className="space-y-1.5 max-w-md mx-auto">
               <h3 className="text-base font-bold text-slate-900">
-                {lang === 'ar'
-                  ? 'سجّل الدخول لتأكيد حجزك بأمان'
-                  : 'Connectez-vous pour confirmer votre réservation'}
+                {uiText(lang).booking.connectezVousPourConfirmerVotreReservation}
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                {lang === 'ar'
-                  ? 'لحماية طلباتك وتفعيل الدردشة المباشرة وضمان CMI، يرجى تسجيل الدخول بحسابك أو إنشاء حساب جديد في ثوانٍ.'
-                  : 'Pour suivre votre intervention, discuter en direct avec le Maâlem et bénéficier du séquestre CMI, connectez-vous en un clic.'}
+                {uiText(lang).booking.pourSuivreVotreInterventionDiscuterEn}
               </p>
             </div>
 
@@ -414,9 +407,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
                 >
                   <span>
-                    {lang === 'ar'
-                      ? 'الدخول بالبريد الإلكتروني'
-                      : 'Connexion / Inscription par e-mail'}
+                    {uiText(lang).booking.connexionInscriptionParEMail}
                   </span>
                 </button>
               )}
@@ -431,9 +422,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               >
                 <MessageCircle className="w-3.5 h-3.5" />
                 <span>
-                  {lang === 'ar'
-                    ? 'أو تواصل مباشرة عبر واتساب للاستفسار'
-                    : 'Ou poser une question rapide sur WhatsApp'}
+                  {uiText(lang).booking.ouPoserUneQuestionRapideSur}
                 </span>
               </a>
             </div>
@@ -449,9 +438,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               >
                 <AlertCircle className="w-4 h-4 text-rose-700 shrink-0 mt-0.5" />
                 <p>
-                  {lang === 'ar'
-                    ? 'يرجى تأكيد بريدك الإلكتروني في قسم الملف الشخصي قبل تأكيد الحجز.'
-                    : 'Veuillez confirmer votre adresse e-mail depuis votre espace profil avant d’envoyer une réservation.'}
+                  {uiText(lang).booking.veuillezConfirmerVotreAdresseEMail}
                 </p>
               </div>
             )}
@@ -746,7 +733,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className="text-xs font-bold text-slate-900">{t.paymentCashLabel}</span>
                       <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800">
-                        {lang === 'ar' ? '0% رسوم' : '0% frais'}
+                        {uiText(lang).booking.n0Frais}
                       </span>
                     </div>
                     <div className="text-[11px] text-slate-600 mt-0.5 leading-snug">
@@ -768,9 +755,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                       </span>
                     </div>
                     <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">
-                      {lang === 'ar'
-                        ? 'سيتم تفعيل الدفع الإلكتروني عبر بوابة CMI المعتمدة قريباً.'
-                        : 'Activation prochaine via passerelle CMI certifiée côté serveur.'}
+                      {uiText(lang).booking.activationProchaineViaPasserelleCmiCertifiee}
                     </div>
                   </div>
                 </div>

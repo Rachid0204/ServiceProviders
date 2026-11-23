@@ -1,3 +1,4 @@
+import { uiText } from '../i18n/uiCopy';
 import React from 'react';
 import { CheckCircle2, Clock, Play, Star, XCircle, Circle } from 'lucide-react';
 import type {
@@ -110,10 +111,10 @@ export const BookingTimeline: React.FC<{
       {!isCancelled && (
         <div className="text-[11px] text-slate-500 flex items-center justify-between pt-1 border-t border-slate-200/70">
           <span>
-            {isAr ? 'تاريخ الطلب:' : 'Créée le :'} <strong>{booking.createdAtIso}</strong>
+            {uiText(isAr).booking.creeeLe} <strong>{booking.createdAtIso}</strong>
           </span>
           <span>
-            {isAr ? 'موعد التنفيذ:' : 'Intervention :'} <strong>{booking.preferredDate}</strong>
+            {uiText(isAr).booking.intervention} <strong>{booking.preferredDate}</strong>
           </span>
         </div>
       )}
@@ -132,12 +133,8 @@ export const JobLifecycleStepper: React.FC<{
         <XCircle className="w-3.5 h-3.5" />
         <span>
           {job.status === 'cancelled'
-            ? isAr
-              ? 'طلب ملغى'
-              : 'Annonce annulée'
-            : isAr
-            ? 'طلب مغلق'
-            : 'Annonce clôturée'}
+            ? uiText(isAr).booking.annonceAnnulee
+            : uiText(isAr).booking.annonceCloturee}
         </span>
       </div>
     );

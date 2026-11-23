@@ -11,7 +11,6 @@ export const AdminDashboardPage: React.FC = () => {
     t,
     toggleLanguage,
     isPureProvider,
-    setBookingProvider,
     firebaseUser,
     authReady,
     signInWithGoogle,
@@ -19,13 +18,11 @@ export const AdminDashboardPage: React.FC = () => {
     allProviders,
     firestoreProviders,
     bookings,
-    chatThreads,
     systemSettings,
     updateLocalSettings,
     applyAdminProviderOverride,
     removeProviderReview,
     applyAdminBookingPatch,
-    sendLocalChatMessage,
   } = useMarketplace();
 
   return (
@@ -36,10 +33,6 @@ export const AdminDashboardPage: React.FC = () => {
       onExitAdmin={() =>
         navigate(isPureProvider ? ROUTE_PATHS.PROVIDER_DASHBOARD : ROUTE_PATHS.HOME)
       }
-      onBookFromAdmin={(p) => {
-        navigate(ROUTE_PATHS.HOME);
-        setBookingProvider(p);
-      }}
       firebaseUser={firebaseUser}
       authReady={authReady}
       onGoogleSignIn={async () => {
@@ -52,13 +45,11 @@ export const AdminDashboardPage: React.FC = () => {
       allProviders={allProviders}
       firestoreProviders={firestoreProviders}
       bookings={bookings}
-      chatThreads={chatThreads}
       systemSettings={systemSettings}
       onUpdateLocalSettings={updateLocalSettings}
       onApplyProviderOverride={applyAdminProviderOverride}
       onRemoveProviderReview={removeProviderReview}
       onApplyBookingPatch={applyAdminBookingPatch}
-      onSendLocalChatMessage={sendLocalChatMessage}
     />
   );
 };

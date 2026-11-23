@@ -1,3 +1,4 @@
+import { uiText } from '../i18n/uiCopy';
 import React, { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -82,7 +83,7 @@ export const ProviderMap: React.FC<ProviderMapProps> = ({
       userPopup.style.fontSize = '12px';
       userPopup.style.padding = '2px';
       const userTitle = document.createElement('strong');
-      userTitle.textContent = lang === 'ar' ? 'موقعي الحالي' : 'Votre position';
+      userTitle.textContent = uiText(lang).publicUi.votrePosition;
       const userBr = document.createElement('br');
       const userLabel = document.createElement('span');
       userLabel.textContent =
@@ -187,12 +188,10 @@ export const ProviderMap: React.FC<ProviderMapProps> = ({
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-2xs flex flex-col h-full min-h-[420px]">
       <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between gap-2 text-xs">
         <div className="font-semibold text-slate-800">
-          {lang === 'ar'
-            ? 'خريطة المعلمين التفاعلية (OpenStreetMap)'
-            : 'Carte Interactive des Maâlems (OpenStreetMap)'}
+          {uiText(lang).publicUi.carteInteractiveDesMaalemsOpenstreetmap}
         </div>
         <div className="text-slate-500 tabular-nums">
-          {providers.length} {lang === 'ar' ? 'مواقع على الخريطة' : 'positions affichées'}
+          {providers.length} {uiText(lang).publicUi.positionsAffichees}
         </div>
       </div>
       <div

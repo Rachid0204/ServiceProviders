@@ -1,3 +1,4 @@
+import { uiText, interpolateCopy } from '../../i18n/uiCopy';
 import React, { useState, useMemo } from 'react';
 import {
   Search,
@@ -78,13 +79,11 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
             <Search className="w-4 h-4 text-slate-400 absolute top-2.5 start-3 pointer-events-none" />
             <input
               type="search"
-              aria-label={isAr ? 'بحث عن معلم...' : 'Rechercher un Maâlem...'}
+              aria-label={uiText(isAr).admin.rechercherUnMaalem}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={
-                isAr
-                  ? 'ابحث بالاسم، الحرفة، الحي أو الهاتف...'
-                  : 'Nom, métier, quartier ou +212...'
+                uiText(isAr).admin.nomMetierQuartierOu212
               }
               className="w-full ps-9 pe-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
             />
@@ -120,7 +119,7 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            {isAr ? `الكل (${providers.length})` : `Tous (${providers.length})`}
+            {interpolateCopy(uiText(isAr).admin.tous, { v0: providers.length })}
           </button>
           <button
             type="button"
@@ -131,7 +130,7 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            {isAr ? `قيد التحقق (${pendingCount})` : `En attente CIN (${pendingCount})`}
+            {interpolateCopy(uiText(isAr).admin.enAttenteCin, { v0: pendingCount })}
           </button>
           <button
             type="button"
@@ -142,9 +141,7 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            {isAr
-              ? `موثقون (${providers.length - pendingCount})`
-              : `CIN Vérifiée (${providers.length - pendingCount})`}
+            {interpolateCopy(uiText(isAr).admin.cinVerifiee, { v0: providers.length - pendingCount })}
           </button>
         </div>
       </div>
@@ -155,23 +152,21 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
           <table className="w-full text-start border-collapse">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold text-slate-600">
-                <th className="py-3 px-4 text-start">{isAr ? 'المعلم / التخصص' : 'Maâlem & Métier'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'المدينة والحي' : 'Ville & Quartier'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'الهاتف' : 'Téléphone'}</th>
-                <th className="py-3 px-4 text-end">{isAr ? 'التعريفة / ساعة' : 'Tarif / h'}</th>
-                <th className="py-3 px-4 text-end">{isAr ? 'التقييم' : 'Note'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'التوفر' : 'Disponibilité'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'حالة CIN' : 'Statut CIN'}</th>
-                <th className="py-3 px-4 text-end">{isAr ? 'إجراءات الإدارة' : 'Actions'}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.maalemMetier}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.villeQuartier}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.telephone}</th>
+                <th className="py-3 px-4 text-end">{uiText(isAr).admin.tarifH}</th>
+                <th className="py-3 px-4 text-end">{uiText(isAr).admin.note}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.disponibilite}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.statutCin2}</th>
+                <th className="py-3 px-4 text-end">{uiText(isAr).admin.actions2}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-10 px-4 text-center text-slate-500">
-                    {isAr
-                      ? 'لا يوجد أي مقدم خدمة يطابق الفلتر الحالي.'
-                      : 'Aucun prestataire ne correspond à ce filtre.'}
+                    {uiText(isAr).admin.aucunPrestataireNeCorrespondACe}
                   </td>
                 </tr>
               ) : (
@@ -219,12 +214,12 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
                       {p.verifiedBadge ? (
                         <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
                           <ShieldCheck className="w-3.5 h-3.5" />
-                          <span>{isAr ? 'CIN موثقة' : 'CIN Vérifiée'}</span>
+                          <span>{uiText(isAr).admin.cinVerifiee2}</span>
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 font-semibold text-amber-700">
                           <ShieldOff className="w-3.5 h-3.5" />
-                          <span>{isAr ? 'قيد الانتظار' : 'En attente CIN'}</span>
+                          <span>{uiText(isAr).admin.enAttenteCin2}</span>
                         </span>
                       )}
                     </td>
@@ -236,12 +231,12 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
                           className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
                         >
                           <FileCheck2 className="w-3.5 h-3.5 text-emerald-700" />
-                          <span>{isAr ? 'ملف KYC' : 'Dossier KYC'}</span>
+                          <span>{uiText(isAr).admin.dossierKyc}</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => onInspectProvider(p)}
-                          aria-label={`${isAr ? 'معاينة' : 'Inspecter'} ${p.fullNameFr}`}
+                          aria-label={`${uiText(isAr).admin.inspecter} ${p.fullNameFr}`}
                           className="p-1.5 text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors cursor-pointer"
                         >
                           <Eye className="w-3.5 h-3.5" />
@@ -256,12 +251,8 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
                           }`}
                         >
                           {p.verifiedBadge
-                            ? isAr
-                              ? 'إلغاء التوثيق'
-                              : 'Révoquer CIN'
-                            : isAr
-                            ? 'توثيق CIN'
-                            : 'Approuver CIN'}
+                            ? uiText(isAr).admin.revoquerCin
+                            : uiText(isAr).admin.approuverCin}
                         </button>
                       </div>
                     </td>
@@ -285,9 +276,7 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
             <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-200">
               <div>
                 <h2 id="kyc-modal-title" className="text-base font-bold text-slate-900">
-                  {isAr
-                    ? 'مراجعة ملف التحقق (CIN / KYC)'
-                    : 'Revue du Dossier KYC / CIN'}
+                  {uiText(isAr).admin.revueDuDossierKycCin}
                 </h2>
                 <p className="text-xs text-slate-600 mt-0.5">
                   {isAr ? kycModalProvider.fullNameAr : kycModalProvider.fullNameFr} ·{' '}
@@ -307,7 +296,7 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
             <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-lg text-xs space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">
-                  {isAr ? 'حالة البطاقة الوطنية:' : 'Statut CIN :'}
+                  {uiText(isAr).admin.statutCin}
                 </span>
                 <span className="font-mono-tabular font-bold text-slate-900">
                   {kycModalProvider.cinNumberMasked}
@@ -315,7 +304,7 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">
-                  {isAr ? 'الهاتف المسجل:' : 'Téléphone vérifié :'}
+                  {uiText(isAr).admin.telephoneVerifie}
                 </span>
                 <span className="font-mono-tabular font-semibold text-slate-800" dir="ltr">
                   {kycModalProvider.phone}
@@ -323,7 +312,7 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-slate-500">
-                  {isAr ? 'الشهادة المهنية:' : 'Qualification / Diplôme :'}
+                  {uiText(isAr).admin.qualificationDiplome}
                 </span>
                 <span className="font-semibold text-slate-800 text-end">
                   {isAr ? kycModalProvider.diplomaAr : kycModalProvider.diplomaFr}
@@ -334,9 +323,7 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
             <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2.5 text-xs text-amber-900">
               <Lock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
               <span>
-                {isAr
-                  ? 'التحقق من وثائق البطاقة الوطنية (CIN) والدبلومات يتم يدوياً خارج المنصة إلى حين تفعيل خدمة رفع الوثائق المشفرة عبر Storage.'
-                  : 'Vérifiez manuellement la pièce CIN et le diplôme OFPPT/ISTA du prestataire avant d’activer le badge CIN (le stockage chiffré KYC n’est pas encore connecté).'}
+                {uiText(isAr).admin.verifiezManuellementLaPieceCinEt}
               </span>
             </div>
 
@@ -361,12 +348,8 @@ export const AdminProvidersSection: React.FC<AdminProvidersSectionProps> = ({
                 }`}
               >
                 {kycModalProvider.verifiedBadge
-                  ? isAr
-                    ? 'إلغاء توثيق CIN'
-                    : 'Révoquer CIN'
-                  : isAr
-                  ? 'المصادقة على ملف CIN'
-                  : 'Approuver Dossier CIN'}
+                  ? uiText(isAr).admin.revoquerCin2
+                  : uiText(isAr).admin.approuverDossierCin}
               </button>
             </div>
           </div>

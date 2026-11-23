@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React, { useState, useMemo } from 'react';
 import {
   Search,
@@ -89,15 +90,15 @@ export const AdminBookingsSection: React.FC<AdminBookingsSectionProps> = ({
   };
 
   const getPaymentStatusLabel = (b: BookingRecord): string => {
-    if (b.paymentStatus === 'paid') return isAr ? 'مدفوع (90/10)' : 'Payé (90/10)';
-    if (b.paymentStatus === 'refunded') return isAr ? 'مسترجع 100%' : 'Remboursé 100%';
+    if (b.paymentStatus === 'paid') return uiText(isAr).admin.paye9010;
+    if (b.paymentStatus === 'refunded') return uiText(isAr).common.rembourse100;
     if (b.paymentStatus === 'disputed_split') {
-      return isAr ? 'تسوية نزاع (50/50)' : 'Arbitrage (50/50)';
+      return uiText(isAr).common.arbitrage5050;
     }
     if (b.paymentStatus === 'escrow_held') {
-      return isAr ? 'ضمان CMI محجوز' : 'Séquestre CMI bloqué';
+      return uiText(isAr).admin.sequestreCmiBloque2;
     }
-    return isAr ? 'عند الإنجاز' : 'À régler (COD)';
+    return uiText(isAr).admin.aReglerCod;
   };
 
   const getStatusLabel = (status: BookingStatus): string => {
@@ -126,21 +127,21 @@ export const AdminBookingsSection: React.FC<AdminBookingsSectionProps> = ({
             <Search className="w-4 h-4 text-slate-400 absolute top-2.5 start-3 pointer-events-none" />
             <input
               type="search"
-              aria-label={isAr ? 'بحث في الحجوزات...' : 'Rechercher une réservation...'}
+              aria-label={uiText(isAr).admin.rechercherUneReservation}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder={isAr ? 'المرجع #MK، الزبون أو المعلم...' : 'Réf #MK, client ou Maâlem...'}
+              placeholder={uiText(isAr).admin.refMkClientOuMaalem}
               className="w-full ps-9 pe-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
             />
           </div>
 
           <select
-            aria-label={isAr ? 'تصفية حسب الحالة' : 'Filtrer par statut'}
+            aria-label={uiText(isAr).admin.filtrerParStatut}
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as BookingStatus | 'ALL')}
             className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
           >
-            <option value="ALL">{isAr ? 'جميع الحالات' : 'Tous les statuts'}</option>
+            <option value="ALL">{uiText(isAr).admin.tousLesStatuts}</option>
             {ALL_STATUSES.map((st) => (
               <option key={st} value={st}>
                 {getStatusLabel(st)}
@@ -149,15 +150,15 @@ export const AdminBookingsSection: React.FC<AdminBookingsSectionProps> = ({
           </select>
 
           <select
-            aria-label={isAr ? 'طريقة الدفع' : 'Mode de paiement'}
+            aria-label={uiText(isAr).admin.modeDePaiement}
             value={paymentFilter}
             onChange={(e) => setPaymentFilter(e.target.value as PaymentMethod | 'ALL')}
             className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
           >
-            <option value="ALL">{isAr ? 'كل طرق الدفع' : 'Tous paiements'}</option>
-            <option value="cmi_escrow">{isAr ? 'ضمان CMI الإلكتروني' : 'Séquestre CMI'}</option>
+            <option value="ALL">{uiText(isAr).admin.tousPaiements}</option>
+            <option value="cmi_escrow">{uiText(isAr).admin.sequestreCmi}</option>
             <option value="cash_on_completion">
-              {isAr ? 'الدفع عند الخدمة (COD)' : 'Espèces fin de travaux (COD)'}
+              {uiText(isAr).admin.especesFinDeTravauxCod}
             </option>
           </select>
         </div>
@@ -168,7 +169,7 @@ export const AdminBookingsSection: React.FC<AdminBookingsSectionProps> = ({
           className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
         >
           <Download className="w-3.5 h-3.5" />
-          <span>{isAr ? 'تصدير CSV' : 'Exporter CSV'}</span>
+          <span>{uiText(isAr).admin.exporterCsv}</span>
         </button>
       </div>
 
@@ -178,22 +179,20 @@ export const AdminBookingsSection: React.FC<AdminBookingsSectionProps> = ({
           <table className="w-full text-start border-collapse">
             <thead>
               <tr className="border-b border-slate-200 bg-slate-50/80 text-[11px] font-semibold text-slate-600">
-                <th className="py-3 px-4 text-start">{isAr ? 'المرجع والتاريخ' : 'Réf & Créneau'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'الزبون ← المعلم' : 'Client → Maâlem'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'الخدمة والمدينة' : 'Service & Ville'}</th>
-                <th className="py-3 px-4 text-end">{isAr ? 'المبلغ والتوزيع' : 'Montant & Ventilation'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'حالة الدفع / CMI' : 'Paiement / CMI'}</th>
-                <th className="py-3 px-4 text-start">{isAr ? 'حالة الطلب (تحكم)' : 'Statut (Override)'}</th>
-                <th className="py-3 px-4 text-end">{isAr ? 'إجراءات الضمان' : 'Actions Séquestre'}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.refCreneau}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.clientMaalem2}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.serviceVille}</th>
+                <th className="py-3 px-4 text-end">{uiText(isAr).admin.montantVentilation}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.paiementCmi}</th>
+                <th className="py-3 px-4 text-start">{uiText(isAr).admin.statutOverride}</th>
+                <th className="py-3 px-4 text-end">{uiText(isAr).admin.actionsSequestre}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="py-10 px-4 text-center text-slate-500">
-                    {isAr
-                      ? 'لا توجد حجوزات تطابق معايير البحث الحالية.'
-                      : 'Aucune réservation ne correspond à ce filtre.'}
+                    {uiText(isAr).admin.aucuneReservationNeCorrespondACe}
                   </td>
                 </tr>
               ) : (
@@ -229,7 +228,7 @@ export const AdminBookingsSection: React.FC<AdminBookingsSectionProps> = ({
                         </div>
                         <div className="text-[11px] text-slate-500">
                           {b.paymentStatus === 'refunded'
-                            ? `${isAr ? 'مسترجع:' : 'Remboursé:'} ${refundMad || b.estimatedMad} DH`
+                            ? `${uiText(isAr).admin.rembourse} ${refundMad || b.estimatedMad} DH`
                             : `${payoutMad} DH (${Math.max(0, 100 - platformFeePct)}%) / ${feeMad} DH (${platformFeePct}%)`}
                         </div>
                       </td>

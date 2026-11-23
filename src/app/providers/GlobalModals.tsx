@@ -1,7 +1,7 @@
 import React, { useMemo, lazy, Suspense } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useMarketplace } from './MarketplaceContext';
-import { ROUTE_PATHS } from '../routePaths';
+import { buildMessageThreadPath, ROUTE_PATHS } from '../routePaths';
 
 const PostJobModal = lazy(() =>
   import('../../components/PostJobModal').then((m) => ({ default: m.PostJobModal }))
@@ -11,12 +11,6 @@ const AuthModal = lazy(() =>
 );
 const BookingModal = lazy(() =>
   import('../../components/BookingModal').then((m) => ({ default: m.BookingModal }))
-);
-const ProviderDetailModal = lazy(() =>
-  import('../../components/ProviderDetailModal').then((m) => ({ default: m.ProviderDetailModal }))
-);
-const ChatDrawerModal = lazy(() =>
-  import('../../components/ChatDrawerModal').then((m) => ({ default: m.ChatDrawerModal }))
 );
 const ReviewModal = lazy(() =>
   import('../../components/ReviewModal').then((m) => ({ default: m.ReviewModal }))
@@ -45,9 +39,7 @@ export const GlobalModals: React.FC = () => {
     isVerified,
     userProfile,
     systemSettings,
-    allProviders,
     bookings,
-    chatThreads,
     setSignupRoleIntent,
     signInWithGoogle,
     handleAuthSuccess,
@@ -57,19 +49,12 @@ export const GlobalModals: React.FC = () => {
     cancelBookingWithReason,
     rescheduleBooking,
     submitClientReview,
-    sendLocalChatMessage,
-    markConversationRead,
-    updateConversationOnMessage,
     authModalIntent,
     setAuthModalIntent,
     isPostJobModalOpen,
     setIsPostJobModalOpen,
-    detailProvider,
-    setDetailProvider,
     bookingProvider,
     setBookingProvider,
-    activeChatBooking,
-    setActiveChatBooking,
     detailBooking,
     setDetailBooking,
     cancellingBooking,
@@ -83,14 +68,6 @@ export const GlobalModals: React.FC = () => {
   const syncedDetailBooking = useMemo(
     () => (detailBooking ? bookings.find((b) => b.id === detailBooking.id) || detailBooking : null),
     [bookings, detailBooking]
-  );
-
-  const syncedDetailProvider = useMemo(
-    () =>
-      detailProvider
-        ? allProviders.find((p) => p.id === detailProvider.id) || detailProvider
-        : null,
-    [allProviders, detailProvider]
   );
 
   const activeModalRole: 'client' | 'provider' = location.pathname.startsWith(
@@ -128,16 +105,6 @@ export const GlobalModals: React.FC = () => {
         />
       )}
 
-      {syncedDetailProvider && (
-        <ProviderDetailModal
-          provider={syncedDetailProvider}
-          lang={lang}
-          t={t}
-          onClose={() => setDetailProvider(null)}
-          onBookProvider={setBookingProvider}
-        />
-      )}
-
       {bookingProvider && (
         <BookingModal
           provider={bookingProvider}
@@ -162,11 +129,15 @@ export const GlobalModals: React.FC = () => {
           activeRole={activeModalRole}
           platformFeePct={systemSettings.platformFeePct}
           onClose={() => setDetailBooking(null)}
-          onOpenChat={setActiveChatBooking}
+          onOpenChat={(b) => {
+            setDetailBooking(null);
+            navigate(buildMessageThreadPath(b.id));
+          }}
           onOpenReschedule={setReschedulingBooking}
           onOpenCancel={setCancellingBooking}
           onOpenReview={setReviewingBooking}
           onOpenDispute={(b) => {
+            setDetailBooking(null);
             navigate(`${ROUTE_PATHS.DISPUTES}?bookingId=${encodeURIComponent(b.id)}`);
           }}
           onConfirmAndReleaseEscrow={clientConfirmAndReleaseEscrow}
@@ -191,29 +162,6 @@ export const GlobalModals: React.FC = () => {
           t={t}
           onClose={() => setReschedulingBooking(null)}
           onConfirmReschedule={rescheduleBooking}
-        />
-      )}
-
-      {activeChatBooking && (
-        <ChatDrawerModal
-          booking={activeChatBooking}
-          relatedBookings={bookings}
-          onSwitchBooking={setActiveChatBooking}
-          lang={lang}
-          t={t}
-          firebaseUser={firebaseUser}
-          activeRole={activeModalRole}
-          activeUserName={
-            userProfile?.fullName ||
-            (activeModalRole === 'provider'
-              ? activeChatBooking.providerName
-              : activeChatBooking.clientName)
-          }
-          localMessages={chatThreads[activeChatBooking.id] || []}
-          onSendLocalMessage={sendLocalChatMessage}
-          onMarkConversationRead={markConversationRead}
-          onUpdateConversationOnMessage={updateConversationOnMessage}
-          onClose={() => setActiveChatBooking(null)}
         />
       )}
 

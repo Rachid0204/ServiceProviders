@@ -7,6 +7,7 @@ const ROOT = import.meta.dirname;
 const indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const vercelJsonRaw = fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8');
 const vercelConfig = JSON.parse(vercelJsonRaw) as {
+  buildCommand?: string;
   rewrites?: Array<{ source: string; destination: string }>;
   headers?: Array<{ source: string; headers: Array<{ key: string; value: string }> }>;
   outputDirectory?: string;
@@ -14,6 +15,16 @@ const vercelConfig = JSON.parse(vercelJsonRaw) as {
 
 test('Vercel SPA rewrites, immutable asset caching, and security headers are configured in vercel.json', () => {
   assert.equal(vercelConfig.outputDirectory, 'dist');
+  const pkgJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as {
+    scripts?: Record<string, string>;
+  };
+  const buildScriptMatch = vercelConfig.buildCommand?.match(/^npm run ([a-zA-Z0-9:_-]+)$/);
+  if (buildScriptMatch) {
+    assert.ok(
+      pkgJson.scripts?.[buildScriptMatch[1]],
+      `package.json is missing script "${buildScriptMatch[1]}" referenced by vercel.json buildCommand`
+    );
+  }
   assert.ok(Array.isArray(vercelConfig.rewrites) && vercelConfig.rewrites.length >= 1);
   const spaRewrite = vercelConfig.rewrites.find((r) => r.destination === '/index.html');
   assert.ok(spaRewrite, 'Missing SPA catch-all rewrite to /index.html');
@@ -231,4 +242,58 @@ test('AUD-012: Firebase auto-deploy workflow watches and deploys storage.rules a
   assert.equal(firebaseJson.storage?.rules, 'storage.rules');
   assert.ok(fs.existsSync(path.join(ROOT, 'storage.rules')), 'storage.rules file must exist');
 });
+
+test('AUD-014: Dead Express server and duplicate ChatDrawerModal/ProviderDetailModal are permanently retired and all ProviderDashboard modules stay < 500 lines', () => {
+  for (const retiredPath of [
+    'server.ts',
+    'serverAuth.ts',
+    'src/components/ChatDrawerModal.tsx',
+    'src/components/ProviderDetailModal.tsx',
+  ]) {
+    assert.equal(
+      fs.existsSync(path.join(ROOT, retiredPath)),
+      false,
+      `Retired file "${retiredPath}" must not exist`
+    );
+  }
+
+  const dashboardsDir = path.join(ROOT, 'src/components/dashboards');
+  const providerModules = fs
+    .readdirSync(dashboardsDir)
+    .filter((f) => f.startsWith('Provider') && f.endsWith('.tsx'));
+  assert.ok(providerModules.length >= 8, 'Expected modularized Provider dashboard tab files');
+  for (const modFile of providerModules) {
+    const lineCount = fs.readFileSync(path.join(dashboardsDir, modFile), 'utf8').split('\n').length;
+    assert.ok(
+      lineCount < 500,
+      `AUD-014: Expected ${modFile} to stay < 500 lines, got ${lineCount} lines`
+    );
+  }
+});
+
+test('AUD-019 & AUD-021: proposals.providerId COLLECTION_GROUP index override and headless Chromium smoke E2E script are configured in CI', () => {
+  const indexesJson = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'firestore.indexes.json'), 'utf8')
+  ) as {
+    fieldOverrides?: Array<{
+      collectionGroup: string;
+      fieldPath: string;
+      indexes: Array<{ queryScope: string; order?: string }>;
+    }>;
+  };
+  const proposalOverride = (indexesJson.fieldOverrides || []).find(
+    (o) => o.collectionGroup === 'proposals' && o.fieldPath === 'providerId'
+  );
+  assert.ok(proposalOverride, 'Missing proposals.providerId fieldOverride in firestore.indexes.json');
+  assert.ok(
+    proposalOverride.indexes.some((idx) => idx.queryScope === 'COLLECTION_GROUP'),
+    'proposals.providerId override must enable COLLECTION_GROUP queryScope'
+  );
+
+  assert.ok(fs.existsSync(path.join(ROOT, 'scripts/e2e-smoke.mjs')), 'Missing scripts/e2e-smoke.mjs');
+  const ciContent = fs.readFileSync(path.join(ROOT, '.github/workflows/ci.yml'), 'utf8');
+  assert.ok(ciContent.includes('npm run test:e2e'), 'CI workflow must execute npm run test:e2e');
+});
+
+
 

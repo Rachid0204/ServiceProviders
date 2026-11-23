@@ -1,3 +1,4 @@
+import { uiText } from '../i18n/uiCopy';
 import React, { useState, useEffect } from 'react';
 import {
   X,
@@ -123,9 +124,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       } else {
         await requestPasswordReset(check.normalizedEmail);
         setNotice(
-          isAr
-            ? 'تم إرسال رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني.'
-            : 'Un lien de réinitialisation du mot de passe a été envoyé à votre e-mail.'
+          uiText(isAr).auth.unLienDeReinitialisationDuMot
         );
       }
     } catch (err) {
@@ -154,41 +153,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               )}
               <span>
                 {selectedRole === 'provider'
-                  ? isAr
-                    ? 'فضاء المعلمين المعتمدين'
-                    : 'Espace Maâlem & Artisans'
+                  ? uiText(isAr).auth.espaceMaalemArtisans
                   : t.brandName}
               </span>
             </div>
             <h2 id="auth-modal-title" className="text-xl font-bold text-slate-900">
               {mode === 'signin'
-                ? isAr
-                  ? 'تسجيل الدخول إلى حسابك'
-                  : 'Connexion à votre espace'
+                ? uiText(isAr).auth.connexionAVotreEspace
                 : mode === 'signup'
                 ? selectedRole === 'provider'
-                  ? isAr
-                    ? 'إنشاء حساب معلم / مقدم خدمة'
-                    : 'Créer mon compte Maâlem'
+                  ? uiText(isAr).auth.creerMonCompteMaalem
                   : selectedRole === 'both'
-                  ? isAr
-                    ? 'إنشاء حساب مزدوج (زبون ومعلم)'
-                    : 'Créer un double compte'
-                  : isAr
-                  ? 'إنشاء حساب زبون جديد'
-                  : 'Créer mon compte Client'
-                : isAr
-                ? 'استعادة كلمة المرور'
-                : 'Réinitialiser le mot de passe'}
+                  ? uiText(isAr).auth.creerUnDoubleCompte
+                  : uiText(isAr).auth.creerMonCompteClient
+                : uiText(isAr).auth.reinitialiserLeMotDePasse}
             </h2>
             <p className="text-xs text-slate-600">
               {selectedRole === 'provider'
-                ? isAr
-                  ? 'تصفح طلبات الزبناء المنشورة، قدّم عروضك، وأدر بطاقتك المهنية وأرباحك.'
-                  : 'Consultez les offres postées par les clients, envoyez vos devis et gérez votre fiche Maâlem.'
-                : isAr
-                ? 'انشر طلباتك لتلقي عروض المعلمين أو احجز مباشرة مع معلمين موثوقين.'
-                : 'Publiez vos besoins pour recevoir des devis ou réservez un Maâlem vérifié.'}
+                ? uiText(isAr).auth.consultezLesOffresPosteesParLes
+                : uiText(isAr).auth.publiezVosBesoinsPourRecevoirDes}
             </p>
           </div>
           <button
@@ -216,7 +199,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            {isAr ? 'تسجيل الدخول' : 'Connexion'}
+            {uiText(isAr).common.connexion}
           </button>
           <button
             type="button"
@@ -231,7 +214,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            {isAr ? 'حساب جديد' : 'Créer un compte'}
+            {uiText(isAr).auth.creerUnCompte}
           </button>
         </div>
 
@@ -239,7 +222,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         {mode === 'signup' && (
           <div className="space-y-2">
             <span className="block text-xs font-semibold text-slate-700">
-              {isAr ? 'اختر نوع حسابك :' : 'Je m’inscris en tant que :'}
+              {uiText(isAr).auth.jeMInscrisEnTantQue}
             </span>
             <div className="grid grid-cols-3 gap-2">
               {(
@@ -320,7 +303,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 rel="noopener noreferrer"
                 className="text-emerald-700 font-semibold hover:underline"
               >
-                {isAr ? 'شروط الاستخدام' : 'CGU'}
+                {uiText(isAr).common.cgu}
               </a>{' '}
               ·{' '}
               <a
@@ -329,7 +312,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 rel="noopener noreferrer"
                 className="text-emerald-700 font-semibold hover:underline"
               >
-                {isAr ? 'الخصوصية (قانون 09-08)' : 'Confidentialité (Loi 09-08)'}
+                {uiText(isAr).common.confidentialiteLoi0908}
               </a>
             </span>
           </label>
@@ -353,7 +336,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <div className="relative flex items-center justify-center">
               <div className="border-t border-slate-200 w-full" />
               <span className="bg-white px-3 text-[11px] font-medium text-slate-500 whitespace-nowrap">
-                {isAr ? 'أو بالبريد الإلكتروني' : 'ou par e-mail'}
+                {uiText(isAr).auth.ouParEMail}
               </span>
               <div className="border-t border-slate-200 w-full" />
             </div>
@@ -387,7 +370,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               htmlFor="auth-modal-email"
               className="block text-xs font-semibold text-slate-700 mb-1"
             >
-              {isAr ? 'البريد الإلكتروني' : 'Adresse e-mail'}
+              {uiText(isAr).auth.adresseEMail}
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-slate-400 absolute top-2.5 start-3 pointer-events-none" />
@@ -411,7 +394,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   htmlFor="auth-modal-password"
                   className="block text-xs font-semibold text-slate-700"
                 >
-                  {isAr ? 'كلمة المرور' : 'Mot de passe'}
+                  {uiText(isAr).auth.motDePasse}
                 </label>
                 {mode === 'signin' && (
                   <button
@@ -423,7 +406,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     }}
                     className="text-[11px] font-medium text-emerald-700 hover:underline cursor-pointer"
                   >
-                    {isAr ? 'نسيت كلمة المرور؟' : 'Mot de passe oublié ?'}
+                    {uiText(isAr).auth.motDePasseOublie}
                   </button>
                 )}
               </div>
@@ -434,7 +417,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder={
-                  isAr ? '8 أحرف على الأقل (حروف وأرقام)' : '8 caractères min. (lettres + chiffres)'
+                  uiText(isAr).auth.n8CaracteresMinLettresChiffres
                 }
                 autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
                 className="w-full px-3.5 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
@@ -448,20 +431,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             className="w-full py-2.5 text-sm font-semibold text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 disabled:opacity-60 transition-colors cursor-pointer"
           >
             {isSubmitting
-              ? isAr
-                ? 'جاري المعالجة...'
-                : 'Chargement...'
+              ? uiText(isAr).auth.chargement
               : mode === 'signin'
-              ? isAr
-                ? 'تسجيل الدخول'
-                : 'Se connecter'
+              ? uiText(isAr).auth.seConnecter
               : mode === 'signup'
-              ? isAr
-                ? 'إنشاء الحساب وإرسال رابط التفعيل'
-                : 'Créer mon compte'
-              : isAr
-              ? 'إرسال رابط الاستعادة'
-              : 'Envoyer le lien'}
+              ? uiText(isAr).auth.creerMonCompte2
+              : uiText(isAr).auth.envoyerLeLien}
           </button>
         </form>
       </div>

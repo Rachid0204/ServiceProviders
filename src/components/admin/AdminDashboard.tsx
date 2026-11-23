@@ -1,3 +1,4 @@
+import { uiText } from '../../i18n/uiCopy';
 import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
@@ -213,9 +214,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
         <div className="bg-white border border-slate-200 rounded-2xl max-w-sm w-full p-6 shadow-sm text-center space-y-3">
           <div className="w-10 h-10 rounded-full border-2 border-emerald-600 border-t-transparent animate-spin mx-auto" />
           <p className="text-xs font-medium text-slate-600">
-            {isAr
-              ? 'جاري التحقق من صلاحيات المشرف...'
-              : 'Vérification des privilèges administrateur...'}
+            {uiText(isAr).admin.verificationDesPrivilegesAdministrateur}
           </p>
         </div>
       </div>
@@ -232,16 +231,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           </div>
           <div className="space-y-1.5">
             <h1 className="text-lg font-bold text-slate-900">
-              {isAr ? 'ولوج محصور بالإدارة' : 'Accès Administration Restreint'}
+              {uiText(isAr).admin.accesAdministrationRestreint}
             </h1>
             <p className="text-xs text-slate-600 leading-relaxed">
               {firebaseUser
-                ? isAr
-                  ? 'الحساب المتصل حالياً لا يملك صلاحيات المشرف الموثقة على Firestore.'
-                  : 'Le compte actuellement connecté ne dispose pas des privilèges administrateur vérifiés.'
-                : isAr
-                ? 'يرجى تسجيل الدخول بحساب مشرف موثق للوصول إلى لوحة التحكم والعمليات المالية.'
-                : 'Veuillez vous connecter avec un compte administrateur vérifié pour accéder à la console.'}
+                ? uiText(isAr).admin.leCompteActuellementConnecteNeDispose
+                : uiText(isAr).admin.veuillezVousConnecterAvecUnCompte}
             </p>
           </div>
           {adminAuthError && (
@@ -275,7 +270,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 disabled:opacity-60 rounded-lg transition-colors cursor-pointer"
               >
                 <LogIn className="w-4 h-4" />
-                <span>{isAr ? 'تسجيل دخول المشرف (Google)' : 'Connexion Administrateur Google'}</span>
+                <span>{uiText(isAr).admin.connexionAdministrateurGoogle}</span>
               </button>
             )}
             <button
@@ -284,7 +279,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
             >
               <BackIcon className="w-4 h-4" />
-              <span>{isAr ? 'العودة إلى المنصة' : 'Retour Marketplace'}</span>
+              <span>{uiText(isAr).admin.retourMarketplace}</span>
             </button>
           </div>
         </div>
@@ -445,7 +440,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             {firebaseUser?.email}
           </div>
           <div className="text-[11px] text-emerald-700 font-medium">
-            {isAr ? 'صلاحية Firestore مفعلة' : 'Firestore Admin actif'}
+            {uiText(isAr).admin.firestoreAdminActif}
           </div>
         </div>
 
@@ -493,7 +488,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             <button
               type="button"
               onClick={() => setMobileNavOpen(true)}
-              aria-label={isAr ? 'فتح قائمة الإدارة' : 'Ouvrir le menu admin'}
+              aria-label={uiText(isAr).admin.ouvrirLeMenuAdmin}
               className="lg:hidden p-2 text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer shrink-0"
             >
               <Menu className="w-5 h-5" />
@@ -507,7 +502,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
                 /
               </span>
               <span className="text-slate-500 whitespace-nowrap hidden sm:inline">
-                {isAr ? 'الإدارة' : 'Administration'}
+                {uiText(isAr).admin.administration}
               </span>
               <span className="text-slate-300 hidden sm:inline" aria-hidden="true">
                 /
@@ -535,9 +530,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               className="inline-flex items-center gap-1.5 px-2.5 sm:px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
               <BackIcon className="w-3.5 h-3.5" />
-              <span className="sm:hidden">{isAr ? 'المنصة' : 'Plateforme'}</span>
+              <span className="sm:hidden">{uiText(isAr).admin.plateforme}</span>
               <span className="hidden sm:inline">
-                {isAr ? 'العودة للمنصة' : 'Retour Marketplace'}
+                {uiText(isAr).admin.retourMarketplace2}
               </span>
             </button>
           </div>
