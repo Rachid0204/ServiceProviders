@@ -1148,12 +1148,20 @@ export interface ProviderEarningsBreakdown {
  * on site (COD) from funds actually held by the platform (AUD-001).
  * While CMI escrow is disabled (cmiEscrowEnabled = false), platform-held withdrawable balance is always 0 MAD.
  */
+export function buildWithdrawalRequestId(providerId: string, nowMs = Date.now()): string {
+  const safeUid = providerId.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
+  return `wd_${safeUid}_${nowMs}`;
+}
+
 export function computeProviderEarningsBreakdown(params: {
   bookings: Pick<
     BookingRecord,
     'paymentMethod' | 'paymentStatus' | 'estimatedMad' | 'providerPayoutMad'
   >[];
-  withdrawals: { amountMad: number; status: 'pending' | 'approved' | 'frozen' | 'rejected' }[];
+  withdrawals: {
+    amountMad: number;
+    status: 'pending' | 'approved' | 'completed' | 'frozen' | 'rejected';
+  }[];
   platformFeePct: number;
   minWithdrawalMad: number;
   cmiEscrowEnabled?: boolean;
@@ -1193,10 +1201,10 @@ export function computeProviderEarningsBreakdown(params: {
   let hasPendingWithdrawal = false;
 
   for (const w of withdrawals) {
-    if (w.status === 'pending') {
+    if (w.status === 'pending' || w.status === 'frozen') {
       hasPendingWithdrawal = true;
       pendingWithdrawalsMad += Math.max(0, Math.round(w.amountMad || 0));
-    } else if (w.status === 'approved') {
+    } else if (w.status === 'approved' || w.status === 'completed') {
       approvedWithdrawalsMad += Math.max(0, Math.round(w.amountMad || 0));
     }
   }

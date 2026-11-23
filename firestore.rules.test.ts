@@ -400,39 +400,58 @@ test('Wave 0 Live Firebase Firestore Emulator Execution: AUD-001, AUD-002, AUD-0
     return fields;
   }
 
-  async function commitWrite(params: {
-    token: string;
-    docPath: string;
-    data: Record<string, unknown>;
-    requestTimeFields?: string[];
-    rawTimestampFields?: Record<string, string>;
-    currentDocumentExists?: boolean;
-  }): Promise<{ status: number; body: string }> {
-    const fields = buildDocFields(params.data);
-    if (params.rawTimestampFields) {
-      for (const [k, iso] of Object.entries(params.rawTimestampFields)) {
-        fields[k] = { timestampValue: iso };
+  type BatchWriteOp =
+    | {
+        type?: 'update';
+        docPath: string;
+        data: Record<string, unknown>;
+        requestTimeFields?: string[];
+        rawTimestampFields?: Record<string, string>;
+        currentDocumentExists?: boolean;
       }
-    }
-    const writes: unknown[] = [
-      {
+    | {
+        type: 'delete';
+        docPath: string;
+        currentDocumentExists?: boolean;
+      };
+
+  async function commitBatch(params: {
+    token: string;
+    ops: BatchWriteOp[];
+  }): Promise<{ status: number; body: string }> {
+    const writes: unknown[] = params.ops.map((op) => {
+      if (op.type === 'delete') {
+        return {
+          delete: `projects/${projectId}/databases/(default)/documents/${op.docPath}`,
+          ...(op.currentDocumentExists !== undefined
+            ? { currentDocument: { exists: op.currentDocumentExists } }
+            : {}),
+        };
+      }
+      const fields = buildDocFields(op.data);
+      if (op.rawTimestampFields) {
+        for (const [k, iso] of Object.entries(op.rawTimestampFields)) {
+          fields[k] = { timestampValue: iso };
+        }
+      }
+      return {
         update: {
-          name: `projects/${projectId}/databases/(default)/documents/${params.docPath}`,
+          name: `projects/${projectId}/databases/(default)/documents/${op.docPath}`,
           fields,
         },
-        ...(params.requestTimeFields && params.requestTimeFields.length > 0
+        ...(op.requestTimeFields && op.requestTimeFields.length > 0
           ? {
-              updateTransforms: params.requestTimeFields.map((fp) => ({
+              updateTransforms: op.requestTimeFields.map((fp) => ({
                 fieldPath: fp,
                 setToServerValue: 'REQUEST_TIME',
               })),
             }
           : {}),
-        ...(params.currentDocumentExists !== undefined
-          ? { currentDocument: { exists: params.currentDocumentExists } }
+        ...(op.currentDocumentExists !== undefined
+          ? { currentDocument: { exists: op.currentDocumentExists } }
           : {}),
-      },
-    ];
+      };
+    });
 
     return new Promise((resolve, reject) => {
       const req = http.request(
@@ -458,9 +477,50 @@ test('Wave 0 Live Firebase Firestore Emulator Execution: AUD-001, AUD-002, AUD-0
     });
   }
 
+  async function commitWrite(params: {
+    token: string;
+    docPath: string;
+    data: Record<string, unknown>;
+    requestTimeFields?: string[];
+    rawTimestampFields?: Record<string, string>;
+    currentDocumentExists?: boolean;
+  }): Promise<{ status: number; body: string }> {
+    return commitBatch({
+      token: params.token,
+      ops: [{ type: 'update', ...params }],
+    });
+  }
+
+  async function getDocument(params: {
+    token: string;
+    docPath: string;
+  }): Promise<{ status: number; body: string }> {
+    return new Promise((resolve, reject) => {
+      const req = http.request(
+        {
+          hostname: '127.0.0.1',
+          port,
+          path: `${dbBase}/${params.docPath}`,
+          method: 'GET',
+          headers: {
+            Authorization: `Bearer ${params.token}`,
+          },
+        },
+        (res) => {
+          let body = '';
+          res.on('data', (c) => (body += c));
+          res.on('end', () => resolve({ status: res.statusCode ?? 500, body }));
+        }
+      );
+      req.on('error', reject);
+      req.end();
+    });
+  }
+
   const fixedCreatedIso = '2026-11-20T10:00:00Z';
   const clientToken = makeJwt({ uid: 'client1' });
   const providerToken = makeJwt({ uid: 'prov1' });
+  const provider2Token = makeJwt({ uid: 'prov2' });
   const suspendedToken = makeJwt({ uid: 'susp1' });
   const adminToken = makeJwt({ uid: 'admin1', admin: true });
 
@@ -548,26 +608,467 @@ test('Wave 0 Live Firebase Firestore Emulator Execution: AUD-001, AUD-002, AUD-0
   });
   assert.equal(seedProvider.status, 200);
 
-  // --- AUD-001: Unauthorized COD provider withdrawal rejected by Firestore rules ---
-  const unauthorizedWithdrawal = await commitWrite({
+  // --- AUD-001 (All 7 Conditions): Complete Live Emulator Withdrawal Lifecycle ---
+  // Condition 5 & 6: COD provider (prov1, withdrawableBalanceMad unset/0) rejected when attempting payout
+  const unauthorizedCodWithdrawal = await commitBatch({
     token: providerToken,
-    docPath: 'withdrawals/wd_prov1',
-    data: {
-      providerId: 'prov1',
-      providerName: 'Maâlem Karim',
-      city: 'Casablanca',
-      bankName: 'Attijariwafa Bank',
-      ribMasked: '•••• 123456',
-      amountMad: 500,
-      status: 'pending',
-    },
-    requestTimeFields: ['createdAt', 'updatedAt'],
-    currentDocumentExists: false,
+    ops: [
+      {
+        docPath: 'withdrawals/wd_prov1_cod',
+        data: {
+          providerId: 'prov1',
+          providerName: 'Maâlem Karim',
+          city: 'Casablanca',
+          bankName: 'Attijariwafa Bank',
+          ribMasked: '•••• 123456',
+          amountMad: 500,
+          status: 'pending',
+        },
+        requestTimeFields: ['createdAt', 'updatedAt'],
+        currentDocumentExists: false,
+      },
+      {
+        docPath: 'withdrawalLocks/prov1',
+        data: {
+          providerId: 'prov1',
+          activeWithdrawalId: 'wd_prov1_cod',
+        },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: false,
+      },
+    ],
   });
   assert.equal(
-    unauthorizedWithdrawal.status,
+    unauthorizedCodWithdrawal.status,
     403,
-    'AUD-001: Provider without server-verified withdrawableBalanceMad must be rejected'
+    'AUD-001 (Cond 5 & 6): COD provider without platform-held withdrawableBalanceMad must be rejected'
+  );
+
+  // Condition 4: Provider cannot self-modify withdrawableBalanceMad on /providers/{uid}
+  const selfInflateBalanceAttempt = await commitWrite({
+    token: providerToken,
+    docPath: 'providers/prov1',
+    data: {
+      uid: 'prov1',
+      fullNameFr: 'Maâlem Karim',
+      fullNameAr: 'المعلم كريم',
+      category: 'Plomberie',
+      bioFr: 'Plombier professionnel certifié à Casablanca Maârif.',
+      bioAr: 'سباك محترف ومعتمد في الدار البيضاء المعاريف.',
+      hourlyRateMAD: 150,
+      fixedVisitFeeMAD: 70,
+      experienceYears: 8,
+      skills: ['Plomberie'],
+      portfolioImages: ['/src/assets/images/service_plumbing_repair_1794980477189.jpg'],
+      ratingAvg: 5,
+      reviewCount: 0,
+      isAvailableNow: true,
+      verifiedBadge: true,
+      phone: '+212661987654',
+      withdrawableBalanceMad: 5000,
+      location: { lat: 33.5883, lng: -7.6325, city: 'Casablanca', quartier: 'Maârif' },
+    },
+    rawTimestampFields: { createdAt: fixedCreatedIso },
+    requestTimeFields: ['updatedAt'],
+    currentDocumentExists: true,
+  });
+  assert.equal(
+    selfInflateBalanceAttempt.status,
+    403,
+    'AUD-001 (Cond 4): Provider must not be able to modify their own withdrawableBalanceMad'
+  );
+
+  // Seed systemSettings/global (minWithdrawalMad: 250) and prov2 with server-assigned withdrawableBalanceMad: 900
+  const seedSettings = await commitWrite({
+    token: 'owner',
+    docPath: 'systemSettings/global',
+    data: {
+      platformFeePct: 10,
+      minWithdrawalMad: 250,
+      autoRefundOnProviderCancel: true,
+      requireKycForEscrowPayout: true,
+      supportWhatsAppPhone: '+212661234567',
+      updatedByEmail: 'admin1@test.ma',
+    },
+    rawTimestampFields: { updatedAt: fixedCreatedIso },
+  });
+  assert.equal(seedSettings.status, 200);
+
+  await commitWrite({
+    token: 'owner',
+    docPath: 'users/prov2',
+    data: {
+      uid: 'prov2',
+      role: 'provider',
+      fullName: 'Maâlem Youssef',
+      phone: '+212661112233',
+      city: 'Rabat',
+      neighborhood: 'Agdal',
+      languagePref: 'fr',
+      verifiedBadge: true,
+      accountStatus: 'active',
+    },
+    rawTimestampFields: { createdAt: fixedCreatedIso },
+  });
+  await commitWrite({
+    token: 'owner',
+    docPath: 'providers/prov2',
+    data: {
+      uid: 'prov2',
+      fullNameFr: 'Maâlem Youssef',
+      fullNameAr: 'المعلم يوسف',
+      category: 'Électricité',
+      bioFr: 'Électricien bâtiment certifié à Rabat Agdal.',
+      bioAr: 'كهربائي معتمد في الرباط أكدال.',
+      hourlyRateMAD: 160,
+      fixedVisitFeeMAD: 80,
+      experienceYears: 10,
+      skills: ['Électricité'],
+      portfolioImages: ['/src/assets/images/service_plumbing_repair_1794980477189.jpg'],
+      ratingAvg: 5,
+      reviewCount: 0,
+      isAvailableNow: true,
+      verifiedBadge: true,
+      phone: '+212661112233',
+      withdrawableBalanceMad: 900,
+      location: { lat: 34.0209, lng: -6.8416, city: 'Rabat', quartier: 'Agdal' },
+    },
+    rawTimestampFields: { createdAt: fixedCreatedIso, updatedAt: fixedCreatedIso },
+  });
+
+  // Condition 7a: Below minWithdrawalMad (150 < 250) rejected by Firestore rules
+  const belowMinWithdrawal = await commitBatch({
+    token: provider2Token,
+    ops: [
+      {
+        docPath: 'withdrawals/wd_prov2_low',
+        data: {
+          providerId: 'prov2',
+          providerName: 'Maâlem Youssef',
+          city: 'Rabat',
+          bankName: 'CIH Bank',
+          ribMasked: '•••• 654321',
+          amountMad: 150,
+          status: 'pending',
+        },
+        requestTimeFields: ['createdAt', 'updatedAt'],
+        currentDocumentExists: false,
+      },
+      {
+        docPath: 'withdrawalLocks/prov2',
+        data: {
+          providerId: 'prov2',
+          activeWithdrawalId: 'wd_prov2_low',
+        },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: false,
+      },
+    ],
+  });
+  assert.equal(
+    belowMinWithdrawal.status,
+    403,
+    'AUD-001 (Cond 7a): Withdrawal below systemSettings.minWithdrawalMad (250) must be rejected'
+  );
+
+  // Condition 7b: Above withdrawableBalanceMad (1200 > 900) rejected by Firestore rules
+  const aboveBalanceWithdrawal = await commitBatch({
+    token: provider2Token,
+    ops: [
+      {
+        docPath: 'withdrawals/wd_prov2_high',
+        data: {
+          providerId: 'prov2',
+          providerName: 'Maâlem Youssef',
+          city: 'Rabat',
+          bankName: 'CIH Bank',
+          ribMasked: '•••• 654321',
+          amountMad: 1200,
+          status: 'pending',
+        },
+        requestTimeFields: ['createdAt', 'updatedAt'],
+        currentDocumentExists: false,
+      },
+      {
+        docPath: 'withdrawalLocks/prov2',
+        data: {
+          providerId: 'prov2',
+          activeWithdrawalId: 'wd_prov2_high',
+        },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: false,
+      },
+    ],
+  });
+  assert.equal(
+    aboveBalanceWithdrawal.status,
+    403,
+    'AUD-001 (Cond 7b): Withdrawal exceeding provider withdrawableBalanceMad (900) must be rejected'
+  );
+
+  // Condition 1: First valid pending withdrawal (wd_prov2_1 for 300 MAD) succeeds, and a second pending withdrawal while wd_prov2_1 is pending is rejected
+  const firstWithdrawal = await commitBatch({
+    token: provider2Token,
+    ops: [
+      {
+        docPath: 'withdrawals/wd_prov2_1',
+        data: {
+          providerId: 'prov2',
+          providerName: 'Maâlem Youssef',
+          city: 'Rabat',
+          bankName: 'CIH Bank',
+          ribMasked: '•••• 654321',
+          amountMad: 300,
+          status: 'pending',
+        },
+        requestTimeFields: ['createdAt', 'updatedAt'],
+        currentDocumentExists: false,
+      },
+      {
+        docPath: 'withdrawalLocks/prov2',
+        data: {
+          providerId: 'prov2',
+          activeWithdrawalId: 'wd_prov2_1',
+        },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: false,
+      },
+    ],
+  });
+  assert.equal(
+    firstWithdrawal.status,
+    200,
+    `AUD-001 (Cond 1): First valid withdrawal request must succeed: ${firstWithdrawal.body}`
+  );
+  const wd1CreatedIso =
+    JSON.parse(firstWithdrawal.body).writeResults?.[0]?.transformResults?.[0]?.timestampValue ??
+    fixedCreatedIso;
+
+  const duplicatePendingWithdrawal = await commitBatch({
+    token: provider2Token,
+    ops: [
+      {
+        docPath: 'withdrawals/wd_prov2_dup',
+        data: {
+          providerId: 'prov2',
+          providerName: 'Maâlem Youssef',
+          city: 'Rabat',
+          bankName: 'CIH Bank',
+          ribMasked: '•••• 654321',
+          amountMad: 300,
+          status: 'pending',
+        },
+        requestTimeFields: ['createdAt', 'updatedAt'],
+        currentDocumentExists: false,
+      },
+      {
+        docPath: 'withdrawalLocks/prov2',
+        data: {
+          providerId: 'prov2',
+          activeWithdrawalId: 'wd_prov2_dup',
+        },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: true,
+      },
+    ],
+  });
+  assert.equal(
+    duplicatePendingWithdrawal.status,
+    403,
+    'AUD-001 (Cond 1): Second withdrawal while wd_prov2_1 is still pending must be rejected'
+  );
+
+  // Condition 2a: Admin rejects wd_prov2_1 -> Provider can submit a new request wd_prov2_2
+  const adminRejectWd1 = await commitWrite({
+    token: adminToken,
+    docPath: 'withdrawals/wd_prov2_1',
+    data: {
+      providerId: 'prov2',
+      providerName: 'Maâlem Youssef',
+      city: 'Rabat',
+      bankName: 'CIH Bank',
+      ribMasked: '•••• 654321',
+      amountMad: 300,
+      status: 'rejected',
+      adminNote: 'RIB incomplet',
+    },
+    rawTimestampFields: { createdAt: wd1CreatedIso },
+    requestTimeFields: ['updatedAt'],
+    currentDocumentExists: true,
+  });
+  assert.equal(adminRejectWd1.status, 200);
+
+  const secondWithdrawalAfterReject = await commitBatch({
+    token: provider2Token,
+    ops: [
+      {
+        docPath: 'withdrawals/wd_prov2_2',
+        data: {
+          providerId: 'prov2',
+          providerName: 'Maâlem Youssef',
+          city: 'Rabat',
+          bankName: 'CIH Bank',
+          ribMasked: '•••• 998877',
+          amountMad: 300,
+          status: 'pending',
+        },
+        requestTimeFields: ['createdAt', 'updatedAt'],
+        currentDocumentExists: false,
+      },
+      {
+        docPath: 'withdrawalLocks/prov2',
+        data: {
+          providerId: 'prov2',
+          activeWithdrawalId: 'wd_prov2_2',
+        },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: true,
+      },
+    ],
+  });
+  assert.equal(
+    secondWithdrawalAfterReject.status,
+    200,
+    `AUD-001 (Cond 2a): New withdrawal after rejection must succeed: ${secondWithdrawalAfterReject.body}`
+  );
+  const wd2CreatedIso =
+    JSON.parse(secondWithdrawalAfterReject.body).writeResults?.[0]?.transformResults?.[0]?.timestampValue ??
+    fixedCreatedIso;
+
+  // Condition 2b: Admin approves wd_prov2_2 (and decrements balance 900 -> 600) -> Provider can submit wd_prov2_3
+  const adminApproveWd2 = await commitWrite({
+    token: adminToken,
+    docPath: 'withdrawals/wd_prov2_2',
+    data: {
+      providerId: 'prov2',
+      providerName: 'Maâlem Youssef',
+      city: 'Rabat',
+      bankName: 'CIH Bank',
+      ribMasked: '•••• 998877',
+      amountMad: 300,
+      status: 'approved',
+      adminNote: 'Virement validé',
+    },
+    rawTimestampFields: { createdAt: wd2CreatedIso },
+    requestTimeFields: ['updatedAt'],
+    currentDocumentExists: true,
+  });
+  assert.equal(adminApproveWd2.status, 200);
+
+  const thirdWithdrawalAfterApprove = await commitBatch({
+    token: provider2Token,
+    ops: [
+      {
+        docPath: 'withdrawals/wd_prov2_3',
+        data: {
+          providerId: 'prov2',
+          providerName: 'Maâlem Youssef',
+          city: 'Rabat',
+          bankName: 'CIH Bank',
+          ribMasked: '•••• 998877',
+          amountMad: 250,
+          status: 'pending',
+        },
+        requestTimeFields: ['createdAt', 'updatedAt'],
+        currentDocumentExists: false,
+      },
+      {
+        docPath: 'withdrawalLocks/prov2',
+        data: {
+          providerId: 'prov2',
+          activeWithdrawalId: 'wd_prov2_3',
+        },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: true,
+      },
+    ],
+  });
+  assert.equal(
+    thirdWithdrawalAfterApprove.status,
+    200,
+    `AUD-001 (Cond 2b): New withdrawal after approval must succeed: ${thirdWithdrawalAfterApprove.body}`
+  );
+  const wd3CreatedIso =
+    JSON.parse(thirdWithdrawalAfterApprove.body).writeResults?.[0]?.transformResults?.[0]?.timestampValue ??
+    fixedCreatedIso;
+
+  // Condition 2c: Admin marks wd_prov2_3 completed -> Provider can submit wd_prov2_4
+  const adminCompleteWd3 = await commitWrite({
+    token: adminToken,
+    docPath: 'withdrawals/wd_prov2_3',
+    data: {
+      providerId: 'prov2',
+      providerName: 'Maâlem Youssef',
+      city: 'Rabat',
+      bankName: 'CIH Bank',
+      ribMasked: '•••• 998877',
+      amountMad: 250,
+      status: 'completed',
+      adminNote: 'Virement exécuté',
+    },
+    rawTimestampFields: { createdAt: wd3CreatedIso },
+    requestTimeFields: ['updatedAt'],
+    currentDocumentExists: true,
+  });
+  assert.equal(adminCompleteWd3.status, 200);
+
+  const fourthWithdrawalAfterComplete = await commitBatch({
+    token: provider2Token,
+    ops: [
+      {
+        docPath: 'withdrawals/wd_prov2_4',
+        data: {
+          providerId: 'prov2',
+          providerName: 'Maâlem Youssef',
+          city: 'Rabat',
+          bankName: 'CIH Bank',
+          ribMasked: '•••• 998877',
+          amountMad: 250,
+          status: 'pending',
+        },
+        requestTimeFields: ['createdAt', 'updatedAt'],
+        currentDocumentExists: false,
+      },
+      {
+        docPath: 'withdrawalLocks/prov2',
+        data: {
+          providerId: 'prov2',
+          activeWithdrawalId: 'wd_prov2_4',
+        },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: true,
+      },
+    ],
+  });
+  assert.equal(
+    fourthWithdrawalAfterComplete.status,
+    200,
+    `AUD-001 (Cond 2c): New withdrawal after completed status must succeed: ${fourthWithdrawalAfterComplete.body}`
+  );
+
+  // Condition 3: Complete history of all 4 withdrawal requests is preserved and deletion is forbidden
+  for (const [id, expectedStatus] of [
+    ['wd_prov2_1', 'rejected'],
+    ['wd_prov2_2', 'approved'],
+    ['wd_prov2_3', 'completed'],
+    ['wd_prov2_4', 'pending'],
+  ] as const) {
+    const docRes = await getDocument({ token: provider2Token, docPath: `withdrawals/${id}` });
+    assert.equal(docRes.status, 200, `AUD-001 (Cond 3): Historical withdrawal ${id} must exist`);
+    assert.ok(
+      docRes.body.includes(`"stringValue": "${expectedStatus}"`),
+      `AUD-001 (Cond 3): Historical withdrawal ${id} must retain status ${expectedStatus}`
+    );
+  }
+
+  const deleteHistoryAttempt = await commitBatch({
+    token: adminToken,
+    ops: [{ type: 'delete', docPath: 'withdrawals/wd_prov2_1' }],
+  });
+  assert.equal(
+    deleteHistoryAttempt.status,
+    403,
+    'AUD-001 (Cond 3): Withdrawal history records must be immutable against deletion'
   );
 
   // --- AUD-002: Client cmi_escrow booking creation rejected; cash_on_completion allowed ---

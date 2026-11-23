@@ -8,6 +8,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  runTransaction,
   setDoc,
   updateDoc,
   writeBatch,
@@ -914,7 +915,7 @@ export function useAdminData(params: {
     }
   };
 
-  // Action 7: Approve, Freeze, or Reject Provider Withdrawal Request
+  // Action 7: Approve, Complete, Freeze, or Reject Provider Withdrawal Request
   const updateWithdrawalStatus = async (
     withdrawal: WithdrawalRecord,
     nextStatus: WithdrawalStatus,
@@ -925,16 +926,44 @@ export function useAdminData(params: {
     const defaultNotes: Record<WithdrawalStatus, string> = {
       pending: 'En attente de vérification RIB',
       approved: 'Virement national RIB validé et ordonné',
+      completed: 'Virement national RIB exécuté et clôturé',
       frozen: 'Gel temporaire pour contrôle de conformité KYC / litige',
       rejected: 'Demande rejetée — RIB non conforme ou solde insuffisant',
     };
     const finalNote = (adminNote ?? defaultNotes[nextStatus]).slice(0, 250);
 
     try {
-      await updateDoc(doc(db, 'withdrawals', withdrawal.id), {
-        status: nextStatus,
-        adminNote: finalNote,
-        updatedAt: serverTimestamp(),
+      const wdRef = doc(db, 'withdrawals', withdrawal.id);
+      const providerRef = doc(db, 'providers', withdrawal.providerId);
+
+      await runTransaction(db, async (tx) => {
+        const [wdSnap, providerSnap] = await Promise.all([
+          tx.get(wdRef),
+          tx.get(providerRef),
+        ]);
+        const prevStatus = wdSnap.exists()
+          ? (wdSnap.data().status as WithdrawalStatus)
+          : withdrawal.status;
+        const wasSettled = prevStatus === 'approved' || prevStatus === 'completed';
+        const willBeSettled = nextStatus === 'approved' || nextStatus === 'completed';
+
+        tx.update(wdRef, {
+          status: nextStatus,
+          adminNote: finalNote,
+          updatedAt: serverTimestamp(),
+        });
+
+        if (!wasSettled && willBeSettled && providerSnap.exists()) {
+          const currentBalance = Number(providerSnap.data().withdrawableBalanceMad ?? 0);
+          const nextBalance = Math.max(
+            0,
+            Math.round(currentBalance - Math.round(withdrawal.amountMad))
+          );
+          tx.update(providerRef, {
+            withdrawableBalanceMad: nextBalance,
+            updatedAt: serverTimestamp(),
+          });
+        }
       });
 
       await appendAuditLog(
