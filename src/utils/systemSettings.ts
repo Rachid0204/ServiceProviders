@@ -15,7 +15,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettingsRecord = {
   minWithdrawalMad: 200,
   autoRefundOnProviderCancel: true,
   requireKycForEscrowPayout: true,
-  supportWhatsAppPhone: '+212661428910',
+  supportWhatsAppPhone: '',
   updatedByEmail: DEFAULT_ADMIN_EMAIL_PLACEHOLDER,
   updatedAtIso: '2026-11-18 09:00',
 };

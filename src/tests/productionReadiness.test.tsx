@@ -272,4 +272,34 @@ describe('Phase 7 Production Readiness: Arabic RTL, Landmarks & Critical Journey
       }
     }
   });
+
+  it('AUD-015: BookingModal does not render the demo sample photo button while preserving real photo upload', async () => {
+    const { BookingModal } = await import('../components/BookingModal');
+    const mockUser = { uid: 'c-1', email: 'salma@test.ma', emailVerified: true } as unknown as User;
+    const mockProfile: UserProfileRecord = {
+      uid: 'c-1',
+      role: 'client',
+      fullName: 'Salma Bennani',
+      phone: '+212661234567',
+      city: 'Casablanca',
+      neighborhood: 'Maârif',
+      languagePref: 'fr',
+      verifiedBadge: false,
+    };
+    render(
+      <BookingModal
+        provider={VETTED_PROVIDERS[0]}
+        lang="fr"
+        t={TRANSLATIONS.fr}
+        firebaseUser={mockUser}
+        currentProfile={mockProfile}
+        onClose={vi.fn()}
+        onSubmitBooking={vi.fn().mockResolvedValue('MK-TEST')}
+      />
+    );
+
+    expect(
+      screen.queryByRole('button', { name: TRANSLATIONS.fr.attachSamplePhotoBtn })
+    ).not.toBeInTheDocument();
+  });
 });

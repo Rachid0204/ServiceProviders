@@ -22,8 +22,10 @@ import {
   computeQuotationTotals,
   generateBookingIds,
   generateJobPostIds,
+  isProviderSlotAvailable,
   isQuotationExpired,
   isSafeImageUrl,
+  parseProviderAvailabilitySnapshot,
   type JobPostRecord,
   type JobPostStatus,
   type JobProposalRecord,
@@ -411,21 +413,59 @@ export function useJobPosts(params: {
       const jobDocRef = doc(db, 'jobPosts', job.id);
       const path = `jobPosts/${job.id}/proposals/${firebaseUser.uid}`;
       try {
-        const batch = writeBatch(db);
-        batch.set(proposalRef, proposalData);
-        batch.update(jobDocRef, {
-          proposalCount: (job.proposalCount || 0) + 1,
-          lastProposalProviderId: firebaseUser.uid,
-          updatedAt: serverTimestamp(),
+        await runTransaction(db, async (tx) => {
+          const [liveJobSnap, livePropSnap] = await Promise.all([
+            tx.get(jobDocRef),
+            tx.get(proposalRef),
+          ]);
+
+          if (!liveJobSnap.exists() || liveJobSnap.data().status !== 'open') {
+            throw new Error(
+              lang === 'ar'
+                ? 'هذا الطلب لم يعد مفتوحاً لاستقبال عروض جديدة.'
+                : 'Cette demande n’est plus ouverte aux devis.'
+            );
+          }
+
+          if (livePropSnap.exists()) {
+            const existingProp = livePropSnap.data();
+            if (existingProp.status !== 'pending' && existingProp.status !== 'withdrawn') {
+              throw new Error(
+                lang === 'ar'
+                  ? 'لا يمكن تعديل هذا العرض بعد قبوله أو رفضه.'
+                  : 'Ce devis ne peut plus être modifié après acceptation ou refus.'
+              );
+            }
+            // Revise existing pending/withdrawn proposal in-place without incrementing proposalCount (AUD-007)
+            tx.set(
+              proposalRef,
+              {
+                ...proposalData,
+                createdAt: existingProp.createdAt ?? serverTimestamp(),
+                updatedAt: serverTimestamp(),
+              },
+              { merge: false }
+            );
+          } else {
+            const currentCount =
+              typeof liveJobSnap.data().proposalCount === 'number'
+                ? Math.round(liveJobSnap.data().proposalCount)
+                : job.proposalCount || 0;
+            tx.set(proposalRef, proposalData);
+            tx.update(jobDocRef, {
+              proposalCount: currentCount + 1,
+              lastProposalProviderId: firebaseUser.uid,
+              updatedAt: serverTimestamp(),
+            });
+          }
         });
-        await batch.commit();
 
         setMyProposalsByJobId((prev) => ({
           ...prev,
           [job.id]: {
             id: firebaseUser.uid,
             ...proposalData,
-            createdAtIso: new Date().toISOString().slice(0, 10),
+            createdAtIso: prev[job.id]?.createdAtIso || new Date().toISOString().slice(0, 10),
           },
         }));
 
@@ -440,7 +480,7 @@ export function useJobPosts(params: {
           linkPath: '/dashboard',
         });
       } catch (err) {
-        handleFirestoreError(err, OperationType.CREATE, path);
+        handleFirestoreError(err, OperationType.WRITE, path);
       }
     },
     [firebaseUser, isVerified, ownProvider, lang]
@@ -503,8 +543,8 @@ export function useJobPosts(params: {
 
   /**
    * Transactional proposal acceptance (anti-double-acceptance & anti-double-booking):
-   * Atomically verifies the job is still open, the quote is pending & unexpired, and
-   * acquires a deterministic schedule slot lock before assigning the job & creating the booking.
+   * Atomically verifies the job is still open, the quote is pending & unexpired, checks provider availability,
+   * and acquires a deterministic schedule slot lock before assigning the job & creating the booking.
    */
   const acceptProposalAndCreateBooking = useCallback(
     async (job: JobPostRecord, proposal: JobProposalRecord): Promise<string> => {
@@ -525,6 +565,7 @@ export function useJobPosts(params: {
       const jobDocRef = doc(db, 'jobPosts', job.id);
       const proposalRef = doc(db, 'jobPosts', job.id, 'proposals', proposal.providerId);
       const bookingDocRef = doc(db, 'bookings', bookingId);
+      const availRef = doc(db, 'providerAvailability', proposal.providerId);
       const lockId = buildScheduleLockId(
         proposal.providerId,
         job.preferredDate,
@@ -560,9 +601,10 @@ export function useJobPosts(params: {
 
       try {
         await runTransaction(db, async (tx) => {
-          const [liveJobSnap, livePropSnap, liveLockSnap] = await Promise.all([
+          const [liveJobSnap, livePropSnap, liveAvailSnap, liveLockSnap] = await Promise.all([
             tx.get(jobDocRef),
             tx.get(proposalRef),
+            tx.get(availRef),
             tx.get(lockRef),
           ]);
 
@@ -580,6 +622,20 @@ export function useJobPosts(params: {
                 ? 'هذا العرض لم يعد متاحاً للقبول.'
                 : 'Ce devis n’est plus en attente de validation.'
             );
+          }
+
+          if (liveAvailSnap.exists()) {
+            const schedule = parseProviderAvailabilitySnapshot(
+              proposal.providerId,
+              liveAvailSnap.data()
+            );
+            if (!isProviderSlotAvailable(schedule, job.preferredDate, job.preferredTimeSlot)) {
+              throw new Error(
+                lang === 'ar'
+                  ? 'هذا المعلم غير متاح في التاريخ أو الفترة الزمنية المحددة حسب جدول مواعيده.'
+                  : 'Ce Maâlem n’est pas disponible sur ce créneau selon son agenda.'
+              );
+            }
           }
 
           if (liveLockSnap.exists()) {

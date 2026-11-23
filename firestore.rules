@@ -20,7 +20,7 @@ service cloud.firestore {
     }
 
     function isValidId(id) {
-      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+      return id is string && id.matches('^[a-zA-Z0-9_\\-]{1,128}$');
     }
 
     function incoming() {
@@ -307,30 +307,7 @@ service cloud.firestore {
 
     // 6. Validation Blueprint: Booking (/bookings/{bookingId})
     function isValidBooking(data) {
-      return data.keys().hasAll([
-          'bookingRef',
-          'clientId',
-          'clientName',
-          'clientPhone',
-          'providerId',
-          'providerName',
-          'providerPhone',
-          'category',
-          'serviceType',
-          'city',
-          'neighborhood',
-          'addressPin',
-          'description',
-          'preferredDate',
-          'preferredTimeSlot',
-          'paymentMethod',
-          'paymentStatus',
-          'estimatedMad',
-          'status',
-          'createdAt',
-          'updatedAt'
-        ]) &&
-        data.keys().hasOnly([
+      return data.keys().hasOnly([
           'bookingRef',
           'clientId',
           'clientName',
@@ -363,12 +340,12 @@ service cloud.firestore {
           'updatedAt'
         ]) &&
         data.bookingRef is string && data.bookingRef.size() >= 3 && data.bookingRef.size() <= 32 &&
-        data.clientId is string && data.clientId.size() >= 1 && data.clientId.size() <= 128 && data.clientId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        isValidId(data.clientId) &&
         data.clientName is string && data.clientName.size() >= 2 && data.clientName.size() <= 80 &&
-        data.clientPhone is string && data.clientPhone.size() >= 12 && data.clientPhone.size() <= 16 && data.clientPhone.matches('^\\+212[5-7][0-9]{8}$') &&
-        data.providerId is string && data.providerId.size() >= 1 && data.providerId.size() <= 128 && data.providerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        data.clientPhone is string && data.clientPhone.matches('^\\+212[5-7][0-9]{8}$') &&
+        isValidId(data.providerId) &&
         data.providerName is string && data.providerName.size() >= 2 && data.providerName.size() <= 80 &&
-        data.providerPhone is string && data.providerPhone.size() >= 12 && data.providerPhone.size() <= 16 && data.providerPhone.matches('^\\+212[5-7][0-9]{8}$') &&
+        data.providerPhone is string && data.providerPhone.matches('^\\+212[5-7][0-9]{8}$') &&
         isValidCategory(data.category) &&
         data.serviceType is string && data.serviceType.size() >= 2 && data.serviceType.size() <= 120 &&
         isValidCity(data.city) &&
@@ -377,16 +354,9 @@ service cloud.firestore {
         data.description is string && data.description.size() >= 10 && data.description.size() <= 600 &&
         (!('problemPhotoUrl' in data) || isSafeAssetUrl(data.problemPhotoUrl)) &&
         data.preferredDate is string && data.preferredDate.size() >= 8 && data.preferredDate.size() <= 32 &&
-        data.preferredTimeSlot is string && data.preferredTimeSlot.size() <= 32 && (
-          data.preferredTimeSlot == '09:00 - 12:00' ||
-          data.preferredTimeSlot == '14:00 - 17:00' ||
-          data.preferredTimeSlot == '18:00 - 20:00'
-        ) &&
-        data.paymentMethod is string && data.paymentMethod.size() <= 32 && (
-          data.paymentMethod == 'cash_on_completion' ||
-          data.paymentMethod == 'cmi_escrow'
-        ) &&
-        data.paymentStatus is string && data.paymentStatus.size() <= 32 && (
+        data.preferredTimeSlot in ['09:00 - 12:00', '14:00 - 17:00', '18:00 - 20:00'] &&
+        (data.paymentMethod == 'cash_on_completion' || data.paymentMethod == 'cmi_escrow') &&
+        (
           data.paymentStatus == 'unpaid_cod' ||
           data.paymentStatus == 'pending_cash' ||
           data.paymentStatus == 'escrow_held' ||
@@ -395,27 +365,30 @@ service cloud.firestore {
           data.paymentStatus == 'disputed_split'
         ) &&
         data.estimatedMad is int && data.estimatedMad >= 50 && data.estimatedMad <= 100000 &&
+        isValidBookingMutableFields(data) &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidBookingMutableFields(data) {
+      return data.preferredDate is string && data.preferredDate.size() >= 8 && data.preferredDate.size() <= 32 &&
+        data.preferredTimeSlot in ['09:00 - 12:00', '14:00 - 17:00', '18:00 - 20:00'] &&
+        (
+          data.paymentStatus == 'unpaid_cod' ||
+          data.paymentStatus == 'pending_cash' ||
+          data.paymentStatus == 'escrow_held' ||
+          data.paymentStatus == 'paid' ||
+          data.paymentStatus == 'refunded' ||
+          data.paymentStatus == 'disputed_split'
+        ) &&
         (!('providerPayoutMad' in data) || (data.providerPayoutMad is int && data.providerPayoutMad >= 0 && data.providerPayoutMad <= 100000)) &&
         (!('platformFeeMad' in data) || (data.platformFeeMad is int && data.platformFeeMad >= 0 && data.platformFeeMad <= 100000)) &&
         (!('refundedClientMad' in data) || (data.refundedClientMad is int && data.refundedClientMad >= 0 && data.refundedClientMad <= 100000)) &&
         (!('cancellationReason' in data) || (data.cancellationReason is string && data.cancellationReason.size() <= 400)) &&
-        (!('cancelledBy' in data) || (data.cancelledBy is string && data.cancelledBy.size() <= 16 && (
-          data.cancelledBy == 'client' ||
-          data.cancelledBy == 'provider' ||
-          data.cancelledBy == 'admin'
-        ))) &&
+        (!('cancelledBy' in data) || (data.cancelledBy == 'client' || data.cancelledBy == 'provider' || data.cancelledBy == 'admin')) &&
         (!('rescheduleNote' in data) || (data.rescheduleNote is string && data.rescheduleNote.size() <= 300)) &&
-        data.status is string && data.status.size() <= 24 && (
-          data.status == 'pending' ||
-          data.status == 'accepted' ||
-          data.status == 'in_progress' ||
-          data.status == 'completed' ||
-          data.status == 'reviewed' ||
-          data.status == 'cancelled'
-        ) &&
+        data.status in ['pending', 'accepted', 'in_progress', 'completed', 'reviewed', 'cancelled'] &&
         (!('reviewRating' in data) || (data.reviewRating is int && data.reviewRating >= 1 && data.reviewRating <= 5)) &&
         (!('reviewComment' in data) || (data.reviewComment is string && data.reviewComment.size() <= 500)) &&
-        data.createdAt is timestamp &&
         data.updatedAt is timestamp;
     }
 
@@ -801,7 +774,7 @@ service cloud.firestore {
 
       allow update: if isActiveVerifiedUser() &&
         isValidId(bookingId) &&
-        isValidBooking(incoming()) &&
+        isValidBookingMutableFields(incoming()) &&
         incoming().clientId == existing().clientId &&
         incoming().providerId == existing().providerId &&
         incoming().estimatedMad == existing().estimatedMad &&
@@ -811,12 +784,14 @@ service cloud.firestore {
           isAdmin() || (
             existing().status != 'cancelled' &&
             existing().status != 'reviewed' && (
-              // Action 1: Client cancels pending or accepted cash_on_completion booking
+              // Action 1 & 5b: Client or Provider cancels a pending or accepted cash_on_completion booking
               (
-                request.auth.uid == existing().clientId &&
-                (existing().status == 'pending' || existing().status == 'accepted') &&
                 incoming().status == 'cancelled' &&
-                incoming().cancelledBy == 'client' &&
+                (existing().status == 'pending' || existing().status == 'accepted') &&
+                (
+                  (request.auth.uid == existing().clientId && incoming().cancelledBy == 'client') ||
+                  (request.auth.uid == existing().providerId && incoming().cancelledBy == 'provider')
+                ) &&
                 incoming().providerPayoutMad == 0 &&
                 incoming().platformFeeMad == 0 &&
                 existing().paymentMethod == 'cash_on_completion' &&
@@ -858,43 +833,13 @@ service cloud.firestore {
                 ]) &&
                 existsAfter(/databases/$(database)/documents/reviews/$(bookingId))
               ) ||
-              // Action 5a: Provider accepts a pending booking (status only)
+              // Action 5a & 6: Provider accepts a pending booking or starts an accepted booking (status only)
               (
                 request.auth.uid == existing().providerId &&
-                existing().status == 'pending' &&
-                incoming().status == 'accepted' &&
-                incoming().diff(existing()).affectedKeys().hasOnly([
-                  'status',
-                  'updatedAt'
-                ])
-              ) ||
-              // Action 5b: Provider declines/cancels a pending or accepted cash_on_completion booking
-              (
-                request.auth.uid == existing().providerId &&
-                (existing().status == 'pending' || existing().status == 'accepted') &&
-                incoming().status == 'cancelled' &&
-                incoming().cancelledBy == 'provider' &&
-                incoming().providerPayoutMad == 0 &&
-                incoming().platformFeeMad == 0 &&
-                existing().paymentMethod == 'cash_on_completion' &&
-                incoming().paymentStatus == existing().paymentStatus &&
-                incoming().refundedClientMad == 0 &&
-                incoming().diff(existing()).affectedKeys().hasOnly([
-                  'status',
-                  'paymentStatus',
-                  'providerPayoutMad',
-                  'platformFeeMad',
-                  'refundedClientMad',
-                  'cancellationReason',
-                  'cancelledBy',
-                  'updatedAt'
-                ])
-              ) ||
-              // Action 6: Provider starts an accepted booking (status only)
-              (
-                request.auth.uid == existing().providerId &&
-                existing().status == 'accepted' &&
-                incoming().status == 'in_progress' &&
+                (
+                  (existing().status == 'pending' && incoming().status == 'accepted') ||
+                  (existing().status == 'accepted' && incoming().status == 'in_progress')
+                ) &&
                 incoming().diff(existing()).affectedKeys().hasOnly([
                   'status',
                   'updatedAt'
@@ -1299,14 +1244,14 @@ service cloud.firestore {
           incoming().jobId == existing().jobId &&
           incoming().clientId == existing().clientId &&
           incoming().providerId == existing().providerId &&
-          incoming().proposedPriceMad == existing().proposedPriceMad &&
           incoming().createdAt == existing().createdAt &&
           incoming().updatedAt == request.time && (
             isAdmin() ||
-            // Client owner accepts or rejects a pending proposal
+            // Client owner accepts or rejects a pending proposal (price locked)
             (
               request.auth.uid == existing().clientId &&
               existing().status == 'pending' &&
+              incoming().proposedPriceMad == existing().proposedPriceMad &&
               (incoming().status == 'accepted' || incoming().status == 'rejected') &&
               incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
             ) ||
@@ -1314,8 +1259,34 @@ service cloud.firestore {
             (
               request.auth.uid == existing().providerId &&
               existing().status == 'pending' &&
+              incoming().proposedPriceMad == existing().proposedPriceMad &&
               incoming().status == 'withdrawn' &&
               incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+            ) ||
+            // Proposing Maâlem revises and resubmits their own pending or withdrawn proposal while job is open (AUD-007)
+            (
+              request.auth.uid == existing().providerId &&
+              providerId == request.auth.uid &&
+              (existing().status == 'pending' || existing().status == 'withdrawn') &&
+              incoming().status == 'pending' &&
+              get(/databases/$(database)/documents/jobPosts/$(jobId)).data.status == 'open' &&
+              incoming().diff(existing()).affectedKeys().hasOnly([
+                'providerName',
+                'providerPhone',
+                'providerCategory',
+                'providerCity',
+                'providerRating',
+                'providerVerified',
+                'proposedPriceMad',
+                'laborCostMad',
+                'materialsCostMad',
+                'validUntilIso',
+                'warrantyNote',
+                'estimatedDuration',
+                'message',
+                'status',
+                'updatedAt'
+              ])
             )
           );
 
@@ -1576,9 +1547,17 @@ service cloud.firestore {
       allow create: if isActiveVerifiedUser() &&
         isValidId(lockId) &&
         isValidScheduleLock(incoming()) &&
-        incoming().clientId == request.auth.uid &&
+        (
+          incoming().clientId == request.auth.uid ||
+          incoming().providerId == request.auth.uid ||
+          isAdmin()
+        ) &&
         incoming().createdAt == request.time &&
-        existsAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId));
+        existsAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId)) &&
+        getAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.clientId == incoming().clientId &&
+        getAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.providerId == incoming().providerId &&
+        getAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.preferredDate == incoming().preferredDate &&
+        getAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.preferredTimeSlot == incoming().preferredTimeSlot;
 
       allow update: if false;
 

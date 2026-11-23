@@ -313,10 +313,25 @@ export function generateBookingIds(): { bookingId: string; bookingRef: string } 
 }
 
 /**
- * Returns today's local date in YYYY-MM-DD format for date inputs.
+ * Returns today's date in YYYY-MM-DD format in the Moroccan Africa/Casablanca timezone (AUD-006).
  */
-export function getTodayIsoDate(): string {
-  const now = new Date();
+export function getTodayIsoDate(now: Date = new Date()): string {
+  try {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Africa/Casablanca',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(now);
+    const y = parts.find((p) => p.type === 'year')?.value;
+    const m = parts.find((p) => p.type === 'month')?.value;
+    const d = parts.find((p) => p.type === 'day')?.value;
+    if (y && m && d) {
+      return `${y}-${m}-${d}`;
+    }
+  } catch {
+    // Fallback if environment lacks Intl timeZone database
+  }
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
@@ -410,6 +425,7 @@ export function isValidMoroccanPhone(phone: string): boolean {
 /**
  * Formats a Moroccan phone number into digits-only `212...` and builds a `https://wa.me/{phone}?text={encoded}` link
  * pre-filled in French or Arabic with the booking reference and service category.
+ * Returns empty string `''` when no valid Moroccan phone number is provided (AUD-010: never dial a fake fallback number).
  */
 export function buildWhatsAppUrl(params: {
   phone: string;
@@ -419,8 +435,14 @@ export function buildWhatsAppUrl(params: {
   bookingRef?: string;
   serviceType?: string;
 }): string {
+  if (!params.phone || !isValidMoroccanPhone(params.phone)) {
+    return '';
+  }
   const normalized = normalizeMoroccanPhone(params.phone);
-  const waPhone = normalized.replace(/^\+/, '').replace(/[^0-9]/g, '') || '212661000000';
+  const waPhone = normalized.replace(/^\+/, '').replace(/[^0-9]/g, '');
+  if (!waPhone) {
+    return '';
+  }
   const refPartFr = params.bookingRef ? ` [Réf: ${params.bookingRef}]` : '';
   const refPartAr = params.bookingRef ? ` [مرجع الطلب: ${params.bookingRef}]` : '';
   const serviceDetail = params.serviceType ? ` (${params.serviceType})` : '';
@@ -989,12 +1011,8 @@ export function isQuotationExpired(
 }
 
 export function getDefaultQuoteValidUntilIso(daysAhead = 7): string {
-  const d = new Date();
-  d.setDate(d.getDate() + daysAhead);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+  const d = new Date(Date.now() + daysAhead * 24 * 60 * 60 * 1000);
+  return getTodayIsoDate(d);
 }
 
 /**
@@ -1029,6 +1047,45 @@ export function hasScheduleConflict(
 const JS_DAY_TO_WEEKDAY: WeekdayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
 /**
+ * Parses a raw Firestore `/providerAvailability/{uid}` document snapshot into a typed `ProviderWeeklySchedule`.
+ */
+export function parseProviderAvailabilitySnapshot(
+  uid: string,
+  data: Record<string, unknown> | null | undefined
+): ProviderWeeklySchedule | null {
+  if (!data || typeof data !== 'object') return null;
+  const defaults = createDefaultWeeklySchedule(uid);
+  const days = { ...defaults.days };
+  if (data.days && typeof data.days === 'object') {
+    for (const key of WEEKDAY_KEYS) {
+      const rawDay = (data.days as Record<string, { enabled?: boolean; slots?: unknown[] }>)[key];
+      if (rawDay && typeof rawDay === 'object') {
+        const validSlots = Array.isArray(rawDay.slots)
+          ? rawDay.slots.filter((s): s is TimeSlot => TIME_SLOTS.includes(s as TimeSlot))
+          : [];
+        days[key as WeekdayKey] = {
+          enabled: Boolean(rawDay.enabled),
+          slots: validSlots,
+        };
+      }
+    }
+  }
+  const blockedDates = Array.isArray(data.blockedDates)
+    ? data.blockedDates
+        .map(String)
+        .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d))
+        .slice(0, 60)
+    : [];
+
+  return {
+    uid,
+    days,
+    blockedDates,
+    acceptsUrgentSameDay: Boolean(data.acceptsUrgentSameDay ?? true),
+  };
+}
+
+/**
  * Evaluates whether a provider's weekly calendar allows booking a specific date & time slot.
  */
 export function isProviderSlotAvailable(
@@ -1038,9 +1095,10 @@ export function isProviderSlotAvailable(
 ): boolean {
   if (!schedule) return true;
   const cleanDate = dateIso.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) return false;
   if (schedule.blockedDates.includes(cleanDate)) return false;
   const parsed = new Date(`${cleanDate}T12:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return true;
+  if (Number.isNaN(parsed.getTime())) return false;
   const dayKey = JS_DAY_TO_WEEKDAY[parsed.getUTCDay()];
   const dayCfg = schedule.days[dayKey];
   if (!dayCfg || !dayCfg.enabled) return false;

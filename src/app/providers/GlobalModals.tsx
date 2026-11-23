@@ -58,6 +58,8 @@ export const GlobalModals: React.FC = () => {
     rescheduleBooking,
     submitClientReview,
     sendLocalChatMessage,
+    markConversationRead,
+    updateConversationOnMessage,
     authModalIntent,
     setAuthModalIntent,
     isPostJobModalOpen,
@@ -209,6 +211,8 @@ export const GlobalModals: React.FC = () => {
           }
           localMessages={chatThreads[activeChatBooking.id] || []}
           onSendLocalMessage={sendLocalChatMessage}
+          onMarkConversationRead={markConversationRead}
+          onUpdateConversationOnMessage={updateConversationOnMessage}
           onClose={() => setActiveChatBooking(null)}
         />
       )}
