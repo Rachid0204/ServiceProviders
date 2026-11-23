@@ -126,7 +126,7 @@ export function useProviders(
             phone:
               typeof data.phone === 'string' && data.phone
                 ? data.phone
-                : seeded?.phone || '+212661000000',
+                : seeded?.phone || '',
             location: {
               lat: Number(loc.lat || 33.5883),
               lng: Number(loc.lng || -7.6325),

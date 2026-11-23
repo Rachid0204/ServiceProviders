@@ -564,7 +564,7 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
         minWithdrawalMad: Math.max(50, Math.min(10000, Math.round(Number(minWithdrawalMad)))),
         autoRefundOnProviderCancel,
         requireKycForEscrowPayout,
-        supportWhatsAppPhone: supportWhatsAppPhone.trim() || '+212661428910',
+        supportWhatsAppPhone: supportWhatsAppPhone.trim(),
       });
     } finally {
       setIsSaving(false);

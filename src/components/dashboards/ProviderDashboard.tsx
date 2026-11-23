@@ -38,7 +38,7 @@ import {
   limit,
   onSnapshot,
   doc,
-  setDoc,
+  runTransaction,
   serverTimestamp,
   type Timestamp,
 } from 'firebase/firestore';
@@ -50,6 +50,7 @@ import {
   DEFAULT_CATEGORY_IMAGE,
   MOROCCAN_CITIES,
   SERVICE_CATEGORIES,
+  buildWithdrawalRequestId,
   calculateEscrowSplit,
   computeProviderEarningsBreakdown,
   computeQuotationTotals,
@@ -94,7 +95,7 @@ interface ProviderWithdrawalItem {
   bankName: string;
   ribMasked: string;
   amountMad: number;
-  status: 'pending' | 'approved' | 'frozen' | 'rejected';
+  status: 'pending' | 'approved' | 'completed' | 'frozen' | 'rejected';
   adminNote?: string;
   createdAtIso: string;
 }
@@ -476,7 +477,7 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
       diplomaAr: cardDiploma.trim() || 'تأهيل مهني — المغرب',
       completedJobs: ownProvider?.completedJobs ?? 0,
       responseMinutes: ownProvider?.responseMinutes ?? 20,
-      phone: cardPhone || '+212661000000',
+      phone: cardPhone || '',
       location: {
         lat: cardCoords?.lat ?? cityRef.lat,
         lng: cardCoords?.lng ?? cityRef.lng,
@@ -690,14 +691,34 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
     }
   };
 
-  const handleOpenQuoteComposer = (job: JobPostRecord) => {
+  const handleOpenQuoteComposer = (job: JobPostRecord, existing?: JobProposalRecord) => {
     setQuotingJobId(job.id);
-    setQuoteLaborMad(job.budgetMad);
-    setQuoteMaterialsMad(0);
-    setQuoteValidUntil(getDefaultQuoteValidUntilIso(7));
-    setQuoteWarranty(isAr ? 'ضمان 30 يوماً على اليد العاملة' : 'Garantie 30 jours main-d’œuvre');
-    setQuoteDuration(isAr ? 'متاح خلال 24 ساعة · ساعتين عمل' : 'Disponible sous 24h · ~2h');
-    setQuoteMessage('');
+    if (existing) {
+      setQuoteLaborMad(
+        typeof existing.laborCostMad === 'number'
+          ? existing.laborCostMad
+          : existing.proposedPriceMad
+      );
+      setQuoteMaterialsMad(
+        typeof existing.materialsCostMad === 'number' ? existing.materialsCostMad : 0
+      );
+      setQuoteValidUntil(existing.validUntilIso || getDefaultQuoteValidUntilIso(7));
+      setQuoteWarranty(
+        existing.warrantyNote ||
+          (isAr ? 'ضمان 30 يوماً على اليد العاملة' : 'Garantie 30 jours main-d’œuvre')
+      );
+      setQuoteDuration(existing.estimatedDuration);
+      setQuoteMessage(existing.message);
+    } else {
+      setQuoteLaborMad(job.budgetMad);
+      setQuoteMaterialsMad(0);
+      setQuoteValidUntil(getDefaultQuoteValidUntilIso(7));
+      setQuoteWarranty(
+        isAr ? 'ضمان 30 يوماً على اليد العاملة' : 'Garantie 30 jours main-d’œuvre'
+      );
+      setQuoteDuration(isAr ? 'متاح خلال 24 ساعة · ساعتين عمل' : 'Disponible sous 24h · ~2h');
+      setQuoteMessage('');
+    }
     setQuoteErrors({});
     setQuoteSubmitError(null);
   };
@@ -807,19 +828,67 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
         ? `${cleanRib.slice(0, 4)} •••• •••• ${cleanRib.slice(-4)}`
         : `•••• ${cleanRib.slice(-6)}`;
 
-    const withdrawalId = `wd_${firebaseUser.uid}`;
+    const withdrawalId = buildWithdrawalRequestId(firebaseUser.uid);
+    const withdrawalRef = doc(db, 'withdrawals', withdrawalId);
+    const lockRef = doc(db, 'withdrawalLocks', firebaseUser.uid);
+    const providerRef = doc(db, 'providers', firebaseUser.uid);
+
     setIsSubmittingWithdrawal(true);
     try {
-      await setDoc(doc(db, 'withdrawals', withdrawalId), {
-        providerId: firebaseUser.uid,
-        providerName: isAr ? ownProvider.fullNameAr : ownProvider.fullNameFr,
-        city: ownProvider.location.city,
-        bankName,
-        ribMasked: maskedRib.slice(0, 40),
-        amountMad: roundedAmount,
-        status: 'pending',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      await runTransaction(db, async (tx) => {
+        const [providerSnap, lockSnap] = await Promise.all([
+          tx.get(providerRef),
+          tx.get(lockRef),
+        ]);
+
+        const serverWithdrawableMad = providerSnap.exists()
+          ? Number(providerSnap.data().withdrawableBalanceMad ?? 0)
+          : 0;
+        if (roundedAmount > serverWithdrawableMad || serverWithdrawableMad < minAllowed) {
+          throw new Error(
+            isAr
+              ? 'رصيدك المعتمد لدى المنصة غير كافٍ لإجراء عملية السحب البنكي.'
+              : 'Solde disponible détenu par la plateforme insuffisant pour ce virement.'
+          );
+        }
+
+        if (lockSnap.exists()) {
+          const prevWithdrawalId = String(lockSnap.data().activeWithdrawalId || '');
+          if (prevWithdrawalId) {
+            const prevSnap = await tx.get(doc(db, 'withdrawals', prevWithdrawalId));
+            if (prevSnap.exists()) {
+              const prevStatus = String(prevSnap.data().status || 'pending');
+              if (
+                prevStatus !== 'approved' &&
+                prevStatus !== 'rejected' &&
+                prevStatus !== 'completed'
+              ) {
+                throw new Error(
+                  isAr
+                    ? 'لديك طلب سحب بنكي قيد المعالجة بالفعل. يرجى انتظار معالجته قبل إرسال طلب جديد.'
+                    : 'Une demande de virement est déjà en cours de traitement.'
+                );
+              }
+            }
+          }
+        }
+
+        tx.set(withdrawalRef, {
+          providerId: firebaseUser.uid,
+          providerName: isAr ? ownProvider.fullNameAr : ownProvider.fullNameFr,
+          city: ownProvider.location.city,
+          bankName,
+          ribMasked: maskedRib.slice(0, 40),
+          amountMad: roundedAmount,
+          status: 'pending',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        tx.set(lockRef, {
+          providerId: firebaseUser.uid,
+          activeWithdrawalId: withdrawalId,
+          updatedAt: serverTimestamp(),
+        });
       });
       setRibInput('');
       setWithdrawalNotice({
@@ -1404,7 +1473,7 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
                           {isAr ? 'عروض مقدمة' : 'devis déjà envoyés'}
                         </span>
 
-                        {existingProposal && existingProposal.status !== 'withdrawn' ? (
+                        {existingProposal && existingProposal.status !== 'withdrawn' && !isQuoting ? (
                           <div className="flex items-center gap-2">
                             <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-semibold">
                               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -1415,25 +1484,42 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
                               </span>
                             </span>
                             {existingProposal.status === 'pending' && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  void onWithdrawJobProposal(job.id);
-                                }}
-                                className="text-rose-700 hover:underline font-medium cursor-pointer"
-                              >
-                                {isAr ? 'سحب' : 'Retirer'}
-                              </button>
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenQuoteComposer(job, existingProposal)}
+                                  className="text-emerald-700 hover:underline font-medium cursor-pointer"
+                                >
+                                  {isAr ? 'تعديل' : 'Modifier'}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    void onWithdrawJobProposal(job.id);
+                                  }}
+                                  className="text-rose-700 hover:underline font-medium cursor-pointer"
+                                >
+                                  {isAr ? 'سحب' : 'Retirer'}
+                                </button>
+                              </>
                             )}
                           </div>
                         ) : !isQuoting ? (
                           <button
                             type="button"
-                            onClick={() => handleOpenQuoteComposer(job)}
+                            onClick={() => handleOpenQuoteComposer(job, existingProposal)}
                             className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-xl transition-colors cursor-pointer"
                           >
                             <Send className="w-3.5 h-3.5" />
-                            <span>{isAr ? 'تقديم عرض / سعر' : 'Proposer un devis'}</span>
+                            <span>
+                              {existingProposal?.status === 'withdrawn'
+                                ? isAr
+                                  ? 'تعديل وإعادة إرسال العرض'
+                                  : 'Modifier & renvoyer un devis'
+                                : isAr
+                                ? 'تقديم عرض / سعر'
+                                : 'Proposer un devis'}
+                            </span>
                           </button>
                         ) : null}
                       </div>
@@ -1781,15 +1867,17 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
                             <MessageSquare className="w-3.5 h-3.5 text-emerald-700" />
                             <span>{t.openChatBtn}</span>
                           </button>
-                          <a
-                            href={whatsappUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5" />
-                            <span>WhatsApp</span>
-                          </a>
+                          {whatsappUrl && (
+                            <a
+                              href={whatsappUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                              <span>WhatsApp</span>
+                            </a>
+                          )}
                         </div>
                       </div>
 

@@ -83,16 +83,18 @@ export const Footer: React.FC = () => {
                     {t.providerDashboardTab}
                   </Link>
                 </li>
-                <li>
-                  <a
-                    href={supportWhatsAppUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="hover:text-emerald-700 hover:underline"
-                  >
-                    {isAr ? 'دعم واتساب المباشر' : 'Support WhatsApp'}
-                  </a>
-                </li>
+                {supportWhatsAppUrl && (
+                  <li>
+                    <a
+                      href={supportWhatsAppUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="hover:text-emerald-700 hover:underline"
+                    >
+                      {isAr ? 'دعم واتساب المباشر' : 'Support WhatsApp'}
+                    </a>
+                  </li>
+                )}
                 {hasAdminAccess && (
                   <li>
                     <Link
@@ -119,14 +121,16 @@ export const Footer: React.FC = () => {
               >
                 {isAr ? 'تفعيل الحساب المزدوج' : 'Activer un compte double (Client & Maâlem)'}
               </Link>
-              <a
-                href={supportWhatsAppUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-emerald-700 hover:underline"
-              >
-                {isAr ? 'دعم واتساب للمعلمين' : 'Support Maâlems WhatsApp'}
-              </a>
+              {supportWhatsAppUrl && (
+                <a
+                  href={supportWhatsAppUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hover:text-emerald-700 hover:underline"
+                >
+                  {isAr ? 'دعم واتساب للمعلمين' : 'Support Maâlems WhatsApp'}
+                </a>
+              )}
             </div>
           </div>
         )}

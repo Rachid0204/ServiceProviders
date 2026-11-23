@@ -771,6 +771,55 @@ test('AUD-001: computeProviderEarningsBreakdown excludes COD earnings from platf
   assert.equal(pendingWithdrawalBreakdown.canRequestWithdrawal, false);
 });
 
+test('AUD-006 & AUD-010: parseProviderAvailabilitySnapshot normalizes provider availability and buildWhatsAppUrl never returns fake fallback phone numbers', async () => {
+  const {
+    parseProviderAvailabilitySnapshot,
+    isProviderSlotAvailable,
+    buildWhatsAppUrl,
+  } = await import('./marketplace');
 
+  // AUD-006: parseProviderAvailabilitySnapshot falls back to defaults and preserves blockedDates & custom day toggles;
+  // missing availability document (null) defaults to available on valid date + standard timeSlot and rejects invalid date/slot.
+  assert.equal(parseProviderAvailabilitySnapshot('prov-1', null), null);
+  assert.equal(isProviderSlotAvailable(null, '2026-11-23', '09:00 - 12:00'), true);
+  assert.equal(isProviderSlotAvailable(null, 'invalid-date', '09:00 - 12:00'), false);
+  const parsedSchedule = parseProviderAvailabilitySnapshot('prov-1', {
+    blockedDates: ['2026-11-30'],
+    acceptsUrgentSameDay: false,
+    days: {
+      mon: { enabled: false, slots: ['09:00 - 12:00'] },
+      tue: { enabled: true, slots: ['14:00 - 17:00'] },
+    },
+  });
+  assert.ok(parsedSchedule);
+  assert.equal(parsedSchedule.acceptsUrgentSameDay, false);
+  // 2026-11-23 is Monday (disabled in custom schedule)
+  assert.equal(isProviderSlotAvailable(parsedSchedule, '2026-11-23', '09:00 - 12:00'), false);
+  // 2026-11-24 is Tuesday (only 14:00 - 17:00 enabled)
+  assert.equal(isProviderSlotAvailable(parsedSchedule, '2026-11-24', '09:00 - 12:00'), false);
+  assert.equal(isProviderSlotAvailable(parsedSchedule, '2026-11-24', '14:00 - 17:00'), true);
+  // 2026-11-30 is Monday and also in blockedDates
+  assert.equal(isProviderSlotAvailable(parsedSchedule, '2026-11-30', '14:00 - 17:00'), false);
 
-
+  // AUD-010: buildWhatsAppUrl returns empty string when phone is empty or invalid (never 212661000000)
+  assert.equal(
+    buildWhatsAppUrl({ phone: '', lang: 'fr', providerName: 'Karim', category: 'Plomberie' }),
+    ''
+  );
+  assert.equal(
+    buildWhatsAppUrl({ phone: '   ', lang: 'fr', providerName: 'Karim', category: 'Plomberie' }),
+    ''
+  );
+  assert.equal(
+    buildWhatsAppUrl({ phone: '123', lang: 'fr', providerName: 'Karim', category: 'Plomberie' }),
+    ''
+  );
+  const validWa = buildWhatsAppUrl({
+    phone: '0661234567',
+    lang: 'fr',
+    providerName: 'Karim',
+    category: 'Plomberie',
+  });
+  assert.ok(validWa.startsWith('https://wa.me/212661234567?text='));
+  assert.ok(!validWa.includes('212661000000'));
+});

@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import type { User } from 'firebase/auth';
@@ -19,7 +19,14 @@ vi.mock('../firebase', () => ({
   auth: {},
   storage: {},
   reportFirestoreError: vi.fn(),
-  OperationType: { LIST: 'list', GET: 'get', CREATE: 'create', UPDATE: 'update' },
+  OperationType: {
+    LIST: 'list',
+    GET: 'get',
+    CREATE: 'create',
+    UPDATE: 'update',
+    WRITE: 'write',
+    DELETE: 'delete',
+  },
   signInWithEmail: vi.fn(),
   signUpWithEmail: vi.fn(),
   requestPasswordReset: vi.fn(),
@@ -27,14 +34,19 @@ vi.mock('../firebase', () => ({
 
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
-  doc: vi.fn(),
+  doc: vi.fn((_db, ...segments: string[]) => ({ path: segments.join('/') })),
   query: vi.fn(),
   where: vi.fn(),
   orderBy: vi.fn(),
   limit: vi.fn(),
   onSnapshot: vi.fn(() => () => {}),
-  setDoc: vi.fn(),
-  serverTimestamp: vi.fn(),
+  getDoc: vi.fn(),
+  getDocs: vi.fn(),
+  runTransaction: vi.fn(),
+  setDoc: vi.fn().mockResolvedValue(undefined),
+  updateDoc: vi.fn(),
+  writeBatch: vi.fn(),
+  serverTimestamp: vi.fn(() => 'SERVER_TIMESTAMP'),
 }));
 
 function createArabicContext(
@@ -271,5 +283,149 @@ describe('Phase 7 Production Readiness: Arabic RTL, Landmarks & Critical Journey
         expect(arVal.trim().length).toBeGreaterThan(0);
       }
     }
+  });
+
+  it('AUD-015: BookingModal does not render the demo sample photo button while preserving real photo upload', async () => {
+    const { BookingModal } = await import('../components/BookingModal');
+    const mockUser = { uid: 'c-1', email: 'salma@test.ma', emailVerified: true } as unknown as User;
+    const mockProfile: UserProfileRecord = {
+      uid: 'c-1',
+      role: 'client',
+      fullName: 'Salma Bennani',
+      phone: '+212661234567',
+      city: 'Casablanca',
+      neighborhood: 'Maârif',
+      languagePref: 'fr',
+      verifiedBadge: false,
+    };
+    render(
+      <BookingModal
+        provider={VETTED_PROVIDERS[0]}
+        lang="fr"
+        t={TRANSLATIONS.fr}
+        firebaseUser={mockUser}
+        currentProfile={mockProfile}
+        onClose={vi.fn()}
+        onSubmitBooking={vi.fn().mockResolvedValue('MK-TEST')}
+      />
+    );
+
+    expect(
+      screen.queryByRole('button', { name: TRANSLATIONS.fr.attachSamplePhotoBtn })
+    ).not.toBeInTheDocument();
+  });
+
+  it('saveSystemSettings accepts empty supportWhatsAppPhone, normalizes valid Moroccan phones, and rejects malformed non-empty phones', async () => {
+    const { setDoc } = await import('firebase/firestore');
+    const { useAdminData } = await import('../hooks/useAdminData');
+    const setDocMock = vi.mocked(setDoc);
+    setDocMock.mockClear();
+
+    const adminUser = {
+      uid: 'admin-1',
+      email: 'admin@moul-lkhedma.ma',
+      emailVerified: true,
+      getIdTokenResult: vi.fn().mockResolvedValue({ claims: { admin: true } }),
+    } as unknown as User;
+    const onUpdateLocalSettings = vi.fn();
+    const emptyProviders: typeof VETTED_PROVIDERS = [];
+    const emptyBookings: never[] = [];
+    const noopOverride = vi.fn();
+    const noopRemove = vi.fn();
+    const noopPatch = vi.fn();
+
+    let latestApi: ReturnType<typeof useAdminData> | null = null;
+    const Harness: React.FC = () => {
+      latestApi = useAdminData({
+        enabled: true,
+        firebaseUser: adminUser,
+        authReady: true,
+        allProviders: emptyProviders,
+        firestoreProviders: emptyProviders,
+        bookings: emptyBookings,
+        systemSettings: DEFAULT_SYSTEM_SETTINGS,
+        onUpdateLocalSettings,
+        onApplyProviderOverride: noopOverride,
+        onRemoveProviderReview: noopRemove,
+        onApplyBookingPatch: noopPatch,
+      });
+      return <div data-testid="admin-ready">{latestApi.isLiveAdmin ? 'ready' : 'loading'}</div>;
+    };
+
+    render(<Harness />);
+    await waitFor(() => {
+      expect(screen.getByTestId('admin-ready')).toHaveTextContent('ready');
+    });
+
+    // 1. Empty supportWhatsAppPhone is accepted and persisted as ''
+    await act(async () => {
+      await latestApi!.saveSystemSettings({ supportWhatsAppPhone: '', platformFeePct: 5 });
+    });
+    expect(setDocMock).toHaveBeenCalledWith(
+      { path: 'systemSettings/global' },
+      expect.objectContaining({
+        platformFeePct: 5,
+        minWithdrawalMad: DEFAULT_SYSTEM_SETTINGS.minWithdrawalMad,
+        supportWhatsAppPhone: '',
+      })
+    );
+    expect(onUpdateLocalSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({ supportWhatsAppPhone: '', platformFeePct: 5 })
+    );
+
+    // 2. Valid Moroccan number is normalized and persisted as +212...
+    setDocMock.mockClear();
+    await act(async () => {
+      await latestApi!.saveSystemSettings({ supportWhatsAppPhone: '06 61 23 45 67' });
+    });
+    expect(setDocMock).toHaveBeenCalledWith(
+      { path: 'systemSettings/global' },
+      expect.objectContaining({
+        supportWhatsAppPhone: '+212661234567',
+      })
+    );
+
+    // 3. Invalid non-empty number is rejected without writing to Firestore
+    setDocMock.mockClear();
+    onUpdateLocalSettings.mockClear();
+    await act(async () => {
+      await latestApi!.saveSystemSettings({ supportWhatsAppPhone: '+33612345678' });
+    });
+    expect(setDocMock).not.toHaveBeenCalled();
+    expect(onUpdateLocalSettings).not.toHaveBeenCalled();
+  });
+
+  it('Footer hides WhatsApp support CTAs when supportWhatsAppUrl is empty and shows them when configured', async () => {
+    const { Footer } = await import('../components/Footer');
+    const { unmount } = render(
+      <MemoryRouter>
+        <MarketplaceContext.Provider
+          value={createArabicContext({ lang: 'fr', t: TRANSLATIONS.fr, isAr: false, supportWhatsAppUrl: '' })}
+        >
+          <Footer />
+        </MarketplaceContext.Provider>
+      </MemoryRouter>
+    );
+    expect(screen.queryByRole('link', { name: /Support WhatsApp/i })).not.toBeInTheDocument();
+    unmount();
+
+    render(
+      <MemoryRouter>
+        <MarketplaceContext.Provider
+          value={createArabicContext({
+            lang: 'fr',
+            t: TRANSLATIONS.fr,
+            isAr: false,
+            supportWhatsAppUrl: 'https://wa.me/212661234567?text=Bonjour',
+          })}
+        >
+          <Footer />
+        </MarketplaceContext.Provider>
+      </MemoryRouter>
+    );
+    expect(screen.getByRole('link', { name: /Support WhatsApp/i })).toHaveAttribute(
+      'href',
+      'https://wa.me/212661234567?text=Bonjour'
+    );
   });
 });

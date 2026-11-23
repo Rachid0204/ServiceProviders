@@ -231,3 +231,46 @@ test('recalculateRatingAfterReviewRemoval accurately recalculates average and ha
   assert.equal(resLast.ratingAvg, 5.0);
 });
 
+test('SystemSettings optional supportWhatsAppPhone accepts empty string, normalizes valid Moroccan phones, and rejects malformed non-empty phones', async () => {
+  const { DEFAULT_SYSTEM_SETTINGS, validateOptionalSupportWhatsAppPhone } = await import(
+    './systemSettings'
+  );
+
+  // Default supportWhatsAppPhone must remain empty (no hardcoded fallback number)
+  assert.equal(DEFAULT_SYSTEM_SETTINGS.supportWhatsAppPhone, '');
+
+  // Empty or whitespace-only values are valid and normalize to ''
+  assert.deepEqual(validateOptionalSupportWhatsAppPhone(''), { valid: true, normalized: '' });
+  assert.deepEqual(validateOptionalSupportWhatsAppPhone('   '), { valid: true, normalized: '' });
+
+  // Valid Moroccan mobile & landline formats normalize to strict +212[5-7]XXXXXXXX
+  assert.deepEqual(validateOptionalSupportWhatsAppPhone('+212661234567'), {
+    valid: true,
+    normalized: '+212661234567',
+  });
+  assert.deepEqual(validateOptionalSupportWhatsAppPhone('06 61 23 45 67'), {
+    valid: true,
+    normalized: '+212661234567',
+  });
+  assert.deepEqual(validateOptionalSupportWhatsAppPhone('0701020304'), {
+    valid: true,
+    normalized: '+212701020304',
+  });
+  assert.deepEqual(validateOptionalSupportWhatsAppPhone('212522112233'), {
+    valid: true,
+    normalized: '+212522112233',
+  });
+  assert.deepEqual(validateOptionalSupportWhatsAppPhone('00212661234567'), {
+    valid: true,
+    normalized: '+212661234567',
+  });
+
+  // Malformed non-empty numbers are rejected
+  for (const bad of ['12345', 'abc', '+33612345678', '+212123456789', '+21266123456', '+2126612345678']) {
+    assert.equal(
+      validateOptionalSupportWhatsAppPhone(bad).valid,
+      false,
+      `Expected invalid support phone "${bad}" to be rejected`
+    );
+  }
+});

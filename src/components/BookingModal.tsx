@@ -335,15 +335,17 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-              <a
-                href={whatsappUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
-              >
-                <MessageCircle className="w-4 h-4" />
-                <span>{t.whatsappContactBtn}</span>
-              </a>
+              {whatsappUrl && (
+                <a
+                  href={whatsappUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>{t.whatsappContactBtn}</span>
+                </a>
+              )}
               <button
                 type="button"
                 onClick={onClose}
@@ -693,21 +695,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                       className="hidden"
                     />
                   </label>
-                  {!problemPhotoUrl ? (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setPhotoError(null);
-                        setProblemPhotoUrl(
-                          provider.portfolioImages[0] ||
-                            '/src/assets/images/service_plumbing_repair_1794980477189.jpg'
-                        );
-                      }}
-                      className="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 cursor-pointer"
-                    >
-                      {t.attachSamplePhotoBtn}
-                    </button>
-                  ) : (
+                  {problemPhotoUrl && (
                     <button
                       type="button"
                       onClick={() => {

@@ -24,6 +24,8 @@ import {
 import type { Translations } from '../i18n/translations';
 import { uploadMarketplacePhoto, revokePreviewObjectUrl } from '../utils/storageUpload';
 import { isVerifiedAuthUser } from '../utils/authHelpers';
+import { dispatchUserNotification } from '../hooks/useNotifications';
+import { buildMessageThreadPath } from '../app/routePaths';
 
 interface ChatDrawerModalProps {
   booking: BookingRecord;
@@ -37,6 +39,8 @@ interface ChatDrawerModalProps {
   readOnly?: boolean;
   localMessages: ChatMessageRecord[];
   onSendLocalMessage: (msg: ChatMessageRecord) => void;
+  onMarkConversationRead?: (booking: BookingRecord) => Promise<void> | void;
+  onUpdateConversationOnMessage?: (booking: BookingRecord, messageText: string) => Promise<void> | void;
   onClose: () => void;
 }
 
@@ -66,6 +70,8 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
   readOnly = false,
   localMessages,
   onSendLocalMessage,
+  onMarkConversationRead,
+  onUpdateConversationOnMessage,
   onClose,
 }) => {
   const [text, setText] = useState('');
@@ -92,6 +98,9 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
     setFirestoreMessages([]);
     setUploadError(null);
     if (!isLiveChat) return;
+    if (!readOnly) {
+      void onMarkConversationRead?.(booking);
+    }
     const messagesPath = `chats/${booking.id}/messages`;
     const q = query(
       collection(db, 'chats', booking.id, 'messages'),
@@ -121,6 +130,9 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
           };
         });
         setFirestoreMessages(loaded);
+        if (!readOnly && loaded.length > 0) {
+          void onMarkConversationRead?.(booking);
+        }
       },
       (err) => {
         reportFirestoreError(err, OperationType.LIST, messagesPath);
@@ -133,7 +145,7 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
     );
 
     return () => unsubscribe();
-  }, [isLiveChat, booking.id, booking.clientId, booking.providerId, lang]);
+  }, [isLiveChat, readOnly, booking, onMarkConversationRead, lang]);
 
   const combinedMessages = isLiveChat ? firestoreMessages : localMessages;
 
@@ -225,6 +237,22 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
           ...(safePhotoUrl ? { photoUrl: safePhotoUrl } : {}),
           createdAt: serverTimestamp(),
         });
+
+        await onUpdateConversationOnMessage?.(booking, messageText);
+
+        const recipientUserId =
+          firebaseUser.uid === booking.clientId ? booking.providerId : booking.clientId;
+        void dispatchUserNotification({
+          recipientUserId,
+          actorUserId: firebaseUser.uid,
+          type: 'message_received',
+          titleFr: `Nouveau message de ${safeSenderName}`,
+          titleAr: `رسالة جديدة من ${safeSenderName}`,
+          bodyFr: messageText.slice(0, 140),
+          bodyAr: messageText.slice(0, 140),
+          linkPath: buildMessageThreadPath(booking.id),
+        });
+
         setText('');
         setPhotoUrl('');
         setUploadError(null);
@@ -296,15 +324,17 @@ export const ChatDrawerModal: React.FC<ChatDrawerModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <a
-              href={whatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
-            >
-              <MessageCircle className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">WhatsApp</span>
-            </a>
+            {whatsappUrl && (
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 rounded-lg hover:bg-emerald-700 transition-colors"
+              >
+                <MessageCircle className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">WhatsApp</span>
+              </a>
+            )}
             <button
               type="button"
               onClick={onClose}
