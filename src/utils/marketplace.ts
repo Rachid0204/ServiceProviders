@@ -1087,18 +1087,21 @@ export function parseProviderAvailabilitySnapshot(
 
 /**
  * Evaluates whether a provider's weekly calendar allows booking a specific date & time slot.
+ * Intentional business behavior: if a provider has not yet saved a custom `/providerAvailability/{uid}`
+ * document (`schedule == null`), all valid dates and standard `TIME_SLOTS` default to available.
  */
 export function isProviderSlotAvailable(
   schedule: ProviderWeeklySchedule | null | undefined,
   dateIso: string,
   timeSlot: TimeSlot
 ): boolean {
-  if (!schedule) return true;
   const cleanDate = dateIso.slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) return false;
-  if (schedule.blockedDates.includes(cleanDate)) return false;
   const parsed = new Date(`${cleanDate}T12:00:00Z`);
   if (Number.isNaN(parsed.getTime())) return false;
+  if (!TIME_SLOTS.includes(timeSlot)) return false;
+  if (!schedule) return true;
+  if (schedule.blockedDates.includes(cleanDate)) return false;
   const dayKey = JS_DAY_TO_WEEKDAY[parsed.getUTCDay()];
   const dayCfg = schedule.days[dayKey];
   if (!dayCfg || !dayCfg.enabled) return false;

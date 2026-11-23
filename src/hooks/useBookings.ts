@@ -324,24 +324,15 @@ export function useBookings(params: {
           tx.get(lockRef),
         ]);
 
-        if (availSnap.exists()) {
-          const schedule = parseProviderAvailabilitySnapshot(
-            payload.provider.id,
-            availSnap.data()
+        const schedule = availSnap.exists()
+          ? parseProviderAvailabilitySnapshot(payload.provider.id, availSnap.data())
+          : null;
+        if (!isProviderSlotAvailable(schedule, payload.preferredDate, payload.preferredTimeSlot)) {
+          throw new Error(
+            lang === 'ar'
+              ? 'هذا المعلم غير متاح في التاريخ أو الفترة الزمنية المختارة حسب جدول مواعيده.'
+              : 'Ce Maâlem n’est pas disponible sur ce créneau selon son agenda hebdomadaire.'
           );
-          if (
-            !isProviderSlotAvailable(
-              schedule,
-              payload.preferredDate,
-              payload.preferredTimeSlot
-            )
-          ) {
-            throw new Error(
-              lang === 'ar'
-                ? 'هذا المعلم غير متاح في التاريخ أو الفترة الزمنية المختارة حسب جدول مواعيده.'
-                : 'Ce Maâlem n’est pas disponible sur ce créneau selon son agenda hebdomadaire.'
-            );
-          }
         }
 
         if (lockSnap.exists()) {
@@ -408,11 +399,6 @@ export function useBookings(params: {
   ) => {
     setBookingActionError(null);
     if (!firebaseUser) return;
-    const target = bookings.find((b) => b.id === bookingId);
-    if (!target) return;
-    if (!canTransitionBookingStatus(target.status, nextStatus, actorRole)) {
-      return;
-    }
 
     if (nextStatus === 'cancelled') {
       await cancelBookingWithReason(
@@ -422,6 +408,12 @@ export function useBookings(params: {
           : 'Indisponibilité signalée par le Maâlem',
         actorRole
       );
+      return;
+    }
+
+    const target = bookings.find((b) => b.id === bookingId);
+    if (!target) return;
+    if (!canTransitionBookingStatus(target.status, nextStatus, actorRole)) {
       return;
     }
 
@@ -509,7 +501,7 @@ export function useBookings(params: {
     );
   };
 
-  // Cancellation with explicit reason + atomic release of deterministic /scheduleLocks/{lockId} (AUD-006)
+  // Cancellation with explicit reason + live transactional booking read & atomic release of deterministic /scheduleLocks/{lockId} (AUD-006)
   const cancelBookingWithReason = async (
     bookingId: string,
     reason: string,
@@ -517,45 +509,74 @@ export function useBookings(params: {
   ) => {
     setBookingActionError(null);
     if (!firebaseUser) return;
-    const target = bookings.find((b) => b.id === bookingId);
-    if (!target) return;
     const effectiveRole: 'client' | 'provider' =
       actorRole === 'client' ? 'client' : 'provider';
-    if (!canTransitionBookingStatus(target.status, 'cancelled', effectiveRole)) {
-      return;
-    }
-
-    const settlement = computeCancellationSettlement(
-      target,
-      effectiveRole,
-      reason,
-      autoRefundOnProviderCancel
-    );
-
-    const lockId = buildScheduleLockId(
-      target.providerId,
-      target.preferredDate,
-      target.preferredTimeSlot
-    );
-    const lockRef = doc(db, 'scheduleLocks', lockId);
     const bookingDocRef = doc(db, 'bookings', bookingId);
     const path = `bookings/${bookingId}`;
 
     try {
       await runTransaction(db, async (tx) => {
-        const lockSnap = await tx.get(lockRef);
+        const bookingSnap = await tx.get(bookingDocRef);
+        if (!bookingSnap.exists()) {
+          throw new Error(
+            lang === 'ar' ? 'الحجز غير موجود.' : 'Cette réservation est introuvable.'
+          );
+        }
+        const liveBooking = mapFirestoreBooking(bookingId, bookingSnap.data());
+
+        const isAuthorizedParticipant =
+          effectiveRole === 'client'
+            ? liveBooking.clientId === firebaseUser.uid
+            : liveBooking.providerId === firebaseUser.uid;
+        if (!isAuthorizedParticipant) {
+          throw new Error(
+            lang === 'ar'
+              ? 'غير مصرح لك بإلغاء هذا الحجز.'
+              : 'Vous n’êtes pas autorisé à annuler cette réservation.'
+          );
+        }
+
+        if (!canTransitionBookingStatus(liveBooking.status, 'cancelled', effectiveRole)) {
+          throw new Error(
+            lang === 'ar'
+              ? 'لا يمكن إلغاء هذا الحجز في حالته الحالية.'
+              : 'Cette réservation ne peut plus être annulée dans son statut actuel.'
+          );
+        }
+
+        const liveLockId = buildScheduleLockId(
+          liveBooking.providerId,
+          liveBooking.preferredDate,
+          liveBooking.preferredTimeSlot
+        );
+        const liveLockRef = doc(db, 'scheduleLocks', liveLockId);
+        const lockSnap = await tx.get(liveLockRef);
+
+        const settlement = computeCancellationSettlement(
+          liveBooking,
+          effectiveRole,
+          reason,
+          autoRefundOnProviderCancel
+        );
+
         tx.update(bookingDocRef, {
           ...settlement,
           updatedAt: serverTimestamp(),
         });
+
         if (lockSnap.exists()) {
-          tx.delete(lockRef);
+          const lockBookingId = lockSnap.data()?.bookingId;
+          if (!lockBookingId || lockBookingId === bookingId) {
+            tx.delete(liveLockRef);
+          }
         }
       });
     } catch (err) {
       reportFirestoreError(err, OperationType.UPDATE, path);
       setBookingActionError(
-        lang === 'ar'
+        err instanceof Error && err.message
+          ? err.message
+          : lang === 'ar'
           ? 'تعذر إلغاء الحجز في قاعدة البيانات.'
           : 'Impossible d’annuler la réservation.'
       );
@@ -563,7 +584,8 @@ export function useBookings(params: {
     }
   };
 
-  // Reschedule pending or accepted booking to a new date & time slot while atomically checking availability & moving the slot lock (AUD-006)
+  // Reschedule pending or accepted booking to a new date & time slot while reading live booking document inside transaction,
+  // deriving oldLockId from live data, checking availability/conflicts, and moving the slot lock atomically (AUD-006)
   const rescheduleBooking = async (
     bookingId: string,
     newDate: string,
@@ -572,43 +594,64 @@ export function useBookings(params: {
   ) => {
     setBookingActionError(null);
     if (!firebaseUser) return;
-    const target = bookings.find((b) => b.id === bookingId);
-    if (!target) return;
-    if (target.status !== 'pending' && target.status !== 'accepted') return;
     const safeNote = note.trim().slice(0, 200);
-
-    const oldLockId = buildScheduleLockId(
-      target.providerId,
-      target.preferredDate,
-      target.preferredTimeSlot
-    );
-    const newLockId = buildScheduleLockId(target.providerId, newDate, newSlot);
-    const oldLockRef = doc(db, 'scheduleLocks', oldLockId);
-    const newLockRef = doc(db, 'scheduleLocks', newLockId);
-    const availRef = doc(db, 'providerAvailability', target.providerId);
     const bookingDocRef = doc(db, 'bookings', bookingId);
     const path = `bookings/${bookingId}`;
 
     try {
       await runTransaction(db, async (tx) => {
+        const bookingSnap = await tx.get(bookingDocRef);
+        if (!bookingSnap.exists()) {
+          throw new Error(
+            lang === 'ar' ? 'الحجز غير موجود.' : 'Cette réservation est introuvable.'
+          );
+        }
+        const liveBooking = mapFirestoreBooking(bookingId, bookingSnap.data());
+
+        if (
+          liveBooking.clientId !== firebaseUser.uid &&
+          liveBooking.providerId !== firebaseUser.uid
+        ) {
+          throw new Error(
+            lang === 'ar'
+              ? 'غير مصرح لك بإعادة جدولة هذا الحجز.'
+              : 'Vous n’êtes pas autorisé à reprogrammer cette réservation.'
+          );
+        }
+
+        if (liveBooking.status !== 'pending' && liveBooking.status !== 'accepted') {
+          throw new Error(
+            lang === 'ar'
+              ? 'لا يمكن إعادة جدولة حجز ملغى أو مكتمل.'
+              : 'Impossible de reprogrammer une réservation annulée ou terminée.'
+          );
+        }
+
+        const oldLockId = buildScheduleLockId(
+          liveBooking.providerId,
+          liveBooking.preferredDate,
+          liveBooking.preferredTimeSlot
+        );
+        const newLockId = buildScheduleLockId(liveBooking.providerId, newDate, newSlot);
+        const oldLockRef = doc(db, 'scheduleLocks', oldLockId);
+        const newLockRef = doc(db, 'scheduleLocks', newLockId);
+        const availRef = doc(db, 'providerAvailability', liveBooking.providerId);
+
         const [availSnap, oldLockSnap, newLockSnap] = await Promise.all([
           tx.get(availRef),
           tx.get(oldLockRef),
           newLockId !== oldLockId ? tx.get(newLockRef) : Promise.resolve(null),
         ]);
 
-        if (availSnap.exists()) {
-          const schedule = parseProviderAvailabilitySnapshot(
-            target.providerId,
-            availSnap.data()
+        const schedule = availSnap.exists()
+          ? parseProviderAvailabilitySnapshot(liveBooking.providerId, availSnap.data())
+          : null;
+        if (!isProviderSlotAvailable(schedule, newDate, newSlot)) {
+          throw new Error(
+            lang === 'ar'
+              ? 'هذا المعلم غير متاح في التاريخ أو الفترة الزمنية الجديدة حسب جدول مواعيده.'
+              : 'Ce Maâlem n’est pas disponible sur ce nouveau créneau selon son agenda.'
           );
-          if (!isProviderSlotAvailable(schedule, newDate, newSlot)) {
-            throw new Error(
-              lang === 'ar'
-                ? 'هذا المعلم غير متاح في التاريخ أو الفترة الزمنية الجديدة حسب جدول مواعيده.'
-                : 'Ce Maâlem n’est pas disponible sur ce nouveau créneau selon son agenda.'
-            );
-          }
         }
 
         if (newLockId !== oldLockId && newLockSnap && newLockSnap.exists()) {
@@ -628,11 +671,14 @@ export function useBookings(params: {
 
         if (newLockId !== oldLockId) {
           if (oldLockSnap.exists()) {
-            tx.delete(oldLockRef);
+            const lockBookingId = oldLockSnap.data()?.bookingId;
+            if (!lockBookingId || lockBookingId === bookingId) {
+              tx.delete(oldLockRef);
+            }
           }
           tx.set(newLockRef, {
-            providerId: target.providerId,
-            clientId: target.clientId,
+            providerId: liveBooking.providerId,
+            clientId: liveBooking.clientId,
             bookingId,
             preferredDate: newDate,
             preferredTimeSlot: newSlot,

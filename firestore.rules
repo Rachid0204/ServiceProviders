@@ -1611,6 +1611,10 @@ service cloud.firestore {
         ) &&
         incoming().createdAt == request.time &&
         existsAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId)) &&
+        (
+          getAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.status == 'pending' ||
+          getAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.status == 'accepted'
+        ) &&
         getAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.clientId == incoming().clientId &&
         getAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.providerId == incoming().providerId &&
         getAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.preferredDate == incoming().preferredDate &&

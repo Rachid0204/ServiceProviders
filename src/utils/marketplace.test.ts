@@ -778,8 +778,11 @@ test('AUD-006 & AUD-010: parseProviderAvailabilitySnapshot normalizes provider a
     buildWhatsAppUrl,
   } = await import('./marketplace');
 
-  // AUD-006: parseProviderAvailabilitySnapshot falls back to defaults and preserves blockedDates & custom day toggles
+  // AUD-006: parseProviderAvailabilitySnapshot falls back to defaults and preserves blockedDates & custom day toggles;
+  // missing availability document (null) defaults to available on valid date + standard timeSlot and rejects invalid date/slot.
   assert.equal(parseProviderAvailabilitySnapshot('prov-1', null), null);
+  assert.equal(isProviderSlotAvailable(null, '2026-11-23', '09:00 - 12:00'), true);
+  assert.equal(isProviderSlotAvailable(null, 'invalid-date', '09:00 - 12:00'), false);
   const parsedSchedule = parseProviderAvailabilitySnapshot('prov-1', {
     blockedDates: ['2026-11-30'],
     acceptsUrgentSameDay: false,

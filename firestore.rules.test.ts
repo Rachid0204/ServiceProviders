@@ -1300,7 +1300,25 @@ test('Wave 0 Live Firebase Firestore Emulator Execution: AUD-001, AUD-002, AUD-0
     `AUD-005: Admin creating kyc_updated notification must succeed: ${adminKycNotif.body}`
   );
 
-  // --- AUD-006: Schedule lock creation and provider-initiated reschedule lock creation ---
+  // --- AUD-006: Live Emulator Concurrency, Reschedule, Cancellation & Provider Rejection ---
+  const client2Token = makeJwt({ uid: 'client2' });
+  await commitWrite({
+    token: 'owner',
+    docPath: 'users/client2',
+    data: {
+      uid: 'client2',
+      role: 'client',
+      fullName: 'Omar Tazi',
+      phone: '+212661445566',
+      city: 'Casablanca',
+      neighborhood: 'Gauthier',
+      languagePref: 'fr',
+      verifiedBadge: false,
+      accountStatus: 'active',
+    },
+    rawTimestampFields: { createdAt: fixedCreatedIso },
+  });
+
   const createInitialScheduleLock = await commitWrite({
     token: clientToken,
     docPath: 'scheduleLocks/prov1_2026-11-28_09001200',
@@ -1320,48 +1338,383 @@ test('Wave 0 Live Firebase Firestore Emulator Execution: AUD-001, AUD-002, AUD-0
     `AUD-006: Client creating scheduleLock matching booking must succeed: ${createInitialScheduleLock.body}`
   );
 
-  // Provider reschedules bk_cod_1 to 2026-11-29 (14:00 - 17:00) and acquires new scheduleLock
+  // Scenario 1: Two clients attempting the same provider slot concurrently (2026-11-28, 09:00 - 12:00)
+  const concurrentSameSlotAttempt = await commitBatch({
+    token: client2Token,
+    ops: [
+      {
+        docPath: 'bookings/bk_client2_race',
+        data: {
+          ...baseBookingData,
+          bookingRef: 'MK-RACE01',
+          clientId: 'client2',
+          clientName: 'Omar Tazi',
+          clientPhone: '+212661445566',
+          paymentMethod: 'cash_on_completion',
+          paymentStatus: 'unpaid_cod',
+        },
+        requestTimeFields: ['createdAt', 'updatedAt'],
+        currentDocumentExists: false,
+      },
+      {
+        docPath: 'scheduleLocks/prov1_2026-11-28_09001200',
+        data: {
+          providerId: 'prov1',
+          clientId: 'client2',
+          bookingId: 'bk_client2_race',
+          preferredDate: '2026-11-28',
+          preferredTimeSlot: '09:00 - 12:00',
+        },
+        requestTimeFields: ['createdAt'],
+        currentDocumentExists: false,
+      },
+    ],
+  });
+  assert.notEqual(
+    concurrentSameSlotAttempt.status,
+    200,
+    'AUD-006 (Scenario 1): Second client attempting already-locked slot must fail atomic commit'
+  );
+  // Scenario 6 check: Failed transaction leaves no partial booking document
+  const checkRolledBackRaceBooking = await getDocument({
+    token: adminToken,
+    docPath: 'bookings/bk_client2_race',
+  });
+  assert.equal(
+    checkRolledBackRaceBooking.status,
+    404,
+    'AUD-006 (Scenario 6): Failed concurrent booking transaction must not persist partial booking'
+  );
+
+  // Client 2 books an open slot (2026-11-28, 14:00 - 17:00)
+  const client2ValidBooking = await commitBatch({
+    token: client2Token,
+    ops: [
+      {
+        docPath: 'bookings/bk_client2_ok',
+        data: {
+          ...baseBookingData,
+          bookingRef: 'MK-C2OK01',
+          clientId: 'client2',
+          clientName: 'Omar Tazi',
+          clientPhone: '+212661445566',
+          preferredDate: '2026-11-28',
+          preferredTimeSlot: '14:00 - 17:00',
+          paymentMethod: 'cash_on_completion',
+          paymentStatus: 'unpaid_cod',
+        },
+        requestTimeFields: ['createdAt', 'updatedAt'],
+        currentDocumentExists: false,
+      },
+      {
+        docPath: 'scheduleLocks/prov1_2026-11-28_14001700',
+        data: {
+          providerId: 'prov1',
+          clientId: 'client2',
+          bookingId: 'bk_client2_ok',
+          preferredDate: '2026-11-28',
+          preferredTimeSlot: '14:00 - 17:00',
+        },
+        requestTimeFields: ['createdAt'],
+        currentDocumentExists: false,
+      },
+    ],
+  });
+  assert.equal(client2ValidBooking.status, 200);
+  const client2BookingCreatedIso =
+    JSON.parse(client2ValidBooking.body).writeResults?.[0]?.transformResults?.[0]?.timestampValue ??
+    fixedCreatedIso;
+
+  // Scenario 2: Two simultaneous reschedules to the same new slot (2026-11-29, 14:00 - 17:00)
+  // First reschedule (bk_cod_1 moves from 2026-11-28 09:00-12:00 -> 2026-11-29 14:00-17:00) succeeds atomically
   const codBookingCreatedIso =
     JSON.parse(codBookingAttempt.body).writeResults?.[0]?.transformResults?.[0]?.timestampValue ??
     fixedCreatedIso;
-  const providerRescheduleBooking = await commitWrite({
+  const atomicReschedule1 = await commitBatch({
     token: providerToken,
-    docPath: 'bookings/bk_cod_1',
-    data: {
-      ...baseBookingData,
-      paymentMethod: 'cash_on_completion',
-      paymentStatus: 'unpaid_cod',
-      preferredDate: '2026-11-29',
-      preferredTimeSlot: '14:00 - 17:00',
-      rescheduleNote: 'Reporté au lendemain après-midi',
-    },
-    rawTimestampFields: { createdAt: codBookingCreatedIso },
-    requestTimeFields: ['updatedAt'],
-    currentDocumentExists: true,
+    ops: [
+      {
+        docPath: 'bookings/bk_cod_1',
+        data: {
+          ...baseBookingData,
+          paymentMethod: 'cash_on_completion',
+          paymentStatus: 'unpaid_cod',
+          preferredDate: '2026-11-29',
+          preferredTimeSlot: '14:00 - 17:00',
+          rescheduleNote: 'Reporté au lendemain après-midi',
+        },
+        rawTimestampFields: { createdAt: codBookingCreatedIso },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: true,
+      },
+      {
+        type: 'delete',
+        docPath: 'scheduleLocks/prov1_2026-11-28_09001200',
+        currentDocumentExists: true,
+      },
+      {
+        docPath: 'scheduleLocks/prov1_2026-11-29_14001700',
+        data: {
+          providerId: 'prov1',
+          clientId: 'client1',
+          bookingId: 'bk_cod_1',
+          preferredDate: '2026-11-29',
+          preferredTimeSlot: '14:00 - 17:00',
+        },
+        requestTimeFields: ['createdAt'],
+        currentDocumentExists: false,
+      },
+    ],
   });
   assert.equal(
-    providerRescheduleBooking.status,
+    atomicReschedule1.status,
     200,
-    `AUD-006: Provider rescheduling booking must succeed: ${providerRescheduleBooking.body}`
+    `AUD-006 (Scenario 2a): First atomic reschedule must succeed: ${atomicReschedule1.body}`
   );
 
-  const providerCreateNewLock = await commitWrite({
-    token: providerToken,
-    docPath: 'scheduleLocks/prov1_2026-11-29_14001700',
-    data: {
-      providerId: 'prov1',
-      clientId: 'client1',
-      bookingId: 'bk_cod_1',
-      preferredDate: '2026-11-29',
-      preferredTimeSlot: '14:00 - 17:00',
-    },
-    requestTimeFields: ['createdAt'],
-    currentDocumentExists: false,
+  // Second simultaneous reschedule (bk_client2_ok attempts to move to the same 2026-11-29 14:00-17:00 slot) fails atomically
+  const conflictingReschedule2 = await commitBatch({
+    token: client2Token,
+    ops: [
+      {
+        docPath: 'bookings/bk_client2_ok',
+        data: {
+          ...baseBookingData,
+          bookingRef: 'MK-C2OK01',
+          clientId: 'client2',
+          clientName: 'Omar Tazi',
+          clientPhone: '+212661445566',
+          preferredDate: '2026-11-29',
+          preferredTimeSlot: '14:00 - 17:00',
+          rescheduleNote: 'Conflit créneau',
+          paymentMethod: 'cash_on_completion',
+          paymentStatus: 'unpaid_cod',
+        },
+        rawTimestampFields: { createdAt: client2BookingCreatedIso },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: true,
+      },
+      {
+        type: 'delete',
+        docPath: 'scheduleLocks/prov1_2026-11-28_14001700',
+        currentDocumentExists: true,
+      },
+      {
+        docPath: 'scheduleLocks/prov1_2026-11-29_14001700',
+        data: {
+          providerId: 'prov1',
+          clientId: 'client2',
+          bookingId: 'bk_client2_ok',
+          preferredDate: '2026-11-29',
+          preferredTimeSlot: '14:00 - 17:00',
+        },
+        requestTimeFields: ['createdAt'],
+        currentDocumentExists: false,
+      },
+    ],
+  });
+  assert.notEqual(
+    conflictingReschedule2.status,
+    200,
+    'AUD-006 (Scenario 2b): Competing reschedule to the same new slot must fail'
+  );
+  // Scenario 6 check: bk_client2_ok original lock is still intact after failed reschedule
+  const checkOriginalLockIntact = await getDocument({
+    token: client2Token,
+    docPath: 'scheduleLocks/prov1_2026-11-28_14001700',
   });
   assert.equal(
-    providerCreateNewLock.status,
+    checkOriginalLockIntact.status,
     200,
-    `AUD-006: Provider creating new scheduleLock on reschedule must succeed: ${providerCreateNewLock.body}`
+    'AUD-006 (Scenario 6): Original scheduleLock must remain intact when a reschedule transaction fails'
+  );
+
+  // Scenario 5: Cancellation after a previous reschedule (live booking read derives new lock prov1_2026-11-29_14001700 and deletes it)
+  const liveRescheduledBookingDoc = await getDocument({
+    token: clientToken,
+    docPath: 'bookings/bk_cod_1',
+  });
+  assert.equal(liveRescheduledBookingDoc.status, 200);
+  const parsedLiveBooking = JSON.parse(liveRescheduledBookingDoc.body);
+  const liveDate = parsedLiveBooking.fields.preferredDate.stringValue;
+  const liveSlot = parsedLiveBooking.fields.preferredTimeSlot.stringValue;
+  assert.equal(liveDate, '2026-11-29');
+  assert.equal(liveSlot, '14:00 - 17:00');
+  const derivedLiveLockPath = `scheduleLocks/prov1_${liveDate}_${liveSlot.replace(/[^0-9]/g, '')}`;
+
+  const cancelAfterReschedule = await commitBatch({
+    token: clientToken,
+    ops: [
+      {
+        docPath: 'bookings/bk_cod_1',
+        data: {
+          ...baseBookingData,
+          paymentMethod: 'cash_on_completion',
+          paymentStatus: 'unpaid_cod',
+          preferredDate: liveDate,
+          preferredTimeSlot: liveSlot,
+          rescheduleNote: 'Reporté au lendemain après-midi',
+          status: 'cancelled',
+          cancelledBy: 'client',
+          cancellationReason: 'Empêchement personnel après report',
+          providerPayoutMad: 0,
+          platformFeeMad: 0,
+          refundedClientMad: 0,
+        },
+        rawTimestampFields: { createdAt: codBookingCreatedIso },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: true,
+      },
+      {
+        type: 'delete',
+        docPath: derivedLiveLockPath,
+        currentDocumentExists: true,
+      },
+    ],
+  });
+  assert.equal(
+    cancelAfterReschedule.status,
+    200,
+    `AUD-006 (Scenario 5): Cancellation after reschedule must succeed and delete current lock: ${cancelAfterReschedule.body}`
+  );
+  const verifyOldLockGone = await getDocument({
+    token: clientToken,
+    docPath: 'scheduleLocks/prov1_2026-11-28_09001200',
+  });
+  const verifyNewLockGone = await getDocument({
+    token: clientToken,
+    docPath: derivedLiveLockPath,
+  });
+  assert.equal(verifyOldLockGone.status, 404, 'Old lock must remain deleted');
+  assert.equal(verifyNewLockGone.status, 404, 'Rescheduled lock must be deleted on cancellation');
+
+  // Scenario 3: Cancellation racing with rescheduling (a reschedule arriving after cancellation is rejected with 403 and creates no lock)
+  const rescheduleAfterCancelRace = await commitBatch({
+    token: providerToken,
+    ops: [
+      {
+        docPath: 'bookings/bk_cod_1',
+        data: {
+          ...baseBookingData,
+          paymentMethod: 'cash_on_completion',
+          paymentStatus: 'unpaid_cod',
+          preferredDate: '2026-11-30',
+          preferredTimeSlot: '09:00 - 12:00',
+          rescheduleNote: 'Tentative tardive après annulation',
+          status: 'cancelled',
+          cancelledBy: 'client',
+          cancellationReason: 'Empêchement personnel après report',
+          providerPayoutMad: 0,
+          platformFeeMad: 0,
+          refundedClientMad: 0,
+        },
+        rawTimestampFields: { createdAt: codBookingCreatedIso },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: true,
+      },
+      {
+        docPath: 'scheduleLocks/prov1_2026-11-30_09001200',
+        data: {
+          providerId: 'prov1',
+          clientId: 'client1',
+          bookingId: 'bk_cod_1',
+          preferredDate: '2026-11-30',
+          preferredTimeSlot: '09:00 - 12:00',
+        },
+        requestTimeFields: ['createdAt'],
+        currentDocumentExists: false,
+      },
+    ],
+  });
+  assert.equal(
+    rescheduleAfterCancelRace.status,
+    403,
+    'AUD-006 (Scenario 3): Reschedule racing after cancellation must be rejected by Firestore rules'
+  );
+  const verifyNoOrphanLockOnRace = await getDocument({
+    token: providerToken,
+    docPath: 'scheduleLocks/prov1_2026-11-30_09001200',
+  });
+  assert.equal(
+    verifyNoOrphanLockOnRace.status,
+    404,
+    'AUD-006 (Scenario 3 & 6): Failed reschedule race must not leave an orphaned scheduleLock'
+  );
+
+  // Scenario 4: Provider rejection of a pending booking releases its scheduleLock so another client can book that slot
+  const providerRejectBooking = await commitBatch({
+    token: providerToken,
+    ops: [
+      {
+        docPath: 'bookings/bk_client2_ok',
+        data: {
+          ...baseBookingData,
+          bookingRef: 'MK-C2OK01',
+          clientId: 'client2',
+          clientName: 'Omar Tazi',
+          clientPhone: '+212661445566',
+          preferredDate: '2026-11-28',
+          preferredTimeSlot: '14:00 - 17:00',
+          paymentMethod: 'cash_on_completion',
+          paymentStatus: 'unpaid_cod',
+          status: 'cancelled',
+          cancelledBy: 'provider',
+          cancellationReason: 'Indisponibilité signalée par le Maâlem',
+          providerPayoutMad: 0,
+          platformFeeMad: 0,
+          refundedClientMad: 0,
+        },
+        rawTimestampFields: { createdAt: client2BookingCreatedIso },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: true,
+      },
+      {
+        type: 'delete',
+        docPath: 'scheduleLocks/prov1_2026-11-28_14001700',
+        currentDocumentExists: true,
+      },
+    ],
+  });
+  assert.equal(
+    providerRejectBooking.status,
+    200,
+    `AUD-006 (Scenario 4a): Provider rejecting pending booking and releasing scheduleLock must succeed: ${providerRejectBooking.body}`
+  );
+
+  const rebookFreedSlotAfterProviderReject = await commitBatch({
+    token: clientToken,
+    ops: [
+      {
+        docPath: 'bookings/bk_rebooked_after_reject',
+        data: {
+          ...baseBookingData,
+          bookingRef: 'MK-REBOOK1',
+          preferredDate: '2026-11-28',
+          preferredTimeSlot: '14:00 - 17:00',
+          paymentMethod: 'cash_on_completion',
+          paymentStatus: 'unpaid_cod',
+        },
+        requestTimeFields: ['createdAt', 'updatedAt'],
+        currentDocumentExists: false,
+      },
+      {
+        docPath: 'scheduleLocks/prov1_2026-11-28_14001700',
+        data: {
+          providerId: 'prov1',
+          clientId: 'client1',
+          bookingId: 'bk_rebooked_after_reject',
+          preferredDate: '2026-11-28',
+          preferredTimeSlot: '14:00 - 17:00',
+        },
+        requestTimeFields: ['createdAt'],
+        currentDocumentExists: false,
+      },
+    ],
+  });
+  assert.equal(
+    rebookFreedSlotAfterProviderReject.status,
+    200,
+    `AUD-006 (Scenario 4b): Another client booking the slot released by provider rejection must succeed: ${rebookFreedSlotAfterProviderReject.body}`
   );
 
   // --- AUD-007: Provider can withdraw and revise/resubmit proposal while job is open ---

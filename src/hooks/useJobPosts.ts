@@ -566,46 +566,14 @@ export function useJobPosts(params: {
       const proposalRef = doc(db, 'jobPosts', job.id, 'proposals', proposal.providerId);
       const bookingDocRef = doc(db, 'bookings', bookingId);
       const availRef = doc(db, 'providerAvailability', proposal.providerId);
-      const lockId = buildScheduleLockId(
-        proposal.providerId,
-        job.preferredDate,
-        job.preferredTimeSlot
-      );
-      const lockRef = doc(db, 'scheduleLocks', lockId);
       const path = `jobPosts/${job.id}`;
-
-      const bookingPayload = {
-        bookingRef,
-        clientId: firebaseUser.uid,
-        clientName: job.clientName,
-        clientPhone: job.clientPhone,
-        providerId: proposal.providerId,
-        providerName: proposal.providerName,
-        providerPhone: proposal.providerPhone,
-        category: job.category,
-        serviceType: job.title.slice(0, 120),
-        city: job.city,
-        neighborhood: job.neighborhood,
-        addressPin: `${job.neighborhood}, ${job.city} (${job.jobRef})`.slice(0, 160),
-        description: `${job.description} — Devis accepté (${proposal.estimatedDuration})`.slice(0, 600),
-        ...(job.problemPhotoUrl ? { problemPhotoUrl: job.problemPhotoUrl } : {}),
-        preferredDate: job.preferredDate,
-        preferredTimeSlot: job.preferredTimeSlot,
-        paymentMethod: 'cash_on_completion',
-        paymentStatus: 'unpaid_cod',
-        estimatedMad: Math.max(50, Math.min(100000, Math.round(proposal.proposedPriceMad))),
-        status: 'pending',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      };
 
       try {
         await runTransaction(db, async (tx) => {
-          const [liveJobSnap, livePropSnap, liveAvailSnap, liveLockSnap] = await Promise.all([
+          const [liveJobSnap, livePropSnap, liveAvailSnap] = await Promise.all([
             tx.get(jobDocRef),
             tx.get(proposalRef),
             tx.get(availRef),
-            tx.get(lockRef),
           ]);
 
           if (!liveJobSnap.exists() || liveJobSnap.data().status !== 'open') {
@@ -616,6 +584,11 @@ export function useJobPosts(params: {
             );
           }
 
+          const liveJobData = liveJobSnap.data();
+          if (liveJobData.clientId !== firebaseUser.uid) {
+            throw new Error('Unauthorized');
+          }
+
           if (!livePropSnap.exists() || livePropSnap.data().status !== 'pending') {
             throw new Error(
               lang === 'ar'
@@ -624,18 +597,35 @@ export function useJobPosts(params: {
             );
           }
 
-          if (liveAvailSnap.exists()) {
-            const schedule = parseProviderAvailabilitySnapshot(
-              proposal.providerId,
-              liveAvailSnap.data()
+          const livePropData = livePropSnap.data();
+          if (isQuotationExpired(typeof livePropData.validUntilIso === 'string' ? livePropData.validUntilIso : proposal.validUntilIso)) {
+            throw new Error(
+              lang === 'ar'
+                ? 'انتهت صلاحية هذا العرض. يرجى اختيار عرض آخر أو طلب تحديثه.'
+                : 'Ce devis a expiré. Veuillez choisir un autre devis ou demander un devis actualisé.'
             );
-            if (!isProviderSlotAvailable(schedule, job.preferredDate, job.preferredTimeSlot)) {
-              throw new Error(
-                lang === 'ar'
-                  ? 'هذا المعلم غير متاح في التاريخ أو الفترة الزمنية المحددة حسب جدول مواعيده.'
-                  : 'Ce Maâlem n’est pas disponible sur ce créneau selon son agenda.'
-              );
-            }
+          }
+
+          const livePreferredDate = String(liveJobData.preferredDate || job.preferredDate);
+          const livePreferredTimeSlot =
+            (liveJobData.preferredTimeSlot as TimeSlot) || job.preferredTimeSlot;
+          const liveLockId = buildScheduleLockId(
+            proposal.providerId,
+            livePreferredDate,
+            livePreferredTimeSlot
+          );
+          const lockRef = doc(db, 'scheduleLocks', liveLockId);
+          const liveLockSnap = await tx.get(lockRef);
+
+          const schedule = liveAvailSnap.exists()
+            ? parseProviderAvailabilitySnapshot(proposal.providerId, liveAvailSnap.data())
+            : null;
+          if (!isProviderSlotAvailable(schedule, livePreferredDate, livePreferredTimeSlot)) {
+            throw new Error(
+              lang === 'ar'
+                ? 'هذا المعلم غير متاح في التاريخ أو الفترة الزمنية المحددة حسب جدول مواعيده.'
+                : 'Ce Maâlem n’est pas disponible sur ce créneau selon son agenda.'
+            );
           }
 
           if (liveLockSnap.exists()) {
@@ -646,10 +636,39 @@ export function useJobPosts(params: {
             );
           }
 
+          const livePriceMad = Math.max(
+            50,
+            Math.min(100000, Math.round(Number(livePropData.proposedPriceMad ?? proposal.proposedPriceMad)))
+          );
+          const bookingPayload = {
+            bookingRef,
+            clientId: firebaseUser.uid,
+            clientName: String(liveJobData.clientName || job.clientName),
+            clientPhone: String(liveJobData.clientPhone || job.clientPhone),
+            providerId: proposal.providerId,
+            providerName: String(livePropData.providerName || proposal.providerName),
+            providerPhone: String(livePropData.providerPhone || proposal.providerPhone),
+            category: liveJobData.category || job.category,
+            serviceType: String(liveJobData.title || job.title).slice(0, 120),
+            city: liveJobData.city || job.city,
+            neighborhood: String(liveJobData.neighborhood || job.neighborhood),
+            addressPin: `${liveJobData.neighborhood || job.neighborhood}, ${liveJobData.city || job.city} (${liveJobData.jobRef || job.jobRef})`.slice(0, 160),
+            description: `${liveJobData.description || job.description} — Devis accepté (${livePropData.estimatedDuration || proposal.estimatedDuration})`.slice(0, 600),
+            ...(liveJobData.problemPhotoUrl ? { problemPhotoUrl: String(liveJobData.problemPhotoUrl) } : {}),
+            preferredDate: livePreferredDate,
+            preferredTimeSlot: livePreferredTimeSlot,
+            paymentMethod: 'cash_on_completion',
+            paymentStatus: 'unpaid_cod',
+            estimatedMad: livePriceMad,
+            status: 'pending',
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+
           tx.update(jobDocRef, {
             status: 'assigned',
             assignedProviderId: proposal.providerId,
-            assignedProviderName: proposal.providerName,
+            assignedProviderName: String(livePropData.providerName || proposal.providerName),
             assignedBookingId: bookingId,
             updatedAt: serverTimestamp(),
           });
@@ -662,8 +681,8 @@ export function useJobPosts(params: {
             providerId: proposal.providerId,
             clientId: firebaseUser.uid,
             bookingId,
-            preferredDate: job.preferredDate,
-            preferredTimeSlot: job.preferredTimeSlot,
+            preferredDate: livePreferredDate,
+            preferredTimeSlot: livePreferredTimeSlot,
             createdAt: serverTimestamp(),
           });
         });
