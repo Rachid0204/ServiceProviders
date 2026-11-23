@@ -50,8 +50,68 @@ export const ROUTE_PATHS = {
   // Admin routes
   ADMIN_ROOT: '/admin',
   ADMIN_DASHBOARD: '/admin/dashboard',
+  ADMIN_KYC: '/admin/kyc',
+  ADMIN_PROVIDERS: '/admin/providers',
+  ADMIN_BOOKINGS: '/admin/bookings',
+  ADMIN_DISPUTES: '/admin/disputes',
+  ADMIN_WITHDRAWALS: '/admin/withdrawals',
+  ADMIN_USERS: '/admin/users',
+  ADMIN_REVIEWS: '/admin/reviews',
+  ADMIN_SETTINGS: '/admin/settings',
+  ADMIN_AUDIT: '/admin/audit',
   ADMIN_WILDCARD: '/admin/*',
 } as const;
+
+export type AdminRouteSectionId =
+  | 'overview'
+  | 'kyc'
+  | 'providers'
+  | 'bookings'
+  | 'disputes'
+  | 'withdrawals'
+  | 'users'
+  | 'reviews'
+  | 'settings'
+  | 'audit';
+
+export function getAdminSectionFromPathname(pathname: string): AdminRouteSectionId {
+  if (pathname.startsWith(ROUTE_PATHS.ADMIN_KYC)) return 'kyc';
+  if (pathname.startsWith(ROUTE_PATHS.ADMIN_PROVIDERS)) return 'providers';
+  if (pathname.startsWith(ROUTE_PATHS.ADMIN_BOOKINGS)) return 'bookings';
+  if (pathname.startsWith(ROUTE_PATHS.ADMIN_DISPUTES)) return 'disputes';
+  if (pathname.startsWith(ROUTE_PATHS.ADMIN_WITHDRAWALS)) return 'withdrawals';
+  if (pathname.startsWith(ROUTE_PATHS.ADMIN_USERS)) return 'users';
+  if (pathname.startsWith(ROUTE_PATHS.ADMIN_REVIEWS)) return 'reviews';
+  if (pathname.startsWith(ROUTE_PATHS.ADMIN_SETTINGS)) return 'settings';
+  if (pathname.startsWith(ROUTE_PATHS.ADMIN_AUDIT)) return 'audit';
+  return 'overview';
+}
+
+export function getPathForAdminSection(section: AdminRouteSectionId): string {
+  switch (section) {
+    case 'kyc':
+      return ROUTE_PATHS.ADMIN_KYC;
+    case 'providers':
+      return ROUTE_PATHS.ADMIN_PROVIDERS;
+    case 'bookings':
+      return ROUTE_PATHS.ADMIN_BOOKINGS;
+    case 'disputes':
+      return ROUTE_PATHS.ADMIN_DISPUTES;
+    case 'withdrawals':
+      return ROUTE_PATHS.ADMIN_WITHDRAWALS;
+    case 'users':
+      return ROUTE_PATHS.ADMIN_USERS;
+    case 'reviews':
+      return ROUTE_PATHS.ADMIN_REVIEWS;
+    case 'settings':
+      return ROUTE_PATHS.ADMIN_SETTINGS;
+    case 'audit':
+      return ROUTE_PATHS.ADMIN_AUDIT;
+    case 'overview':
+    default:
+      return ROUTE_PATHS.ADMIN_DASHBOARD;
+  }
+}
 
 export const CATEGORY_TO_SLUG: Record<ServiceCategory, string> = {
   Plomberie: 'plumbing',

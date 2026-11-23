@@ -18,6 +18,11 @@ export {
 export type AdminActionType =
   | 'cin_approved'
   | 'cin_revoked'
+  | 'document_viewed'
+  | 'kyc_reviewed'
+  | 'dispute_resolved'
+  | 'report_moderated'
+  | 'user_suspended'
   | 'escrow_released'
   | 'escrow_refunded'
   | 'dispute_split'
@@ -30,10 +35,25 @@ export type AdminActionType =
 export type AdminTargetCollection =
   | 'users'
   | 'providers'
+  | 'providerDocuments'
   | 'bookings'
+  | 'disputes'
   | 'reviews'
+  | 'reviewReports'
+  | 'chatReports'
   | 'withdrawals'
   | 'settings';
+
+export interface AdminModerationReportItem {
+  id: string;
+  source: 'reviewReports' | 'chatReports';
+  targetId: string;
+  reporterId: string;
+  reason: string;
+  details: string;
+  status: 'open' | 'reviewed' | 'resolved' | 'dismissed';
+  createdAtIso: string;
+}
 
 export interface AdminAuditLog {
   id: string;

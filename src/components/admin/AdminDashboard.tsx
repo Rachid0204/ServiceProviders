@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   ShieldCheck,
@@ -16,18 +17,24 @@ import {
   LogIn,
   LogOut,
   CheckCircle2,
+  FileCheck,
+  Scale,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import type {
   BookingRecord,
   BookingStatus,
+  DisputeRecord,
+  DisputeStatus,
   LanguageCode,
+  ProviderKycDocumentRecord,
   UserProfileRecord,
   VettedProvider,
 } from '../../utils/marketplace';
 import {
   type AdminAnalyticsSummary,
   type AdminAuditLog,
+  type AdminModerationReportItem,
   type AdminReviewItem,
   type SystemSettingsRecord,
   type WithdrawalRecord,
@@ -36,9 +43,16 @@ import {
 import type { Translations } from '../../i18n/translations';
 import type { AdminToastMessage } from '../../hooks/useAdminData';
 import { mapFirebaseAuthError } from '../../utils/authHelpers';
+import {
+  getAdminSectionFromPathname,
+  getPathForAdminSection,
+  type AdminRouteSectionId,
+} from '../../app/routePaths';
 import { AdminOverviewSection } from './AdminOverviewSection';
 import { AdminProvidersSection } from './AdminProvidersSection';
 import { AdminBookingsSection } from './AdminBookingsSection';
+import { AdminKycReviewSection } from './AdminKycReviewSection';
+import { AdminDisputesModerationSection } from './AdminDisputesModerationSection';
 import {
   AdminAuditSection,
   AdminReviewsSection,
@@ -47,15 +61,7 @@ import {
   AdminWithdrawalsSection,
 } from './AdminUsersReviewsSection';
 
-export type AdminSectionId =
-  | 'overview'
-  | 'providers'
-  | 'bookings'
-  | 'withdrawals'
-  | 'users'
-  | 'reviews'
-  | 'settings'
-  | 'audit';
+export type AdminSectionId = AdminRouteSectionId;
 
 interface AdminDashboardProps {
   lang: LanguageCode;
@@ -76,12 +82,31 @@ interface AdminDashboardProps {
   users: UserProfileRecord[];
   reviews: AdminReviewItem[];
   withdrawals: WithdrawalRecord[];
+  kycDocuments: ProviderKycDocumentRecord[];
+  disputes: DisputeRecord[];
+  moderationReports: AdminModerationReportItem[];
   systemSettings: SystemSettingsRecord;
   auditLogs: AdminAuditLog[];
   onToggleCinVerification: (provider: VettedProvider) => void;
   onToggleAvailability: (provider: VettedProvider) => void;
   onInspectProvider: (provider: VettedProvider) => void;
   onToggleUserVerified: (user: UserProfileRecord) => void;
+  onToggleUserSuspension: (user: UserProfileRecord) => void;
+  onLogKycDocumentViewed: (record: ProviderKycDocumentRecord, docLabel: string) => Promise<void>;
+  onReviewProviderKyc: (
+    record: ProviderKycDocumentRecord,
+    nextStatus: 'under_review' | 'verified' | 'rejected' | 'resubmission_required',
+    rejectionReason?: string
+  ) => Promise<void>;
+  onUpdateDispute: (
+    dispute: DisputeRecord,
+    nextStatus: DisputeStatus,
+    resolutionSummary: string
+  ) => Promise<void>;
+  onModerateReport: (
+    report: AdminModerationReportItem,
+    nextStatus: 'reviewed' | 'resolved' | 'dismissed'
+  ) => Promise<void>;
   onReleaseEscrow: (booking: BookingRecord) => void;
   onRefundEscrow: (booking: BookingRecord) => void;
   onDisputeSplitEscrow: (booking: BookingRecord) => void;
@@ -114,12 +139,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   users,
   reviews,
   withdrawals,
+  kycDocuments,
+  disputes,
+  moderationReports,
   systemSettings,
   auditLogs,
   onToggleCinVerification,
   onToggleAvailability,
   onInspectProvider,
   onToggleUserVerified,
+  onToggleUserSuspension,
+  onLogKycDocumentViewed,
+  onReviewProviderKyc,
+  onUpdateDispute,
+  onModerateReport,
   onReleaseEscrow,
   onRefundEscrow,
   onDisputeSplitEscrow,
@@ -130,13 +163,24 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
   onSaveSystemSettings,
 }) => {
   const isAr = lang === 'ar';
-  const [activeSection, setActiveSection] = useState<AdminSectionId>('overview');
+  const location = useLocation();
+  const navigate = useNavigate();
+  const activeSection: AdminSectionId = getAdminSectionFromPathname(location.pathname);
+  const setActiveSection = (next: AdminSectionId) => {
+    navigate(getPathForAdminSection(next));
+  };
   const [mobileNavOpen, setMobileNavOpen] = useState<boolean>(false);
   const [adminAuthError, setAdminAuthError] = useState<string | null>(null);
   const [isAuthenticating, setIsAuthenticating] = useState<boolean>(false);
 
   const BackIcon = isAr ? ArrowRight : ArrowLeft;
   const pendingWithdrawalsCount = withdrawals.filter((w) => w.status === 'pending').length;
+  const pendingKycDocsCount = kycDocuments.filter(
+    (d) => d.status === 'submitted' || d.status === 'under_review'
+  ).length;
+  const openDisputesAndReportsCount =
+    disputes.filter((d) => d.status !== 'resolved' && d.status !== 'closed').length +
+    moderationReports.filter((r) => r.status === 'open').length;
 
   const handleAdminSignIn = async () => {
     setAdminAuthError(null);
@@ -262,6 +306,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
       icon: LayoutDashboard,
     },
     {
+      id: 'kyc',
+      labelFr: 'Dossiers KYC / CIN (CNDP)',
+      labelAr: 'ملفات البطاقة الوطنية (CNDP)',
+      count: pendingKycDocsCount > 0 ? pendingKycDocsCount : kycDocuments.length,
+      icon: FileCheck,
+    },
+    {
       id: 'providers',
       labelFr: 'Vérification CIN & Maâlems',
       labelAr: 'التحقق من CIN والمعلمين',
@@ -270,10 +321,20 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     },
     {
       id: 'bookings',
-      labelFr: 'Réservations & Séquestre CMI',
-      labelAr: 'الحجوزات وضمان CMI',
+      labelFr: 'Réservations & Paiements',
+      labelAr: 'الحجوزات والمدفوعات',
       count: analytics.escrowHeldCount > 0 ? analytics.escrowHeldCount : undefined,
       icon: Briefcase,
+    },
+    {
+      id: 'disputes',
+      labelFr: 'Litiges & Signalements',
+      labelAr: 'النزاعات والبلاغات',
+      count:
+        openDisputesAndReportsCount > 0
+          ? openDisputesAndReportsCount
+          : disputes.length + moderationReports.length,
+      icon: Scale,
     },
     {
       id: 'withdrawals',
@@ -523,6 +584,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
+          {activeSection === 'kyc' && (
+            <AdminKycReviewSection
+              lang={lang}
+              kycDocuments={kycDocuments}
+              onLogDocumentViewed={onLogKycDocumentViewed}
+              onReviewKyc={onReviewProviderKyc}
+            />
+          )}
+
           {activeSection === 'providers' && (
             <AdminProvidersSection
               lang={lang}
@@ -548,6 +618,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
             />
           )}
 
+          {activeSection === 'disputes' && (
+            <AdminDisputesModerationSection
+              lang={lang}
+              disputes={disputes}
+              reports={moderationReports}
+              onUpdateDispute={onUpdateDispute}
+              onModerateReport={onModerateReport}
+            />
+          )}
+
           {activeSection === 'withdrawals' && (
             <AdminWithdrawalsSection
               lang={lang}
@@ -563,6 +643,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               t={t}
               users={users}
               onToggleUserVerified={onToggleUserVerified}
+              onToggleUserSuspension={onToggleUserSuspension}
             />
           )}
 

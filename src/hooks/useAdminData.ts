@@ -351,6 +351,7 @@ export function useAdminData(params: {
             specialty: data.specialty as ServiceCategory | 'none' | undefined,
             hourlyRateMad: typeof data.hourlyRateMad === 'number' ? data.hourlyRateMad : undefined,
             bio: data.bio ? String(data.bio) : undefined,
+            accountStatus: data.accountStatus === 'suspended' ? 'suspended' : 'active',
           };
         });
         setLiveUsers(list);

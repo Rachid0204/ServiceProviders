@@ -11,6 +11,7 @@ import type { SystemSettingsRecord } from '../../utils/systemSettings';
 import type { ProviderOverride } from '../../hooks/useProviders';
 import type { AdminBookingPatch } from '../../hooks/useBookings';
 import { useAdminData } from '../../hooks/useAdminData';
+import { useAdminModeration } from '../../hooks/useAdminModeration';
 import { AdminDashboard } from './AdminDashboard';
 
 const ProviderDetailModal = lazy(() =>
@@ -110,6 +111,21 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
     onApplyBookingPatch,
   });
 
+  const {
+    kycDocuments,
+    adminDisputes,
+    moderationReports,
+    moderationToast,
+    logKycDocumentViewed,
+    reviewProviderKyc,
+    updateAdminDispute,
+    moderateReport,
+    toggleUserAccountSuspension,
+  } = useAdminModeration({
+    isLiveAdmin,
+    firebaseUser,
+  });
+
   const syncedDetailProvider = detailProvider
     ? adminProviders.find((p) => p.id === detailProvider.id) ??
       allProviders.find((p) => p.id === detailProvider.id) ??
@@ -128,7 +144,7 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
         isLiveAdmin={isLiveAdmin}
         isCheckingAdmin={isCheckingAdmin}
         isLoadingAdmin={isLoadingAdmin}
-        adminToast={adminToast}
+        adminToast={moderationToast || adminToast}
         onGoogleSignIn={onGoogleSignIn}
         onSignOut={onSignOut}
         analytics={analytics}
@@ -137,12 +153,20 @@ export const AdminRoute: React.FC<AdminRouteProps> = ({
         users={adminUsers}
         reviews={adminReviews}
         withdrawals={withdrawals}
+        kycDocuments={kycDocuments}
+        disputes={adminDisputes}
+        moderationReports={moderationReports}
         systemSettings={systemSettings}
         auditLogs={auditLogs}
         onToggleCinVerification={toggleProviderCinVerification}
         onToggleAvailability={adminToggleProviderAvailability}
         onInspectProvider={setDetailProvider}
         onToggleUserVerified={toggleUserVerifiedBadge}
+        onToggleUserSuspension={toggleUserAccountSuspension}
+        onLogKycDocumentViewed={logKycDocumentViewed}
+        onReviewProviderKyc={reviewProviderKyc}
+        onUpdateDispute={updateAdminDispute}
+        onModerateReport={moderateReport}
         onReleaseEscrow={releaseCmiEscrow}
         onRefundEscrow={refundCmiEscrow}
         onDisputeSplitEscrow={disputeSplitEscrow}
