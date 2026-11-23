@@ -7,6 +7,7 @@ const ROOT = import.meta.dirname;
 const indexHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const vercelJsonRaw = fs.readFileSync(path.join(ROOT, 'vercel.json'), 'utf8');
 const vercelConfig = JSON.parse(vercelJsonRaw) as {
+  buildCommand?: string;
   rewrites?: Array<{ source: string; destination: string }>;
   headers?: Array<{ source: string; headers: Array<{ key: string; value: string }> }>;
   outputDirectory?: string;
@@ -14,6 +15,16 @@ const vercelConfig = JSON.parse(vercelJsonRaw) as {
 
 test('Vercel SPA rewrites, immutable asset caching, and security headers are configured in vercel.json', () => {
   assert.equal(vercelConfig.outputDirectory, 'dist');
+  const pkgJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as {
+    scripts?: Record<string, string>;
+  };
+  const buildScriptMatch = vercelConfig.buildCommand?.match(/^npm run ([a-zA-Z0-9:_-]+)$/);
+  if (buildScriptMatch) {
+    assert.ok(
+      pkgJson.scripts?.[buildScriptMatch[1]],
+      `package.json is missing script "${buildScriptMatch[1]}" referenced by vercel.json buildCommand`
+    );
+  }
   assert.ok(Array.isArray(vercelConfig.rewrites) && vercelConfig.rewrites.length >= 1);
   const spaRewrite = vercelConfig.rewrites.find((r) => r.destination === '/index.html');
   assert.ok(spaRewrite, 'Missing SPA catch-all rewrite to /index.html');
