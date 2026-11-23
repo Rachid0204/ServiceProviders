@@ -1579,5 +1579,245 @@ service cloud.firestore {
         isAdmin()
       );
     }
+
+    // 30. Validation Blueprint & Match: Conversation Metadata (/conversations/{bookingId})
+    function isValidConversationMetadata(data) {
+      return data.keys().hasAll([
+          'bookingId',
+          'clientId',
+          'providerId',
+          'lastMessageText',
+          'lastSenderId',
+          'lastMessageAt',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'bookingId',
+          'clientId',
+          'providerId',
+          'lastMessageText',
+          'lastSenderId',
+          'lastMessageAt',
+          'clientLastReadAt',
+          'providerLastReadAt',
+          'blockedByUid',
+          'updatedAt'
+        ]) &&
+        isValidId(data.bookingId) &&
+        isValidId(data.clientId) &&
+        isValidId(data.providerId) &&
+        data.lastMessageText is string && data.lastMessageText.size() <= 500 &&
+        isValidId(data.lastSenderId) &&
+        data.lastMessageAt is timestamp &&
+        (!('clientLastReadAt' in data) || data.clientLastReadAt is timestamp) &&
+        (!('providerLastReadAt' in data) || data.providerLastReadAt is timestamp) &&
+        (!('blockedByUid' in data) || data.blockedByUid == '' || isValidId(data.blockedByUid)) &&
+        data.updatedAt is timestamp;
+    }
+
+    match /conversations/{bookingId} {
+      allow get: if isVerifiedUser() && isValidId(bookingId) && (
+        existing().clientId == request.auth.uid ||
+        existing().providerId == request.auth.uid ||
+        isAdmin()
+      );
+      allow list: if isVerifiedUser() && (
+        resource.data.clientId == request.auth.uid ||
+        resource.data.providerId == request.auth.uid ||
+        isAdmin()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(bookingId) &&
+        isValidConversationMetadata(incoming()) &&
+        incoming().bookingId == bookingId &&
+        (incoming().clientId == request.auth.uid || incoming().providerId == request.auth.uid) &&
+        exists(/databases/$(database)/documents/bookings/$(bookingId)) &&
+        get(/databases/$(database)/documents/bookings/$(bookingId)).data.clientId == incoming().clientId &&
+        get(/databases/$(database)/documents/bookings/$(bookingId)).data.providerId == incoming().providerId &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(bookingId) &&
+        isValidConversationMetadata(incoming()) &&
+        incoming().bookingId == existing().bookingId &&
+        incoming().clientId == existing().clientId &&
+        incoming().providerId == existing().providerId &&
+        (existing().clientId == request.auth.uid || existing().providerId == request.auth.uid || isAdmin()) &&
+        incoming().updatedAt == request.time;
+
+      allow delete: if isAdmin() && isValidId(bookingId);
+    }
+
+    // 31. Validation Blueprint & Match: Conversation Abuse Reports (/chatReports/{reportId})
+    function isValidChatReport(data) {
+      return data.keys().hasAll([
+          'bookingId',
+          'reporterId',
+          'reportedUserId',
+          'reason',
+          'details',
+          'status',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'bookingId',
+          'reporterId',
+          'reportedUserId',
+          'reason',
+          'details',
+          'status',
+          'createdAt'
+        ]) &&
+        isValidId(data.bookingId) &&
+        isValidId(data.reporterId) &&
+        isValidId(data.reportedUserId) &&
+        data.reason is string && data.reason.size() >= 3 && data.reason.size() <= 80 &&
+        data.details is string && data.details.size() >= 5 && data.details.size() <= 500 &&
+        data.status is string && (data.status == 'open' || data.status == 'reviewed' || data.status == 'resolved') &&
+        data.createdAt is timestamp;
+    }
+
+    match /chatReports/{reportId} {
+      allow get, list, update: if isAdmin();
+      allow create: if isVerifiedUser() &&
+        isValidId(reportId) &&
+        isValidChatReport(incoming()) &&
+        incoming().reporterId == request.auth.uid &&
+        incoming().status == 'open' &&
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/bookings/$(incoming().bookingId)) && (
+          get(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.clientId == request.auth.uid ||
+          get(/databases/$(database)/documents/bookings/$(incoming().bookingId)).data.providerId == request.auth.uid
+        );
+      allow delete: if isAdmin() && isValidId(reportId);
+    }
+
+    // 32. Validation Blueprint & Match: User Notifications (/notifications/{notificationId})
+    function isValidNotification(data) {
+      return data.keys().hasAll([
+          'userId',
+          'actorId',
+          'type',
+          'titleFr',
+          'titleAr',
+          'bodyFr',
+          'bodyAr',
+          'linkPath',
+          'isRead',
+          'createdAt'
+        ]) &&
+        data.keys().hasOnly([
+          'userId',
+          'actorId',
+          'type',
+          'titleFr',
+          'titleAr',
+          'bodyFr',
+          'bodyAr',
+          'linkPath',
+          'isRead',
+          'createdAt'
+        ]) &&
+        isValidId(data.userId) &&
+        isValidId(data.actorId) &&
+        data.type is string && data.type.size() <= 32 && (
+          data.type == 'booking_created' ||
+          data.type == 'booking_status' ||
+          data.type == 'quote_received' ||
+          data.type == 'quote_accepted' ||
+          data.type == 'quote_rejected' ||
+          data.type == 'message_received' ||
+          data.type == 'review_received' ||
+          data.type == 'kyc_updated' ||
+          data.type == 'system'
+        ) &&
+        data.titleFr is string && data.titleFr.size() >= 2 && data.titleFr.size() <= 120 &&
+        data.titleAr is string && data.titleAr.size() >= 2 && data.titleAr.size() <= 120 &&
+        data.bodyFr is string && data.bodyFr.size() >= 2 && data.bodyFr.size() <= 300 &&
+        data.bodyAr is string && data.bodyAr.size() >= 2 && data.bodyAr.size() <= 300 &&
+        data.linkPath is string && data.linkPath.size() >= 1 && data.linkPath.size() <= 160 && data.linkPath.matches('^/.*') &&
+        data.isRead is bool &&
+        data.createdAt is timestamp;
+    }
+
+    match /notifications/{notificationId} {
+      allow get: if isVerifiedUser() && isValidId(notificationId) && (
+        existing().userId == request.auth.uid || isAdmin()
+      );
+      allow list: if isVerifiedUser() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+
+      allow create: if isVerifiedUser() &&
+        isValidId(notificationId) &&
+        isValidNotification(incoming()) &&
+        incoming().actorId == request.auth.uid &&
+        incoming().isRead == false &&
+        incoming().createdAt == request.time;
+
+      allow update: if isVerifiedUser() &&
+        isValidId(notificationId) && (
+          (
+            existing().userId == request.auth.uid &&
+            incoming().diff(existing()).affectedKeys().hasOnly(['isRead']) &&
+            incoming().isRead is bool
+          ) ||
+          isAdmin()
+        );
+
+      allow delete: if isVerifiedUser() && isValidId(notificationId) && (
+        existing().userId == request.auth.uid || isAdmin()
+      );
+    }
+
+    // 33. Validation Blueprint & Match: Notification Preferences (/notificationPreferences/{uid})
+    function isValidNotificationPreferences(data) {
+      return data.keys().hasAll([
+          'uid',
+          'inAppEnabled',
+          'emailEnabled',
+          'smsWhatsAppEnabled',
+          'bookingUpdates',
+          'quotationUpdates',
+          'chatMessages',
+          'marketingUpdates',
+          'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'uid',
+          'inAppEnabled',
+          'emailEnabled',
+          'smsWhatsAppEnabled',
+          'bookingUpdates',
+          'quotationUpdates',
+          'chatMessages',
+          'marketingUpdates',
+          'updatedAt'
+        ]) &&
+        isValidId(data.uid) &&
+        data.inAppEnabled is bool &&
+        data.emailEnabled is bool &&
+        data.smsWhatsAppEnabled is bool &&
+        data.bookingUpdates is bool &&
+        data.quotationUpdates is bool &&
+        data.chatMessages is bool &&
+        data.marketingUpdates is bool &&
+        data.updatedAt is timestamp;
+    }
+
+    match /notificationPreferences/{uid} {
+      allow get: if isVerifiedUser() && isValidId(uid) && (request.auth.uid == uid || isAdmin());
+      allow list: if isAdmin();
+
+      allow create, update: if isVerifiedUser() &&
+        isValidId(uid) &&
+        (request.auth.uid == uid || isAdmin()) &&
+        isValidNotificationPreferences(incoming()) &&
+        incoming().uid == uid &&
+        incoming().updatedAt == request.time;
+
+      allow delete: if isAdmin() && isValidId(uid);
+    }
   }
 }

@@ -243,4 +243,24 @@ test('Phase 3 Quotations & Scheduling Rules: itemized proposal totals invariant,
   assert.ok(rulesContent.includes('existsAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId))'));
 });
 
+test('Phase 4 Messaging & Notifications Security Rules and Composite Indexes', () => {
+  assert.ok(rulesContent.includes('function isValidConversationMetadata(data)'));
+  assert.ok(rulesContent.includes('match /conversations/{bookingId}'));
+  assert.ok(rulesContent.includes('function isValidChatReport(data)'));
+  assert.ok(rulesContent.includes('match /chatReports/{reportId}'));
+  assert.ok(rulesContent.includes('function isValidNotification(data)'));
+  assert.ok(rulesContent.includes('match /notifications/{notificationId}'));
+  assert.ok(rulesContent.includes('incoming().isRead == false'));
+  assert.ok(rulesContent.includes("incoming().diff(existing()).affectedKeys().hasOnly(['isRead'])"));
+  assert.ok(rulesContent.includes('function isValidNotificationPreferences(data)'));
+  assert.ok(rulesContent.includes('match /notificationPreferences/{uid}'));
+
+  const indexesRaw = fs.readFileSync(path.resolve(import.meta.dirname, 'firestore.indexes.json'), 'utf8');
+  const parsed = JSON.parse(indexesRaw) as { indexes: Array<{ collectionGroup: string }> };
+  const groups = new Set(parsed.indexes.map((i) => i.collectionGroup));
+  assert.ok(groups.has('notifications'), 'Missing composite index for notifications');
+  assert.ok(groups.has('conversations'), 'Missing composite index for conversations');
+});
+
+
 

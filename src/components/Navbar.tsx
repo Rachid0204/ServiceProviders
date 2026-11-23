@@ -16,6 +16,9 @@ import {
   Briefcase,
   IdCard,
   Wallet,
+  Bell,
+  MessageSquare,
+  CheckCheck,
 } from 'lucide-react';
 import { useMarketplace } from '../app/providers/MarketplaceContext';
 import { ROUTE_PATHS, getProviderTabFromPathname } from '../app/routePaths';
@@ -42,6 +45,11 @@ export const Navbar: React.FC = () => {
     clientActiveCount,
     providerPendingCount,
     openJobsCount,
+    notifications,
+    unreadNotificationCount,
+    unreadConversationsCount,
+    markNotificationRead,
+    markAllNotificationsRead,
     toggleLanguage,
     setAuthModalIntent,
     setIsPostJobModalOpen,
@@ -52,9 +60,11 @@ export const Navbar: React.FC = () => {
   const navigate = useNavigate();
 
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [notifOpen, setNotifOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
 
   const isDoubleAccount = Boolean(firebaseUser && effectiveRole === 'both');
   const isClientCapable = Boolean(
@@ -92,6 +102,7 @@ export const Navbar: React.FC = () => {
   // Close menus on route change
   useEffect(() => {
     setDropdownOpen(false);
+    setNotifOpen(false);
     setMobileMenuOpen(false);
   }, [location.pathname, location.search]);
 
@@ -100,10 +111,14 @@ export const Navbar: React.FC = () => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
         setDropdownOpen(false);
       }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false);
+      }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setDropdownOpen(false);
+        setNotifOpen(false);
         setMobileMenuOpen(false);
       }
     };
@@ -263,7 +278,7 @@ export const Navbar: React.FC = () => {
           )}
         </nav>
 
-        {/* Zone 3: Quick Action (Post Job for Clients) + Language + Auth / Account Dropdown */}
+        {/* Zone 3: Quick Action + Messages + Notification Bell + Language + Auth / Account Dropdown */}
         <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {firebaseUser && isVerified && isClientCapable && (
             <button
@@ -274,6 +289,120 @@ export const Navbar: React.FC = () => {
               <Plus className="w-3.5 h-3.5" />
               <span>{isAr ? 'نشر طلب' : 'Publier un besoin'}</span>
             </button>
+          )}
+
+          {firebaseUser && isVerified && (
+            <>
+              <Link
+                to={ROUTE_PATHS.MESSAGES}
+                aria-label={t.navMessages}
+                className={`relative p-2 rounded-lg transition-colors shrink-0 ${
+                  location.pathname.startsWith(ROUTE_PATHS.MESSAGES)
+                    ? 'bg-emerald-50 text-emerald-700'
+                    : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                }`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                {unreadConversationsCount > 0 && (
+                  <span className="absolute -top-0.5 -end-0.5 min-w-[16px] h-4 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-bold inline-flex items-center justify-center tabular-nums">
+                    {unreadConversationsCount > 9 ? '9+' : unreadConversationsCount}
+                  </span>
+                )}
+              </Link>
+
+              <div ref={notifRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setNotifOpen((v) => !v)}
+                  aria-label={t.navNotifications}
+                  aria-expanded={notifOpen}
+                  aria-haspopup="menu"
+                  className={`relative p-2 rounded-lg transition-colors shrink-0 cursor-pointer ${
+                    notifOpen || location.pathname === ROUTE_PATHS.NOTIFICATIONS
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                  }`}
+                >
+                  <Bell className="w-4 h-4" />
+                  {unreadNotificationCount > 0 && (
+                    <span className="absolute -top-0.5 -end-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold inline-flex items-center justify-center tabular-nums">
+                      {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
+                    </span>
+                  )}
+                </button>
+
+                {notifOpen && (
+                  <div
+                    role="menu"
+                    className="absolute end-0 mt-2 w-80 sm:w-96 bg-white border border-slate-200 rounded-xl shadow-lg overflow-hidden z-50"
+                  >
+                    <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between gap-2 bg-slate-50/70">
+                      <span className="text-xs font-bold text-slate-900">
+                        {t.navNotifications}
+                        {unreadNotificationCount > 0 ? ` (${unreadNotificationCount})` : ''}
+                      </span>
+                      {unreadNotificationCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void markAllNotificationsRead();
+                          }}
+                          className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-700 hover:text-emerald-800 cursor-pointer"
+                        >
+                          <CheckCheck className="w-3.5 h-3.5" />
+                          <span>{t.notificationsMarkAllRead}</span>
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
+                      {notifications.length === 0 ? (
+                        <div className="p-6 text-center text-xs text-slate-500">
+                          {t.notificationsEmpty}
+                        </div>
+                      ) : (
+                        notifications.slice(0, 5).map((notif) => (
+                          <Link
+                            key={notif.id}
+                            to={notif.linkPath}
+                            role="menuitem"
+                            onClick={() => {
+                              setNotifOpen(false);
+                              if (!notif.isRead) void markNotificationRead(notif.id);
+                            }}
+                            className={`block px-4 py-3 hover:bg-slate-50 transition-colors ${
+                              notif.isRead ? 'bg-white' : 'bg-emerald-50/40'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-semibold text-slate-900 truncate">
+                                {isAr ? notif.titleAr : notif.titleFr}
+                              </span>
+                              {!notif.isRead && (
+                                <span className="w-2 h-2 rounded-full bg-emerald-600 shrink-0" />
+                              )}
+                            </div>
+                            <p className="text-[11px] text-slate-600 line-clamp-2 mt-0.5">
+                              {isAr ? notif.bodyAr : notif.bodyFr}
+                            </p>
+                          </Link>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="px-4 py-2.5 border-t border-slate-100 bg-slate-50/70 text-center">
+                      <Link
+                        to={ROUTE_PATHS.NOTIFICATIONS}
+                        onClick={() => setNotifOpen(false)}
+                        className="text-xs font-semibold text-emerald-700 hover:text-emerald-800"
+                      >
+                        {t.notificationsViewAll}
+                      </Link>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
           )}
 
           <button
@@ -519,6 +648,34 @@ export const Navbar: React.FC = () => {
                 <span>{isAr ? 'الأرباح والسحب' : 'Revenus & Retraits'}</span>
               </Link>
               <Link
+                to={ROUTE_PATHS.MESSAGES}
+                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center justify-between"
+              >
+                <span className="inline-flex items-center gap-2.5">
+                  <MessageSquare className="w-4 h-4 text-emerald-700" />
+                  <span>{t.navMessages}</span>
+                </span>
+                {unreadConversationsCount > 0 && (
+                  <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800">
+                    {unreadConversationsCount}
+                  </span>
+                )}
+              </Link>
+              <Link
+                to={ROUTE_PATHS.NOTIFICATIONS}
+                className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center justify-between"
+              >
+                <span className="inline-flex items-center gap-2.5">
+                  <Bell className="w-4 h-4 text-rose-600" />
+                  <span>{t.navNotifications}</span>
+                </span>
+                {unreadNotificationCount > 0 && (
+                  <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-rose-100 text-rose-800">
+                    {unreadNotificationCount}
+                  </span>
+                )}
+              </Link>
+              <Link
                 to={ROUTE_PATHS.CUSTOMER_PROFILE}
                 className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center gap-2.5"
               >
@@ -587,6 +744,38 @@ export const Navbar: React.FC = () => {
                   <Wrench className="w-4 h-4 text-amber-700" />
                   <span>{t.providerDashboardTab}</span>
                 </Link>
+              )}
+              {isVerified && (
+                <>
+                  <Link
+                    to={ROUTE_PATHS.MESSAGES}
+                    className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center justify-between"
+                  >
+                    <span className="inline-flex items-center gap-2.5">
+                      <MessageSquare className="w-4 h-4 text-emerald-700" />
+                      <span>{t.navMessages}</span>
+                    </span>
+                    {unreadConversationsCount > 0 && (
+                      <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800">
+                        {unreadConversationsCount}
+                      </span>
+                    )}
+                  </Link>
+                  <Link
+                    to={ROUTE_PATHS.NOTIFICATIONS}
+                    className="w-full px-3 py-2.5 rounded-lg text-start text-sm font-medium text-slate-800 hover:bg-slate-50 flex items-center justify-between"
+                  >
+                    <span className="inline-flex items-center gap-2.5">
+                      <Bell className="w-4 h-4 text-rose-600" />
+                      <span>{t.navNotifications}</span>
+                    </span>
+                    {unreadNotificationCount > 0 && (
+                      <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-rose-100 text-rose-800">
+                        {unreadNotificationCount}
+                      </span>
+                    )}
+                  </Link>
+                </>
               )}
               <Link
                 to={ROUTE_PATHS.CUSTOMER_PROFILE}

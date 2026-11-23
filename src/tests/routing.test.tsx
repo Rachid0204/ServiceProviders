@@ -59,8 +59,11 @@ vi.mock('firebase/firestore', () => ({
   doc: vi.fn(),
   query: vi.fn(),
   where: vi.fn(),
+  orderBy: vi.fn(),
   limit: vi.fn(),
   onSnapshot: vi.fn(() => () => {}),
+  setDoc: vi.fn(),
+  serverTimestamp: vi.fn(),
 }));
 
 const LocationObserver: React.FC = () => {
@@ -167,6 +170,28 @@ function createMockContext(
     clientActiveCount: 0,
     providerPendingCount: 0,
     openJobsCount: 0,
+    notifications: [],
+    unreadNotificationCount: 0,
+    notificationPreferences: {
+      uid: firebaseUser?.uid ?? '',
+      inAppEnabled: true,
+      emailEnabled: true,
+      smsWhatsAppEnabled: true,
+      bookingUpdates: true,
+      quotationUpdates: true,
+      chatMessages: true,
+      marketingUpdates: false,
+    },
+    markNotificationRead: vi.fn().mockResolvedValue(undefined),
+    markAllNotificationsRead: vi.fn().mockResolvedValue(undefined),
+    deleteNotification: vi.fn().mockResolvedValue(undefined),
+    saveNotificationPreferences: vi.fn().mockResolvedValue(undefined),
+    conversationsByBookingId: {},
+    unreadConversationsCount: 0,
+    markConversationRead: vi.fn().mockResolvedValue(undefined),
+    updateConversationOnMessage: vi.fn().mockResolvedValue(undefined),
+    toggleBlockConversation: vi.fn().mockResolvedValue(undefined),
+    submitChatReport: vi.fn().mockResolvedValue(undefined),
     authModalIntent: null,
     setAuthModalIntent: vi.fn(),
     isPostJobModalOpen: false,
@@ -499,6 +524,65 @@ describe('Phase 1 Routing Acceptance Tests (Spec §2B)', () => {
       expect(screen.getByTestId('current-location')).toHaveTextContent(p);
       unmount();
     }
+  });
+
+  it('guards /messages, /messages/:bookingId, and /notifications behind verified auth and allows both verified clients and providers', async () => {
+    // 1. Unauthenticated redirects to /login?redirect=...
+    for (const protectedPath of ['/messages', '/messages/bk-101', '/notifications']) {
+      const { unmount } = renderAtRoute([protectedPath], { firebaseUser: null });
+      expect(
+        await screen.findByRole('heading', { name: TRANSLATIONS.fr.loginPageTitle })
+      ).toBeInTheDocument();
+      expect(screen.getByTestId('current-location').textContent).toBe(
+        `/login?redirect=${encodeURIComponent(protectedPath)}`
+      );
+      unmount();
+    }
+
+    // 2. Verified client accesses /messages and sees top-bar Notification Bell dropdown
+    const user = userEvent.setup();
+    const clientUser = createMockUser('client-p4', 'client-p4@example.ma', true);
+    const clientProfile = createMockProfile('client-p4', 'client');
+    const { unmount: unmountClient } = renderAtRoute(['/messages'], {
+      firebaseUser: clientUser,
+      userProfile: clientProfile,
+      isVerified: true,
+      unreadNotificationCount: 1,
+      notifications: [
+        {
+          id: 'notif-1',
+          userId: 'client-p4',
+          actorId: 'prov-1',
+          type: 'quote_received',
+          titleFr: 'Nouveau devis reçu (350 DH)',
+          titleAr: 'عرض ثمن جديد',
+          bodyFr: 'Maâlem Karim a envoyé un devis.',
+          bodyAr: 'أرسل المعلم عرضاً.',
+          linkPath: '/dashboard',
+          isRead: false,
+          createdAtIso: '2026-11-22T12:00:00.000Z',
+        },
+      ],
+    });
+    expect(
+      await screen.findByRole('heading', { name: TRANSLATIONS.fr.messagesInboxTitle })
+    ).toBeInTheDocument();
+
+    const bellBtn = screen.getByRole('button', { name: TRANSLATIONS.fr.navNotifications });
+    await user.click(bellBtn);
+    expect(screen.getByText('Nouveau devis reçu (350 DH)')).toBeInTheDocument();
+    unmountClient();
+
+    // 3. Verified provider accesses /notifications directly
+    const providerUser = createMockUser('prov-p4', 'maalem-p4@example.ma', true);
+    renderAtRoute(['/notifications'], {
+      firebaseUser: providerUser,
+      userProfile: createMockProfile('prov-p4', 'provider'),
+      isVerified: true,
+    });
+    expect(
+      await screen.findByRole('heading', { name: TRANSLATIONS.fr.notificationsTitle })
+    ).toBeInTheDocument();
   });
 
   it('enforces single <BrowserRouter> mount in src/main.tsx and zero manual window.history.pushState in src/', () => {

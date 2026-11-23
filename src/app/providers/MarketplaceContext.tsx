@@ -27,6 +27,8 @@ import { useProviders } from '../../hooks/useProviders';
 import { useBookings } from '../../hooks/useBookings';
 import { useJobPosts } from '../../hooks/useJobPosts';
 import { useFavorites } from '../../hooks/useFavorites';
+import { useNotifications } from '../../hooks/useNotifications';
+import { useConversations } from '../../hooks/useConversations';
 import { ROUTE_PATHS } from '../routePaths';
 import type { SystemSettingsRecord } from '../../utils/systemSettings';
 
@@ -103,6 +105,21 @@ export interface MarketplaceContextValue {
   clientActiveCount: number;
   providerPendingCount: number;
   openJobsCount: number;
+
+  // Phase 4: Notifications & Messaging Inbox
+  notifications: ReturnType<typeof useNotifications>['notifications'];
+  unreadNotificationCount: number;
+  notificationPreferences: ReturnType<typeof useNotifications>['notificationPreferences'];
+  markNotificationRead: ReturnType<typeof useNotifications>['markNotificationRead'];
+  markAllNotificationsRead: ReturnType<typeof useNotifications>['markAllNotificationsRead'];
+  deleteNotification: ReturnType<typeof useNotifications>['deleteNotification'];
+  saveNotificationPreferences: ReturnType<typeof useNotifications>['saveNotificationPreferences'];
+  conversationsByBookingId: ReturnType<typeof useConversations>['conversationsByBookingId'];
+  unreadConversationsCount: number;
+  markConversationRead: ReturnType<typeof useConversations>['markConversationRead'];
+  updateConversationOnMessage: ReturnType<typeof useConversations>['updateConversationOnMessage'];
+  toggleBlockConversation: ReturnType<typeof useConversations>['toggleBlockConversation'];
+  submitChatReport: ReturnType<typeof useConversations>['submitChatReport'];
 
   // Global Modal Controls
   authModalIntent: UserRole | null;
@@ -247,6 +264,25 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     authReady,
     isVerified
   );
+
+  const {
+    notifications,
+    unreadNotificationCount,
+    notificationPreferences,
+    markNotificationRead,
+    markAllNotificationsRead,
+    deleteNotification,
+    saveNotificationPreferences,
+  } = useNotifications(firebaseUser, authReady, isVerified);
+
+  const {
+    conversationsByBookingId,
+    unreadConversationsCount,
+    markConversationRead,
+    updateConversationOnMessage,
+    toggleBlockConversation,
+    submitChatReport,
+  } = useConversations(firebaseUser, authReady, isVerified);
 
   const effectiveRole: UserRole | null = userProfile?.role ?? signupRoleIntent ?? null;
   const isPureProvider = Boolean(firebaseUser && effectiveRole === 'provider');
@@ -453,6 +489,19 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       clientActiveCount,
       providerPendingCount,
       openJobsCount,
+      notifications,
+      unreadNotificationCount,
+      notificationPreferences,
+      markNotificationRead,
+      markAllNotificationsRead,
+      deleteNotification,
+      saveNotificationPreferences,
+      conversationsByBookingId,
+      unreadConversationsCount,
+      markConversationRead,
+      updateConversationOnMessage,
+      toggleBlockConversation,
+      submitChatReport,
       authModalIntent,
       setAuthModalIntent,
       isPostJobModalOpen,
@@ -535,6 +584,19 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       clientActiveCount,
       providerPendingCount,
       openJobsCount,
+      notifications,
+      unreadNotificationCount,
+      notificationPreferences,
+      markNotificationRead,
+      markAllNotificationsRead,
+      deleteNotification,
+      saveNotificationPreferences,
+      conversationsByBookingId,
+      unreadConversationsCount,
+      markConversationRead,
+      updateConversationOnMessage,
+      toggleBlockConversation,
+      submitChatReport,
       authModalIntent,
       isPostJobModalOpen,
       detailProvider,
