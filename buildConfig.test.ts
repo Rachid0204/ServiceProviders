@@ -158,6 +158,11 @@ test('Built dist/index.html does not modulepreload lazy routes, dashboards, Leaf
     'ReviewModal',
     'BookingLifecycleModals',
     'OnboardingModal',
+    'MessagesInboxPage',
+    'NotificationsPage',
+    'DisputesPage',
+    'AdminKycReviewSection',
+    'AdminDisputesModerationSection',
   ]) {
     assert.equal(
       preloadJoined.includes(forbidden),
@@ -165,4 +170,48 @@ test('Built dist/index.html does not modulepreload lazy routes, dashboards, Leaf
       `Lazy chunk "${forbidden}" must not be modulepreloaded upfront in dist/index.html`
     );
   }
+});
+
+test('Phase 7 Production Hardening: HSTS header, 12-category sitemap, private route robots disallow, and CI workflow', () => {
+  const allHeaderEntries = (vercelConfig.headers ?? []).flatMap((h) => h.headers);
+  assert.ok(
+    allHeaderEntries.some(
+      (h) => h.key === 'Strict-Transport-Security' && h.value.includes('max-age=')
+    ),
+    'Missing HSTS header in vercel.json'
+  );
+
+  const robots = fs.readFileSync(path.join(ROOT, 'public/robots.txt'), 'utf8');
+  for (const privatePath of ['/admin', '/dashboard', '/provider', '/messages', '/notifications', '/disputes']) {
+    assert.ok(robots.includes(`Disallow: ${privatePath}`), `Missing robots.txt disallow for ${privatePath}`);
+  }
+
+  const sitemap = fs.readFileSync(path.join(ROOT, 'public/sitemap.xml'), 'utf8');
+  for (const slug of [
+    '/services/plumbing',
+    '/services/electricity',
+    '/services/painting',
+    '/services/tutoring',
+    '/services/cleaning',
+    '/services/hvac',
+    '/services/carpentry',
+    '/services/locksmith',
+    '/services/appliance-repair',
+    '/services/gardening',
+    '/services/moving',
+    '/services/masonry',
+    '/terms',
+    '/privacy',
+  ]) {
+    assert.ok(sitemap.includes(slug), `Missing ${slug} in public/sitemap.xml`);
+  }
+
+  const ciWorkflowPath = path.join(ROOT, '.github/workflows/ci.yml');
+  assert.ok(fs.existsSync(ciWorkflowPath), 'Missing .github/workflows/ci.yml quality gate');
+  const ciContent = fs.readFileSync(ciWorkflowPath, 'utf8');
+  assert.ok(ciContent.includes('npm run lint'));
+  assert.ok(ciContent.includes('check-i18n.mjs'));
+  assert.ok(ciContent.includes('npm run lint:rules'));
+  assert.ok(ciContent.includes('npm run build'));
+  assert.ok(ciContent.includes('npm test'));
 });

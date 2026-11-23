@@ -2,6 +2,15 @@ User-agent: *
 Allow: /
 Disallow: /admin
 Disallow: /admin/
+Disallow: /dashboard
+Disallow: /customer/
+Disallow: /provider
+Disallow: /provider/
+Disallow: /messages
+Disallow: /notifications
+Disallow: /disputes
+Disallow: /profile
+Disallow: /verify-email
 Disallow: /api/
 
 Sitemap: https://servicepro-one.vercel.app/sitemap.xml

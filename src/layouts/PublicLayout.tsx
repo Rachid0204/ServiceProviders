@@ -20,6 +20,12 @@ export const PublicLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 overflow-x-clip">
+      <a
+        href="#top"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:start-2 focus:z-50 focus:px-4 focus:py-2 focus:rounded-lg focus:bg-emerald-700 focus:text-white focus:text-xs focus:font-semibold"
+      >
+        Aller au contenu principal / الانتقال إلى المحتوى الرئيسي
+      </a>
       <Navbar />
       <main id="top" className="flex-1">
         <Outlet />
