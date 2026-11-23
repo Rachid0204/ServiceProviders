@@ -1129,6 +1129,10 @@ service cloud.firestore {
           'providerRating',
           'providerVerified',
           'proposedPriceMad',
+          'laborCostMad',
+          'materialsCostMad',
+          'validUntilIso',
+          'warrantyNote',
           'estimatedDuration',
           'message',
           'status',
@@ -1145,6 +1149,11 @@ service cloud.firestore {
         data.providerRating is number && data.providerRating >= 0 && data.providerRating <= 5 &&
         data.providerVerified is bool &&
         data.proposedPriceMad is int && data.proposedPriceMad >= 50 && data.proposedPriceMad <= 100000 &&
+        (!('laborCostMad' in data) || (data.laborCostMad is int && data.laborCostMad >= 0 && data.laborCostMad <= 100000)) &&
+        (!('materialsCostMad' in data) || (data.materialsCostMad is int && data.materialsCostMad >= 0 && data.materialsCostMad <= 100000)) &&
+        (!('laborCostMad' in data && 'materialsCostMad' in data) || (data.laborCostMad + data.materialsCostMad == data.proposedPriceMad)) &&
+        (!('validUntilIso' in data) || (data.validUntilIso is string && data.validUntilIso.size() >= 8 && data.validUntilIso.size() <= 16)) &&
+        (!('warrantyNote' in data) || (data.warrantyNote is string && data.warrantyNote.size() <= 160)) &&
         data.estimatedDuration is string && data.estimatedDuration.size() >= 2 && data.estimatedDuration.size() <= 64 &&
         data.message is string && data.message.size() >= 10 && data.message.size() <= 500 &&
         data.status is string && data.status.size() <= 16 && (
@@ -1505,6 +1514,69 @@ service cloud.firestore {
 
       allow delete: if isVerifiedUser() && isValidId(favoriteId) && (
         existing().userId == request.auth.uid || isAdmin()
+      );
+    }
+
+    // 28. Validation Blueprint & Match: Provider Weekly Availability (/providerAvailability/{uid})
+    function isValidProviderAvailability(data) {
+      return data.keys().hasAll(['uid', 'days', 'blockedDates', 'acceptsUrgentSameDay', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'days', 'blockedDates', 'acceptsUrgentSameDay', 'updatedAt']) &&
+        isValidId(data.uid) &&
+        data.days is map &&
+        data.days.keys().hasAll(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']) &&
+        data.days.keys().hasOnly(['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']) &&
+        data.blockedDates is list && data.blockedDates.size() <= 60 &&
+        data.acceptsUrgentSameDay is bool &&
+        data.updatedAt is timestamp;
+    }
+
+    match /providerAvailability/{uid} {
+      allow get: if isValidId(uid);
+      allow list: if isAdmin();
+
+      allow create, update: if isVerifiedUser() &&
+        isValidId(uid) &&
+        (request.auth.uid == uid || isAdmin()) &&
+        isValidProviderAvailability(incoming()) &&
+        incoming().uid == uid &&
+        incoming().updatedAt == request.time;
+
+      allow delete: if isAdmin() && isValidId(uid);
+    }
+
+    // 29. Validation Blueprint & Match: Anti-Double-Booking Schedule Locks (/scheduleLocks/{lockId})
+    function isValidScheduleLock(data) {
+      return data.keys().hasAll(['providerId', 'clientId', 'bookingId', 'preferredDate', 'preferredTimeSlot', 'createdAt']) &&
+        data.keys().hasOnly(['providerId', 'clientId', 'bookingId', 'preferredDate', 'preferredTimeSlot', 'createdAt']) &&
+        isValidId(data.providerId) &&
+        isValidId(data.clientId) &&
+        isValidId(data.bookingId) &&
+        data.preferredDate is string && data.preferredDate.size() >= 8 && data.preferredDate.size() <= 16 &&
+        data.preferredTimeSlot is string && (
+          data.preferredTimeSlot == '09:00 - 12:00' ||
+          data.preferredTimeSlot == '14:00 - 17:00' ||
+          data.preferredTimeSlot == '18:00 - 20:00'
+        ) &&
+        data.createdAt is timestamp;
+    }
+
+    match /scheduleLocks/{lockId} {
+      allow get: if isVerifiedUser() && isValidId(lockId);
+      allow list: if isAdmin();
+
+      allow create: if isVerifiedUser() &&
+        isValidId(lockId) &&
+        isValidScheduleLock(incoming()) &&
+        incoming().clientId == request.auth.uid &&
+        incoming().createdAt == request.time &&
+        existsAfter(/databases/$(database)/documents/bookings/$(incoming().bookingId));
+
+      allow update: if false;
+
+      allow delete: if isVerifiedUser() && isValidId(lockId) && (
+        existing().clientId == request.auth.uid ||
+        existing().providerId == request.auth.uid ||
+        isAdmin()
       );
     }
   }

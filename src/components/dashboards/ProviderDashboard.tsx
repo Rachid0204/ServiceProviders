@@ -29,6 +29,7 @@ import {
   Award,
   IdCard,
   Filter,
+  Calendar,
 } from 'lucide-react';
 import {
   collection,
@@ -50,7 +51,10 @@ import {
   MOROCCAN_CITIES,
   SERVICE_CATEGORIES,
   calculateEscrowSplit,
+  computeQuotationTotals,
   formatMadCurrency,
+  getDefaultQuoteValidUntilIso,
+  getTodayIsoDate,
   buildWhatsAppUrl,
   canTransitionBookingStatus,
   filterJobPosts,
@@ -82,6 +86,7 @@ import {
 import { ProviderCard } from '../ProviderCard';
 import { ProviderServicesManager } from './ProviderServicesManager';
 import { ProviderVerificationPanel } from './ProviderVerificationPanel';
+import { ProviderAvailabilityCalendar } from './ProviderAvailabilityCalendar';
 
 interface ProviderWithdrawalItem {
   id: string;
@@ -93,7 +98,14 @@ interface ProviderWithdrawalItem {
   createdAtIso: string;
 }
 
-export type ProviderTab = 'jobs' | 'missions' | 'card' | 'services' | 'verification' | 'earnings';
+export type ProviderTab =
+  | 'jobs'
+  | 'missions'
+  | 'card'
+  | 'services'
+  | 'calendar'
+  | 'verification'
+  | 'earnings';
 
 interface ProviderDashboardProps {
   lang: LanguageCode;
@@ -197,9 +209,14 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
   const [jobUrgencyFilter, setJobUrgencyFilter] = useState<JobUrgency | 'ALL'>('ALL');
   const [jobMinBudget, setJobMinBudget] = useState<number>(0);
 
-  // Inline proposal composer state
+  // Inline itemized quotation composer state
   const [quotingJobId, setQuotingJobId] = useState<string | null>(null);
-  const [quotePriceMad, setQuotePriceMad] = useState<number>(200);
+  const [quoteLaborMad, setQuoteLaborMad] = useState<number>(200);
+  const [quoteMaterialsMad, setQuoteMaterialsMad] = useState<number>(0);
+  const [quoteValidUntil, setQuoteValidUntil] = useState<string>(() =>
+    getDefaultQuoteValidUntilIso(7)
+  );
+  const [quoteWarranty, setQuoteWarranty] = useState('');
   const [quoteDuration, setQuoteDuration] = useState('');
   const [quoteMessage, setQuoteMessage] = useState('');
   const [quoteErrors, setQuoteErrors] = useState<Record<string, string>>({});
@@ -673,7 +690,10 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
 
   const handleOpenQuoteComposer = (job: JobPostRecord) => {
     setQuotingJobId(job.id);
-    setQuotePriceMad(job.budgetMad);
+    setQuoteLaborMad(job.budgetMad);
+    setQuoteMaterialsMad(0);
+    setQuoteValidUntil(getDefaultQuoteValidUntilIso(7));
+    setQuoteWarranty(isAr ? 'ضمان 30 يوماً على اليد العاملة' : 'Garantie 30 jours main-d’œuvre');
     setQuoteDuration(isAr ? 'متاح خلال 24 ساعة · ساعتين عمل' : 'Disponible sous 24h · ~2h');
     setQuoteMessage('');
     setQuoteErrors({});
@@ -683,9 +703,10 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
   const handleSendQuote = async (e: React.FormEvent, job: JobPostRecord) => {
     e.preventDefault();
     setQuoteSubmitError(null);
+    const totals = computeQuotationTotals(quoteLaborMad, quoteMaterialsMad);
     const check = validateJobProposalInput(
       {
-        proposedPriceMad: quotePriceMad,
+        proposedPriceMad: totals.totalMad,
         estimatedDuration: quoteDuration,
         message: quoteMessage,
       },
@@ -699,7 +720,11 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
     setIsSendingQuote(true);
     try {
       await onSubmitJobProposal(job, {
-        proposedPriceMad: Math.round(quotePriceMad),
+        proposedPriceMad: totals.totalMad,
+        laborCostMad: totals.laborCostMad,
+        materialsCostMad: totals.materialsCostMad,
+        validUntilIso: quoteValidUntil || getDefaultQuoteValidUntilIso(7),
+        warrantyNote: quoteWarranty.trim() || undefined,
         estimatedDuration: quoteDuration.trim(),
         message: quoteMessage.trim(),
       });
@@ -855,7 +880,12 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
   }
 
   const effectiveTab: ProviderTab =
-    !ownProvider && activeTab !== 'services' && activeTab !== 'verification' ? 'card' : activeTab;
+    !ownProvider &&
+    activeTab !== 'services' &&
+    activeTab !== 'calendar' &&
+    activeTab !== 'verification'
+      ? 'card'
+      : activeTab;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7 lg:py-9 space-y-6">
@@ -985,6 +1015,14 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
               badge: 0,
               labelFr: 'Mes Services',
               labelAr: 'خدماتي',
+            },
+            {
+              id: 'calendar' as const,
+              icon: Calendar,
+              disabled: false,
+              badge: 0,
+              labelFr: 'Mon Agenda',
+              labelAr: 'جدول المواعيد',
             },
             {
               id: 'verification' as const,
@@ -1380,28 +1418,55 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
                           }}
                           className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3"
                         >
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
                               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                                {isAr ? 'السعر المقترح (د.م.)' : 'Votre tarif proposé (DH)'}
+                                {t.laborCostLabel}
                               </label>
                               <input
                                 type="number"
-                                min={50}
+                                min={0}
                                 max={100000}
-                                value={quotePriceMad}
-                                onChange={(e) => setQuotePriceMad(Number(e.target.value))}
+                                value={quoteLaborMad}
+                                onChange={(e) => setQuoteLaborMad(Number(e.target.value))}
                                 className="w-full px-3 py-1.5 text-xs font-mono-tabular bg-white border border-slate-300 rounded-lg"
                               />
-                              {quoteErrors.proposedPriceMad && (
-                                <p className="text-[11px] text-rose-600 mt-0.5">
-                                  {quoteErrors.proposedPriceMad}
-                                </p>
-                              )}
                             </div>
                             <div>
                               <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                                {isAr ? 'التوفر / مدة الإنجاز' : 'Disponibilité / Durée estimée'}
+                                {t.materialsCostLabel}
+                              </label>
+                              <input
+                                type="number"
+                                min={0}
+                                max={100000}
+                                value={quoteMaterialsMad}
+                                onChange={(e) => setQuoteMaterialsMad(Number(e.target.value))}
+                                className="w-full px-3 py-1.5 text-xs font-mono-tabular bg-white border border-slate-300 rounded-lg"
+                              />
+                            </div>
+                            <div className="flex flex-col justify-center bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-1.5">
+                              <span className="text-[10px] font-semibold text-emerald-800">
+                                {isAr ? 'الإجمالي المقترح' : 'Total devis'}
+                              </span>
+                              <span className="text-sm font-bold tabular-nums text-emerald-900">
+                                {formatMadCurrency(
+                                  computeQuotationTotals(quoteLaborMad, quoteMaterialsMad).totalMad,
+                                  lang
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                          {quoteErrors.proposedPriceMad && (
+                            <p className="text-[11px] text-rose-600">
+                              {quoteErrors.proposedPriceMad}
+                            </p>
+                          )}
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                {isAr ? 'التوفر / مدة الإنجاز' : 'Disponibilité / Durée'}
                               </label>
                               <input
                                 type="text"
@@ -1415,6 +1480,30 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
                                   {quoteErrors.estimatedDuration}
                                 </p>
                               )}
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                {t.quoteValidUntilLabel}
+                              </label>
+                              <input
+                                type="date"
+                                min={getTodayIsoDate()}
+                                value={quoteValidUntil}
+                                onChange={(e) => setQuoteValidUntil(e.target.value)}
+                                className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                                {isAr ? 'الضمان (اختياري)' : 'Garantie (optionnel)'}
+                              </label>
+                              <input
+                                type="text"
+                                maxLength={160}
+                                value={quoteWarranty}
+                                onChange={(e) => setQuoteWarranty(e.target.value)}
+                                className="w-full px-3 py-1.5 text-xs bg-white border border-slate-300 rounded-lg"
+                              />
                             </div>
                           </div>
                           <div>
@@ -2405,6 +2494,10 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
           t={t}
           onGoToCardSetup={() => setActiveTab('card')}
         />
+      )}
+
+      {effectiveTab === 'calendar' && (
+        <ProviderAvailabilityCalendar uid={firebaseUser.uid} lang={lang} t={t} />
       )}
 
       {effectiveTab === 'verification' && (

@@ -204,6 +204,9 @@ export const Navbar: React.FC = () => {
               <NavLink to={ROUTE_PATHS.PROVIDER_SERVICES} className={navLinkClass}>
                 {t.providerServicesTab}
               </NavLink>
+              <NavLink to={ROUTE_PATHS.PROVIDER_CALENDAR} className={navLinkClass}>
+                {t.providerCalendarTab}
+              </NavLink>
               <NavLink to={ROUTE_PATHS.PROVIDER_VERIFICATION} className={navLinkClass}>
                 {t.providerVerificationTab}
               </NavLink>

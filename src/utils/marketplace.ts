@@ -909,10 +909,139 @@ export interface JobProposalRecord {
   providerRating: number;
   providerVerified: boolean;
   proposedPriceMad: number;
+  laborCostMad?: number;
+  materialsCostMad?: number;
+  validUntilIso?: string;
+  warrantyNote?: string;
   estimatedDuration: string;
   message: string;
   status: ProposalStatus;
   createdAtIso: string;
+}
+
+export interface BookingTimelineEntry {
+  status: BookingStatus;
+  atIso: string;
+  note?: string;
+}
+
+export type WeekdayKey = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+export const WEEKDAY_KEYS: WeekdayKey[] = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+export interface DayAvailability {
+  enabled: boolean;
+  slots: TimeSlot[];
+}
+
+export interface ProviderWeeklySchedule {
+  uid: string;
+  days: Record<WeekdayKey, DayAvailability>;
+  blockedDates: string[];
+  acceptsUrgentSameDay: boolean;
+  updatedAtIso?: string;
+}
+
+export function createDefaultWeeklySchedule(uid = ''): ProviderWeeklySchedule {
+  return {
+    uid,
+    days: {
+      mon: { enabled: true, slots: ['09:00 - 12:00', '14:00 - 17:00'] },
+      tue: { enabled: true, slots: ['09:00 - 12:00', '14:00 - 17:00'] },
+      wed: { enabled: true, slots: ['09:00 - 12:00', '14:00 - 17:00'] },
+      thu: { enabled: true, slots: ['09:00 - 12:00', '14:00 - 17:00'] },
+      fri: { enabled: true, slots: ['09:00 - 12:00', '14:00 - 17:00'] },
+      sat: { enabled: true, slots: ['09:00 - 12:00'] },
+      sun: { enabled: false, slots: [] },
+    },
+    blockedDates: [],
+    acceptsUrgentSameDay: true,
+  };
+}
+
+/**
+ * Pure itemized quotation calculator ensuring integer MAD consistency:
+ * totalMad === laborCostMad + materialsCostMad.
+ */
+export function computeQuotationTotals(laborCostMad: number, materialsCostMad: number): {
+  laborCostMad: number;
+  materialsCostMad: number;
+  totalMad: number;
+} {
+  const labor = Math.max(0, Math.round(Number(laborCostMad) || 0));
+  const materials = Math.max(0, Math.round(Number(materialsCostMad) || 0));
+  return {
+    laborCostMad: labor,
+    materialsCostMad: materials,
+    totalMad: labor + materials,
+  };
+}
+
+export function isQuotationExpired(
+  validUntilIso: string | undefined,
+  todayIso = getTodayIsoDate()
+): boolean {
+  if (!validUntilIso || validUntilIso.length < 8) return false;
+  return validUntilIso.slice(0, 10) < todayIso.slice(0, 10);
+}
+
+export function getDefaultQuoteValidUntilIso(daysAhead = 7): string {
+  const d = new Date();
+  d.setDate(d.getDate() + daysAhead);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Deterministic lock ID preventing double-booking a Maâlem on the exact same date & time slot.
+ */
+export function buildScheduleLockId(
+  providerId: string,
+  dateIso: string,
+  timeSlot: TimeSlot
+): string {
+  const safeDate = dateIso.replace(/[^0-9]/g, '').slice(0, 8);
+  const safeSlot = timeSlot.replace(/[^0-9]/g, '');
+  return `${providerId}_${safeDate}_${safeSlot}`;
+}
+
+/**
+ * Checks whether an active (non-cancelled, non-completed) booking already occupies a provider's slot.
+ */
+export function hasScheduleConflict(
+  existingBookings: Pick<BookingRecord, 'providerId' | 'preferredDate' | 'preferredTimeSlot' | 'status'>[],
+  candidate: { providerId: string; preferredDate: string; preferredTimeSlot: TimeSlot }
+): boolean {
+  return existingBookings.some(
+    (b) =>
+      b.providerId === candidate.providerId &&
+      b.preferredDate === candidate.preferredDate &&
+      b.preferredTimeSlot === candidate.preferredTimeSlot &&
+      (b.status === 'pending' || b.status === 'accepted' || b.status === 'in_progress')
+  );
+}
+
+const JS_DAY_TO_WEEKDAY: WeekdayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+/**
+ * Evaluates whether a provider's weekly calendar allows booking a specific date & time slot.
+ */
+export function isProviderSlotAvailable(
+  schedule: ProviderWeeklySchedule | null | undefined,
+  dateIso: string,
+  timeSlot: TimeSlot
+): boolean {
+  if (!schedule) return true;
+  const cleanDate = dateIso.slice(0, 10);
+  if (schedule.blockedDates.includes(cleanDate)) return false;
+  const parsed = new Date(`${cleanDate}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return true;
+  const dayKey = JS_DAY_TO_WEEKDAY[parsed.getUTCDay()];
+  const dayCfg = schedule.days[dayKey];
+  if (!dayCfg || !dayCfg.enabled) return false;
+  return dayCfg.slots.includes(timeSlot);
 }
 
 export const CATEGORY_SUGGESTED_SKILLS: Record<ServiceCategory, string[]> = {

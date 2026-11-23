@@ -56,6 +56,7 @@ vi.mock('../firebase', () => ({
 
 vi.mock('firebase/firestore', () => ({
   collection: vi.fn(),
+  doc: vi.fn(),
   query: vi.fn(),
   where: vi.fn(),
   limit: vi.fn(),
@@ -161,6 +162,7 @@ function createMockContext(
     cancelJobPost: vi.fn().mockResolvedValue(undefined),
     submitJobProposal: vi.fn().mockResolvedValue(null),
     withdrawJobProposal: vi.fn().mockResolvedValue(undefined),
+    rejectJobProposal: vi.fn().mockResolvedValue(undefined),
     acceptProposalAndCreateBooking: vi.fn().mockResolvedValue(null),
     clientActiveCount: 0,
     providerPendingCount: 0,
@@ -483,11 +485,11 @@ describe('Phase 1 Routing Acceptance Tests (Spec §2B)', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(TRANSLATIONS.fr.termsConsentRequiredError);
   });
 
-  it('allows authenticated providers to directly open /provider/services and /provider/verification', async () => {
+  it('allows authenticated providers to directly open /provider/services, /provider/calendar, and /provider/verification', async () => {
     const providerUser = createMockUser('prov-p2', 'maalem-p2@example.ma', true);
     const providerProfile = createMockProfile('prov-p2', 'provider');
 
-    for (const p of ['/provider/services', '/provider/verification']) {
+    for (const p of ['/provider/services', '/provider/calendar', '/provider/verification']) {
       const { unmount } = renderAtRoute([p], {
         firebaseUser: providerUser,
         userProfile: providerProfile,

@@ -96,6 +96,7 @@ export interface MarketplaceContextValue {
   cancelJobPost: ReturnType<typeof useJobPosts>['cancelJobPost'];
   submitJobProposal: ReturnType<typeof useJobPosts>['submitJobProposal'];
   withdrawJobProposal: ReturnType<typeof useJobPosts>['withdrawJobProposal'];
+  rejectJobProposal: ReturnType<typeof useJobPosts>['rejectJobProposal'];
   acceptProposalAndCreateBooking: ReturnType<typeof useJobPosts>['acceptProposalAndCreateBooking'];
 
   // Badge Counts
@@ -229,6 +230,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     cancelJobPost,
     submitJobProposal,
     withdrawJobProposal,
+    rejectJobProposal,
     acceptProposalAndCreateBooking,
   } = useJobPosts({
     firebaseUser,
@@ -446,6 +448,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       cancelJobPost,
       submitJobProposal,
       withdrawJobProposal,
+      rejectJobProposal,
       acceptProposalAndCreateBooking,
       clientActiveCount,
       providerPendingCount,
@@ -527,6 +530,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       cancelJobPost,
       submitJobProposal,
       withdrawJobProposal,
+      rejectJobProposal,
       acceptProposalAndCreateBooking,
       clientActiveCount,
       providerPendingCount,

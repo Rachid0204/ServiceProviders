@@ -37,6 +37,7 @@ export const ROUTE_PATHS = {
   PROVIDER_MISSIONS: '/provider/missions',
   PROVIDER_CARD: '/provider/card',
   PROVIDER_SERVICES: '/provider/services',
+  PROVIDER_CALENDAR: '/provider/calendar',
   PROVIDER_VERIFICATION: '/provider/verification',
   PROVIDER_EARNINGS: '/provider/earnings',
 
@@ -125,6 +126,7 @@ export function getProviderTabFromPathname(pathname: string): ProviderTab {
   if (pathname.startsWith(ROUTE_PATHS.PROVIDER_MISSIONS)) return 'missions';
   if (pathname.startsWith(ROUTE_PATHS.PROVIDER_CARD)) return 'card';
   if (pathname.startsWith(ROUTE_PATHS.PROVIDER_SERVICES)) return 'services';
+  if (pathname.startsWith(ROUTE_PATHS.PROVIDER_CALENDAR)) return 'calendar';
   if (pathname.startsWith(ROUTE_PATHS.PROVIDER_VERIFICATION)) return 'verification';
   if (pathname.startsWith(ROUTE_PATHS.PROVIDER_EARNINGS)) return 'earnings';
   return 'jobs';
@@ -138,6 +140,8 @@ export function getPathForProviderTab(tab: ProviderTab): string {
       return ROUTE_PATHS.PROVIDER_CARD;
     case 'services':
       return ROUTE_PATHS.PROVIDER_SERVICES;
+    case 'calendar':
+      return ROUTE_PATHS.PROVIDER_CALENDAR;
     case 'verification':
       return ROUTE_PATHS.PROVIDER_VERIFICATION;
     case 'earnings':
