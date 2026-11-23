@@ -271,39 +271,6 @@ export const AdminBookingsSection: React.FC<AdminBookingsSectionProps> = ({
                       </td>
                       <td className="py-3 px-4 text-end whitespace-nowrap">
                         <div className="inline-flex items-center gap-1.5">
-                          {b.paymentMethod === 'cmi_escrow' &&
-                            b.paymentStatus === 'escrow_held' && (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => onReleaseEscrow(b)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-slate-900 bg-amber-400 hover:bg-amber-500 rounded-lg transition-colors cursor-pointer"
-                                >
-                                  <CreditCard className="w-3.5 h-3.5" />
-                                  <span>
-                                    {isAr
-                                      ? `صرف (${Math.max(0, 100 - platformFeePct)}/${platformFeePct})`
-                                      : `Libérer (${Math.max(0, 100 - platformFeePct)}/${platformFeePct})`}
-                                  </span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => onRefundEscrow(b)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors cursor-pointer"
-                                >
-                                  <RotateCcw className="w-3.5 h-3.5" />
-                                  <span>{isAr ? 'إرجاع 100%' : 'Rembourser'}</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => onDisputeSplitEscrow(b)}
-                                  className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 rounded-lg transition-colors cursor-pointer"
-                                >
-                                  <Scale className="w-3.5 h-3.5" />
-                                  <span>{isAr ? 'نزاع 50/50' : 'Litige 50/50'}</span>
-                                </button>
-                              </>
-                            )}
                           <button
                             type="button"
                             onClick={() => onOpenChat(b)}

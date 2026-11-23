@@ -257,13 +257,20 @@ export function useBookings(params: {
       );
     }
 
+    if (payload.paymentMethod !== 'cash_on_completion') {
+      throw new Error(
+        lang === 'ar'
+          ? 'الدفع الإلكتروني / ضمان CMI غير مفعل حالياً. يتوفر فقط الدفع نقداً عند انتهاء الخدمة.'
+          : 'Le paiement CMI / séquestre en ligne est désactivé. Seul le paiement en espèces à la fin de la prestation (COD) est autorisé.'
+      );
+    }
+
     const generated = generateBookingIds();
     const bookingId = payload.bookingId || generated.bookingId;
     const bookingRef = payload.bookingRef || generated.bookingRef;
     const providerDisplayName =
       lang === 'ar' ? payload.provider.fullNameAr : payload.provider.fullNameFr;
-    const paymentStatus: PaymentStatus =
-      payload.paymentMethod === 'cmi_escrow' ? 'escrow_held' : 'unpaid_cod';
+    const paymentStatus: PaymentStatus = 'unpaid_cod';
 
     const safePhotoUrl = isSafeImageUrl(payload.problemPhotoUrl)
       ? payload.problemPhotoUrl
@@ -287,7 +294,7 @@ export function useBookings(params: {
       ...(safePhotoUrl ? { problemPhotoUrl: safePhotoUrl } : {}),
       preferredDate: payload.preferredDate,
       preferredTimeSlot: payload.preferredTimeSlot,
-      paymentMethod: payload.paymentMethod,
+      paymentMethod: 'cash_on_completion' as PaymentMethod,
       paymentStatus,
       estimatedMad: Math.round(payload.estimatedMad),
       status: 'pending',
@@ -441,38 +448,13 @@ export function useBookings(params: {
     }
   };
 
-  // Client confirms job completion & releases CMI Escrow (respecting configured platformFeePct)
-  const clientConfirmAndReleaseEscrow = async (bookingId: string) => {
-    setBookingActionError(null);
-    if (!firebaseUser) return;
-    const target = bookings.find((b) => b.id === bookingId);
-    if (!target || target.clientId !== firebaseUser.uid) return;
-    if (
-      target.paymentMethod !== 'cmi_escrow' ||
-      target.paymentStatus !== 'escrow_held' ||
-      (target.status !== 'completed' && target.status !== 'reviewed')
-    ) {
-      return;
-    }
-
-    const split = calculateEscrowSplit(target.estimatedMad, platformFeePct, 100);
-    const path = `bookings/${bookingId}`;
-    try {
-      await updateDoc(doc(db, 'bookings', bookingId), {
-        paymentStatus: 'paid',
-        providerPayoutMad: split.providerPayoutMad,
-        platformFeeMad: split.platformFeeMad,
-        refundedClientMad: 0,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (err) {
-      reportFirestoreError(err, OperationType.UPDATE, path);
-      setBookingActionError(
-        lang === 'ar'
-          ? 'تعذر صرف ضمان CMI. يرجى المحاولة مجدداً.'
-          : 'Impossible de libérer le séquestre CMI. Veuillez réessayer.'
-      );
-    }
+  // Simulated CMI escrow release is disabled while no certified CMI payment gateway is connected (AUD-002)
+  const clientConfirmAndReleaseEscrow = async (_bookingId: string) => {
+    setBookingActionError(
+      lang === 'ar'
+        ? 'بوابة الدفع الإلكتروني CMI غير مفعلة حالياً. تتم التسوية نقداً عند انتهاء الخدمة.'
+        : 'La passerelle CMI n’est pas activée. Le règlement s’effectue uniquement en espèces à la fin de la prestation.'
+    );
   };
 
   // Cancellation with explicit reason + automatic 100% CMI escrow refund when escrow_held

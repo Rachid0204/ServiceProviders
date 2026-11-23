@@ -416,3 +416,78 @@ export function computeProviderProfileCompleteness(
     },
   };
 }
+
+/**
+ * Evaluates whether a user profile has been suspended by an administrator (AUD-003).
+ */
+export function isSuspendedUserProfile(
+  profile: Pick<UserProfileRecord, 'accountStatus'> | null | undefined
+): boolean {
+  return Boolean(profile && profile.accountStatus === 'suspended');
+}
+
+/**
+ * Preserves protected fields (`accountStatus`, `termsAcceptedAt`, `verifiedBadge`, `createdAt`)
+ * when writing `/users/{uid}` so profile saves never fail `affectedKeys().hasOnly(...)` in `firestore.rules` (AUD-004).
+ */
+export function preserveProtectedUserFields(
+  target: Record<string, unknown>,
+  existingData: Record<string, unknown> | null | undefined,
+  fallbackCreatedAt: unknown
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {
+    ...target,
+    verifiedBadge: existingData ? Boolean(existingData.verifiedBadge) : Boolean(target.verifiedBadge),
+    createdAt: existingData && 'createdAt' in existingData ? existingData.createdAt : fallbackCreatedAt,
+  };
+
+  if (existingData && ('accountStatus' in existingData) && existingData.accountStatus !== undefined) {
+    result.accountStatus = existingData.accountStatus;
+  } else {
+    delete result.accountStatus;
+  }
+
+  if (existingData && ('termsAcceptedAt' in existingData) && existingData.termsAcceptedAt !== undefined) {
+    result.termsAcceptedAt = existingData.termsAcceptedAt;
+  } else {
+    delete result.termsAcceptedAt;
+  }
+
+  return result;
+}
+
+/**
+ * Preserves protected provider fields (`completedJobs`, `lastCompletedBookingId`, `lastReviewBookingId`)
+ * so updating `/providers/{uid}` never adds an unapproved `completedJobs` key when it was absent on `existing()` (AUD-004).
+ */
+export function preserveProtectedProviderFields(
+  target: Record<string, unknown>,
+  existingProvider: Record<string, unknown> | null | undefined
+): Record<string, unknown> {
+  const result: Record<string, unknown> = { ...target };
+
+  if (existingProvider) {
+    if ('completedJobs' in existingProvider && typeof existingProvider.completedJobs === 'number') {
+      result.completedJobs = Math.round(existingProvider.completedJobs);
+    } else {
+      delete result.completedJobs;
+    }
+    if (typeof existingProvider.lastCompletedBookingId === 'string') {
+      result.lastCompletedBookingId = existingProvider.lastCompletedBookingId;
+    } else {
+      delete result.lastCompletedBookingId;
+    }
+    if (typeof existingProvider.lastReviewBookingId === 'string') {
+      result.lastReviewBookingId = existingProvider.lastReviewBookingId;
+    } else {
+      delete result.lastReviewBookingId;
+    }
+  } else {
+    result.completedJobs = 0;
+    delete result.lastCompletedBookingId;
+    delete result.lastReviewBookingId;
+  }
+
+  return result;
+}
+

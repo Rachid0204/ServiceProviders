@@ -28,6 +28,8 @@ import {
   persistSignupRoleIntent,
   readSignupRoleIntent,
   clearSignupRoleIntent,
+  preserveProtectedUserFields,
+  preserveProtectedProviderFields,
 } from '../utils/authHelpers';
 
 const PROFILE_STORAGE_KEY = 'moul_lkhedma_profile';
@@ -254,28 +256,39 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
         getDoc(userRef),
         getDoc(providerRef),
       ]);
-      let createdAtVal: unknown = serverTimestamp();
+      const existingData = existingSnap.exists() ? existingSnap.data() : null;
+      if (existingData?.accountStatus === 'suspended') {
+        throw new Error(
+          profileInput.languagePref === 'ar'
+            ? 'تم تعليق هذا الحساب مؤقتاً من طرف الإدارة.'
+            : 'Ce compte est actuellement suspendu par l’administration.'
+        );
+      }
 
-      if (existingSnap.exists()) {
-        const existingData = existingSnap.data();
+      if (existingData) {
         verifiedBadgeVal = Boolean(existingData.verifiedBadge);
-        createdAtVal = existingData.createdAt;
+        if (existingData.accountStatus === 'active' || existingData.accountStatus === 'suspended') {
+          record.accountStatus = existingData.accountStatus;
+        }
+        if ('termsAcceptedAt' in existingData && existingData.termsAcceptedAt !== undefined) {
+          record.termsAcceptedAt = existingData.termsAcceptedAt;
+        }
       }
 
       record.verifiedBadge = verifiedBadgeVal;
       const existingProvider = providerSnap.exists() ? providerSnap.data() : null;
 
-      const batch = writeBatch(db);
-      batch.set(
-        userRef,
+      const userDocPayload = preserveProtectedUserFields(
         {
           ...record,
-          verifiedBadge: verifiedBadgeVal,
-          createdAt: createdAtVal,
           updatedAt: serverTimestamp(),
         },
-        { merge: false }
+        existingData,
+        serverTimestamp()
       );
+
+      const batch = writeBatch(db);
+      batch.set(userRef, userDocPayload, { merge: false });
 
       if (profileInput.role === 'provider' || profileInput.role === 'both') {
         const cat: ServiceCategory =
@@ -321,7 +334,7 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
             ? existingProvider.bioAr
             : bioText;
 
-        const providerPayload: Record<string, unknown> = {
+        const baseProviderPayload: Record<string, unknown> = {
           uid: firebaseUser.uid,
           fullNameFr,
           fullNameAr,
@@ -346,10 +359,6 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
             ? Boolean(existingProvider.verifiedBadge)
             : verifiedBadgeVal,
           phone: profileInput.phone,
-          completedJobs:
-            typeof existingProvider?.completedJobs === 'number'
-              ? Math.round(existingProvider.completedJobs)
-              : 0,
           location: {
             lat:
               existingProvider?.location?.city === profileInput.city &&
@@ -369,17 +378,16 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
         };
 
         if (typeof existingProvider?.diplomaFr === 'string' && existingProvider.diplomaFr) {
-          providerPayload.diplomaFr = existingProvider.diplomaFr;
+          baseProviderPayload.diplomaFr = existingProvider.diplomaFr;
         }
         if (typeof existingProvider?.diplomaAr === 'string' && existingProvider.diplomaAr) {
-          providerPayload.diplomaAr = existingProvider.diplomaAr;
+          baseProviderPayload.diplomaAr = existingProvider.diplomaAr;
         }
-        if (typeof existingProvider?.lastCompletedBookingId === 'string') {
-          providerPayload.lastCompletedBookingId = existingProvider.lastCompletedBookingId;
-        }
-        if (typeof existingProvider?.lastReviewBookingId === 'string') {
-          providerPayload.lastReviewBookingId = existingProvider.lastReviewBookingId;
-        }
+
+        const providerPayload = preserveProtectedProviderFields(
+          baseProviderPayload,
+          existingProvider
+        );
 
         batch.set(providerRef, providerPayload, { merge: false });
       } else if (existingProvider && existingProvider.isAvailableNow) {
@@ -431,6 +439,14 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
       const existingUser = existingUserSnap.exists() ? existingUserSnap.data() : null;
       const existingProvider = existingProviderSnap.exists() ? existingProviderSnap.data() : null;
 
+      if (existingUser?.accountStatus === 'suspended') {
+        throw new Error(
+          input.languagePref === 'ar'
+            ? 'تم تعليق هذا الحساب مؤقتاً من طرف الإدارة.'
+            : 'Ce compte est actuellement suspendu par l’administration.'
+        );
+      }
+
       const verifiedBadgeVal = Boolean(
         existingProvider?.verifiedBadge ?? existingUser?.verifiedBadge ?? false
       );
@@ -481,6 +497,12 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
         specialty: input.category,
         hourlyRateMad: Math.max(50, Math.min(50000, Math.round(input.hourlyRateMAD))),
         bio: trimmedBio.slice(0, 500),
+        ...(existingUser?.accountStatus === 'active' || existingUser?.accountStatus === 'suspended'
+          ? { accountStatus: existingUser.accountStatus }
+          : {}),
+        ...(existingUser && 'termsAcceptedAt' in existingUser && existingUser.termsAcceptedAt !== undefined
+          ? { termsAcceptedAt: existingUser.termsAcceptedAt }
+          : {}),
       };
 
       const fullNameFr =
@@ -504,7 +526,7 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
           ? existingProvider.bioAr
           : trimmedBio;
 
-      const providerPayload: Record<string, unknown> = {
+      const baseProviderPayload: Record<string, unknown> = {
         uid,
         fullNameFr,
         fullNameAr,
@@ -521,10 +543,6 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
         isAvailableNow: Boolean(input.isAvailableNow),
         verifiedBadge: verifiedBadgeVal,
         phone: input.phone,
-        completedJobs:
-          typeof existingProvider?.completedJobs === 'number'
-            ? Math.round(existingProvider.completedJobs)
-            : 0,
         location: {
           lat: safeLat,
           lng: safeLng,
@@ -537,34 +555,33 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
 
       if (trimmedDiploma) {
         if (input.languagePref === 'ar') {
-          providerPayload.diplomaAr = trimmedDiploma;
+          baseProviderPayload.diplomaAr = trimmedDiploma;
           if (typeof existingProvider?.diplomaFr === 'string' && existingProvider.diplomaFr) {
-            providerPayload.diplomaFr = existingProvider.diplomaFr;
+            baseProviderPayload.diplomaFr = existingProvider.diplomaFr;
           }
         } else {
-          providerPayload.diplomaFr = trimmedDiploma;
+          baseProviderPayload.diplomaFr = trimmedDiploma;
           if (typeof existingProvider?.diplomaAr === 'string' && existingProvider.diplomaAr) {
-            providerPayload.diplomaAr = existingProvider.diplomaAr;
+            baseProviderPayload.diplomaAr = existingProvider.diplomaAr;
           }
         }
       }
-      if (typeof existingProvider?.lastCompletedBookingId === 'string') {
-        providerPayload.lastCompletedBookingId = existingProvider.lastCompletedBookingId;
-      }
-      if (typeof existingProvider?.lastReviewBookingId === 'string') {
-        providerPayload.lastReviewBookingId = existingProvider.lastReviewBookingId;
-      }
 
-      const batch = writeBatch(db);
-      batch.set(
-        userRef,
+      const userDocPayload = preserveProtectedUserFields(
         {
           ...userRecord,
-          createdAt: existingUser ? existingUser.createdAt : serverTimestamp(),
           updatedAt: serverTimestamp(),
         },
-        { merge: false }
+        existingUser,
+        serverTimestamp()
       );
+      const providerPayload = preserveProtectedProviderFields(
+        baseProviderPayload,
+        existingProvider
+      );
+
+      const batch = writeBatch(db);
+      batch.set(userRef, userDocPayload, { merge: false });
       batch.set(providerRef, providerPayload, { merge: false });
       await batch.commit();
 

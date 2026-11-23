@@ -145,6 +145,7 @@ export interface UserProfileRecord {
   hourlyRateMad?: number;
   bio?: string;
   accountStatus?: 'active' | 'suspended';
+  termsAcceptedAt?: unknown;
   createdAt?: unknown;
   updatedAt?: unknown;
 }
@@ -1068,8 +1069,101 @@ export type NotificationType =
   | 'quote_rejected'
   | 'message_received'
   | 'review_received'
+  | 'dispute_opened'
+  | 'dispute_resolved'
   | 'kyc_updated'
   | 'system';
+
+export interface ProviderEarningsBreakdown {
+  cashCollectedDirectlyMad: number;
+  platformSettledEscrowMad: number;
+  escrowHeldMad: number;
+  pendingWithdrawalsMad: number;
+  approvedWithdrawalsMad: number;
+  platformHeldWithdrawableMad: number;
+  hasPendingWithdrawal: boolean;
+  canRequestWithdrawal: boolean;
+}
+
+/**
+ * Computes a provider's financial metrics while strictly separating cash collected directly
+ * on site (COD) from funds actually held by the platform (AUD-001).
+ * While CMI escrow is disabled (cmiEscrowEnabled = false), platform-held withdrawable balance is always 0 MAD.
+ */
+export function computeProviderEarningsBreakdown(params: {
+  bookings: Pick<
+    BookingRecord,
+    'paymentMethod' | 'paymentStatus' | 'estimatedMad' | 'providerPayoutMad'
+  >[];
+  withdrawals: { amountMad: number; status: 'pending' | 'approved' | 'frozen' | 'rejected' }[];
+  platformFeePct: number;
+  minWithdrawalMad: number;
+  cmiEscrowEnabled?: boolean;
+}): ProviderEarningsBreakdown {
+  const {
+    bookings,
+    withdrawals,
+    platformFeePct,
+    minWithdrawalMad,
+    cmiEscrowEnabled = false,
+  } = params;
+
+  let cashCollectedDirectlyMad = 0;
+  let platformSettledEscrowMad = 0;
+  let escrowHeldMad = 0;
+
+  for (const b of bookings) {
+    if (b.paymentMethod === 'cash_on_completion') {
+      if (b.paymentStatus === 'paid') {
+        cashCollectedDirectlyMad += Math.max(0, Math.round(b.estimatedMad || 0));
+      }
+    } else if (cmiEscrowEnabled && b.paymentMethod === 'cmi_escrow') {
+      const split = calculateEscrowSplit(b.estimatedMad, platformFeePct, 100);
+      if (b.paymentStatus === 'paid') {
+        platformSettledEscrowMad += Math.max(
+          0,
+          Math.round(b.providerPayoutMad ?? split.providerPayoutMad)
+        );
+      } else if (b.paymentStatus === 'escrow_held') {
+        escrowHeldMad += Math.max(0, Math.round(split.providerPayoutMad));
+      }
+    }
+  }
+
+  let pendingWithdrawalsMad = 0;
+  let approvedWithdrawalsMad = 0;
+  let hasPendingWithdrawal = false;
+
+  for (const w of withdrawals) {
+    if (w.status === 'pending') {
+      hasPendingWithdrawal = true;
+      pendingWithdrawalsMad += Math.max(0, Math.round(w.amountMad || 0));
+    } else if (w.status === 'approved') {
+      approvedWithdrawalsMad += Math.max(0, Math.round(w.amountMad || 0));
+    }
+  }
+
+  const platformHeldWithdrawableMad = cmiEscrowEnabled
+    ? Math.max(0, platformSettledEscrowMad - pendingWithdrawalsMad - approvedWithdrawalsMad)
+    : 0;
+
+  const minAllowed = Math.max(100, Math.round(minWithdrawalMad || 100));
+  const canRequestWithdrawal =
+    cmiEscrowEnabled &&
+    !hasPendingWithdrawal &&
+    platformHeldWithdrawableMad >= minAllowed;
+
+  return {
+    cashCollectedDirectlyMad,
+    platformSettledEscrowMad,
+    escrowHeldMad,
+    pendingWithdrawalsMad,
+    approvedWithdrawalsMad,
+    platformHeldWithdrawableMad,
+    hasPendingWithdrawal,
+    canRequestWithdrawal,
+  };
+}
 
 export interface NotificationRecord {
   id: string;

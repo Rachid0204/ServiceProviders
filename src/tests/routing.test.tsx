@@ -418,6 +418,26 @@ describe('Phase 1 Routing Acceptance Tests (Spec §2B)', () => {
     expect(await screen.findByTestId('customer-dashboard-page')).toBeInTheDocument();
     unmountClient();
 
+    const { unmount: unmountSuspendedClient } = renderAtRoute(['/customer/dashboard'], {
+      firebaseUser: doubleUser,
+      userProfile: { ...doubleProfile, accountStatus: 'suspended' },
+      isVerified: true,
+      hasAdminAccess: false,
+    });
+    expect(await screen.findByTestId('suspended-account-screen')).toBeInTheDocument();
+    expect(screen.queryByTestId('customer-dashboard-page')).not.toBeInTheDocument();
+    unmountSuspendedClient();
+
+    const { unmount: unmountSuspendedProfile } = renderAtRoute(['/profile'], {
+      firebaseUser: doubleUser,
+      userProfile: { ...doubleProfile, accountStatus: 'suspended' },
+      isVerified: true,
+      hasAdminAccess: false,
+    });
+    expect(await screen.findByTestId('suspended-account-screen')).toBeInTheDocument();
+    unmountSuspendedProfile();
+
+
     const { unmount: unmountProvider } = renderAtRoute(['/provider/dashboard'], {
       firebaseUser: doubleUser,
       userProfile: doubleProfile,

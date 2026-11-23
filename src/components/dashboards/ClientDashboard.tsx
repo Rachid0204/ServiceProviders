@@ -1077,21 +1077,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                         {booking.description}
                       </p>
 
-                      {booking.paymentMethod === 'cmi_escrow' &&
-                        booking.paymentStatus === 'paid' && (
-                          <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-900 flex items-center justify-between gap-2">
-                            <span className="font-semibold">
-                              {isAr
-                                ? `تم صرف ضمان CMI (${providerSharePct}% / ${platformFeePct}%)`
-                                : `Séquestre CMI libéré (${providerSharePct}% / ${platformFeePct}%)`}
-                            </span>
-                            <span className="font-mono-tabular font-bold">
-                              {formatMadCurrency(providerPayout, lang)} ·{' '}
-                              {formatMadCurrency(platformFee, lang)}
-                            </span>
-                          </div>
-                        )}
-
                       {booking.status === 'reviewed' && booking.reviewRating && (
                         <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg text-xs space-y-1">
                           <div className="flex items-center justify-between">
@@ -1148,21 +1133,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                       </div>
 
                       <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-                        {booking.paymentMethod === 'cmi_escrow' &&
-                          booking.paymentStatus === 'escrow_held' &&
-                          (booking.status === 'completed' || booking.status === 'reviewed') && (
-                            <button
-                              type="button"
-                              onClick={() => onConfirmAndReleaseEscrow(booking.id)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg cursor-pointer"
-                            >
-                              <ShieldCheck className="w-3.5 h-3.5" />
-                              <span>
-                                {isAr ? 'تأكيد وصرف ضمان CMI' : 'Confirmer & Libérer CMI'}
-                              </span>
-                            </button>
-                          )}
-
                         {canTransitionBookingStatus(booking.status, 'reviewed', 'client') && (
                           <button
                             type="button"

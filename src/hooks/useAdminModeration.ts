@@ -355,7 +355,7 @@ export function useAdminModeration(params: {
           void dispatchUserNotification({
             recipientUserId: recipientUid,
             actorUserId: firebaseUser.uid,
-            type: 'system',
+            type: 'dispute_resolved',
             titleFr: `Litige #${dispute.bookingRef} : ${nextStatus}`,
             titleAr: `تحديث ملف النزاع #${dispute.bookingRef}`,
             bodyFr: safeSummary || `Le statut de votre dossier de médiation est désormais : ${nextStatus}.`,

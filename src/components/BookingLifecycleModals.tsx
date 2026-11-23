@@ -58,22 +58,9 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   onOpenCancel,
   onOpenReview,
   onOpenDispute,
-  onConfirmAndReleaseEscrow,
+  onConfirmAndReleaseEscrow: _onConfirmAndReleaseEscrow,
 }) => {
   const isAr = lang === 'ar';
-  const [isReleasing, setIsReleasing] = useState(false);
-
-  const providerSharePct = Math.max(0, 100 - platformFeePct);
-  const split = calculateEscrowSplit(booking.estimatedMad, platformFeePct, 100);
-  const providerPayout = booking.providerPayoutMad ?? split.providerPayoutMad;
-  const platformFee = booking.platformFeeMad ?? split.platformFeeMad;
-  const refundedClient = booking.refundedClientMad ?? 0;
-
-  const canReleaseEscrow =
-    activeRole !== 'provider' &&
-    booking.paymentMethod === 'cmi_escrow' &&
-    booking.paymentStatus === 'escrow_held' &&
-    (booking.status === 'completed' || booking.status === 'reviewed');
 
   const canReschedule =
     booking.status === 'pending' || booking.status === 'accepted';
@@ -85,15 +72,6 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
     'cancelled',
     effectiveActor
   );
-
-  const handleRelease = async () => {
-    setIsReleasing(true);
-    try {
-      await onConfirmAndReleaseEscrow(booking.id);
-    } finally {
-      setIsReleasing(false);
-    }
-  };
 
   return (
     <div
@@ -108,7 +86,7 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h2 id="booking-detail-title" className="text-base font-bold text-slate-900">
-                {isAr ? 'تفاصيل الحجز والتسوية المالية' : 'Détail de la Réservation & Séquestre'}
+                {isAr ? 'تفاصيل الحجز والدفع' : 'Détail de la Réservation'}
               </h2>
               <span className="text-xs font-mono-tabular font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md">
                 #{booking.bookingRef}
@@ -185,76 +163,21 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           </div>
         )}
 
-        {/* Financial & CMI Escrow Breakdown Card */}
-        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 text-xs">
-          <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+        {/* Cash on Completion Financial Summary Card */}
+        <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 font-bold text-slate-900">
-              {booking.paymentMethod === 'cmi_escrow' ? (
-                <CreditCard className="w-4 h-4 text-amber-700" />
-              ) : (
-                <Banknote className="w-4 h-4 text-emerald-700" />
-              )}
+              <Banknote className="w-4 h-4 text-emerald-700" />
               <span>
-                {booking.paymentMethod === 'cmi_escrow'
-                  ? isAr
-                    ? `تفصيل ضمان CMI وتوزيع العمولة (${providerSharePct}% / ${platformFeePct}%)`
-                    : `Ventilation Séquestre CMI (${providerSharePct}% Maâlem / ${platformFeePct}% Plateforme)`
-                  : isAr
-                  ? 'الدفع نقداً عند انتهاء الخدمة'
-                  : 'Règlement Espèces fin de chantier (COD)'}
+                {isAr
+                  ? 'الدفع نقداً عند انتهاء الخدمة (0% عمولة)'
+                  : 'Règlement Espèces fin de chantier (COD · 0% frais)'}
               </span>
             </div>
             <span className="font-mono-tabular font-bold text-sm text-slate-900">
               {formatMadCurrency(booking.estimatedMad, lang)}
             </span>
           </div>
-
-          {booking.paymentMethod === 'cmi_escrow' && (
-            <div className="grid grid-cols-3 gap-2 pt-1">
-              <div className="p-2.5 bg-white border border-slate-200 rounded-lg">
-                <div className="text-[11px] text-slate-500">
-                  {isAr ? `حصة المعلم (${providerSharePct}%)` : `Part Maâlem (${providerSharePct}%)`}
-                </div>
-                <div className="font-mono-tabular font-bold text-emerald-700 text-sm mt-0.5">
-                  {formatMadCurrency(providerPayout, lang)}
-                </div>
-              </div>
-              <div className="p-2.5 bg-white border border-slate-200 rounded-lg">
-                <div className="text-[11px] text-slate-500">
-                  {isAr ? `عمولة المنصة (${platformFeePct}%)` : `Frais plateforme (${platformFeePct}%)`}
-                </div>
-                <div className="font-mono-tabular font-bold text-slate-900 text-sm mt-0.5">
-                  {formatMadCurrency(platformFee, lang)}
-                </div>
-              </div>
-              <div className="p-2.5 bg-white border border-slate-200 rounded-lg">
-                <div className="text-[11px] text-slate-500">
-                  {isAr ? 'مسترجع للزبون' : 'Remboursé client'}
-                </div>
-                <div className="font-mono-tabular font-bold text-amber-700 text-sm mt-0.5">
-                  {formatMadCurrency(refundedClient, lang)}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {canReleaseEscrow && (
-            <div className="pt-2">
-              <button
-                type="button"
-                disabled={isReleasing}
-                onClick={handleRelease}
-                className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors cursor-pointer"
-              >
-                <ShieldCheck className="w-4 h-4" />
-                <span>
-                  {isAr
-                    ? `تأكيد الإنجاز وصرف ضمان CMI (${formatMadCurrency(providerPayout, lang)} للمعلم)`
-                    : `Confirmer & Libérer Séquestre CMI (${formatMadCurrency(providerPayout, lang)} au Maâlem)`}
-                </span>
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Footer Actions */}
@@ -389,9 +312,6 @@ export const CancellationModal: React.FC<CancellationModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const isEscrowRefundable =
-    booking.paymentMethod === 'cmi_escrow' && booking.paymentStatus === 'escrow_held';
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitError(null);
@@ -437,22 +357,6 @@ export const CancellationModal: React.FC<CancellationModalProps> = ({
             <X className="w-4 h-4" />
           </button>
         </div>
-
-        {isEscrowRefundable && (
-          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-bold">
-                {isAr ? 'استرجاع تلقائي 100% لضمان CMI: ' : 'Remboursement automatique CMI 100% : '}
-              </span>
-              <span>
-                {isAr
-                  ? `سيتم إرجاع مبلغ ${formatMadCurrency(booking.estimatedMad, lang)} كاملاً إلى حساب الزبون فوراً.`
-                  : `Le montant séquestré de ${formatMadCurrency(booking.estimatedMad, lang)} sera intégralement remboursé au client.`}
-              </span>
-            </div>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">

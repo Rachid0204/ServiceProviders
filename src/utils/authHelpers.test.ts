@@ -201,3 +201,85 @@ test('computeProviderProfileCompleteness accurately scores a Maâlem card from 0
   assert.equal(full.checks.hasCustomPhoto, true);
   assert.equal(full.checks.hasSkills, true);
 });
+
+test('AUD-003 & AUD-004: isSuspendedUserProfile, preserveProtectedUserFields, and preserveProtectedProviderFields preserve protected fields and completedJobs contract', async () => {
+  const {
+    isSuspendedUserProfile,
+    preserveProtectedUserFields,
+    preserveProtectedProviderFields,
+  } = await import('./authHelpers');
+
+  assert.equal(isSuspendedUserProfile(null), false);
+  assert.equal(isSuspendedUserProfile({ accountStatus: 'active' }), false);
+  assert.equal(isSuspendedUserProfile({ accountStatus: 'suspended' }), true);
+
+  // User profile save preserves existing accountStatus & termsAcceptedAt
+  const mergedWithProtected = preserveProtectedUserFields(
+    {
+      uid: 'u-1',
+      role: 'client',
+      fullName: 'Amina',
+      phone: '+212661234567',
+      city: 'Casablanca',
+      neighborhood: 'Maârif',
+      languagePref: 'fr',
+      verifiedBadge: false,
+      updatedAt: 'NOW',
+    },
+    {
+      verifiedBadge: true,
+      accountStatus: 'active',
+      termsAcceptedAt: 'TS_TERMS',
+      createdAt: 'TS_CREATED',
+    },
+    'FALLBACK_CREATED'
+  );
+  assert.equal(mergedWithProtected.verifiedBadge, true);
+  assert.equal(mergedWithProtected.accountStatus, 'active');
+  assert.equal(mergedWithProtected.termsAcceptedAt, 'TS_TERMS');
+  assert.equal(mergedWithProtected.createdAt, 'TS_CREATED');
+
+  // User profile save omits accountStatus & termsAcceptedAt when absent on existing doc
+  const mergedWithoutOptional = preserveProtectedUserFields(
+    {
+      uid: 'u-2',
+      role: 'client',
+      fullName: 'Youssef',
+      verifiedBadge: false,
+      accountStatus: 'active',
+    },
+    {
+      verifiedBadge: false,
+      createdAt: 'TS_CREATED_2',
+    },
+    'FALLBACK'
+  );
+  assert.equal('accountStatus' in mergedWithoutOptional, false);
+  assert.equal('termsAcceptedAt' in mergedWithoutOptional, false);
+
+  // Provider update omits completedJobs if existing doc did not have completedJobs
+  const updatedProviderWithoutCompleted = preserveProtectedProviderFields(
+    { uid: 'p-1', fullNameFr: 'Karim', completedJobs: 0 },
+    { uid: 'p-1', ratingAvg: 4.8, reviewCount: 5 }
+  );
+  assert.equal('completedJobs' in updatedProviderWithoutCompleted, false);
+
+  // Provider update preserves existing completedJobs and booking IDs when present
+  const updatedProviderWithCompleted = preserveProtectedProviderFields(
+    { uid: 'p-1', fullNameFr: 'Karim' },
+    {
+      uid: 'p-1',
+      completedJobs: 12,
+      lastCompletedBookingId: 'bk-12',
+      lastReviewBookingId: 'bk-11',
+    }
+  );
+  assert.equal(updatedProviderWithCompleted.completedJobs, 12);
+  assert.equal(updatedProviderWithCompleted.lastCompletedBookingId, 'bk-12');
+  assert.equal(updatedProviderWithCompleted.lastReviewBookingId, 'bk-11');
+
+  // New provider creation initializes completedJobs to 0
+  const newProvider = preserveProtectedProviderFields({ uid: 'p-new', fullNameFr: 'Driss' }, null);
+  assert.equal(newProvider.completedJobs, 0);
+});
+
