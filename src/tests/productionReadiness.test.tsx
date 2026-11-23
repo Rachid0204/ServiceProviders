@@ -18,6 +18,10 @@ vi.mock('../firebase', () => ({
   db: {},
   auth: {},
   storage: {},
+  appCheckStatus: { configured: false, active: false, siteKeyPresent: false },
+  handleFirestoreError: vi.fn((err: unknown) => {
+    throw err;
+  }),
   reportFirestoreError: vi.fn(),
   OperationType: {
     LIST: 'list',
@@ -428,4 +432,269 @@ describe('Phase 7 Production Readiness: Arabic RTL, Landmarks & Critical Journey
       'https://wa.me/212661234567?text=Bonjour'
     );
   });
+
+  it('AUD-011: AuthModal requires Law 09-08 terms checkbox in signup mode before creating an account', async () => {
+    const user = userEvent.setup();
+    const { AuthModal } = await import('../components/AuthModal');
+    const { signUpWithEmail } = await import('../firebase');
+    const { hasPendingTermsAcceptedIntent, clearTermsAcceptedIntent } = await import(
+      '../utils/authHelpers'
+    );
+    clearTermsAcceptedIntent();
+    const signUpMock = vi.mocked(signUpWithEmail);
+    signUpMock.mockReset();
+    signUpMock.mockResolvedValue({ user: { uid: 'u-signup' } } as never);
+
+    render(
+      <AuthModal
+        intent="provider"
+        lang="fr"
+        t={TRANSLATIONS.fr}
+        onClose={vi.fn()}
+        onGoogleSignIn={vi.fn().mockResolvedValue(undefined)}
+        onSelectRoleIntent={vi.fn()}
+        onAuthSuccess={vi.fn()}
+      />
+    );
+
+    const emailInput = screen.getByLabelText('Adresse e-mail');
+    const passwordInput = screen.getByLabelText('Mot de passe');
+    await user.type(emailInput, 'nadia@example.ma');
+    await user.type(passwordInput, 'Password123!');
+
+    // Submit without accepting Terms -> blocked
+    const submitBtn = screen.getByRole('button', { name: 'Créer mon compte' });
+    await user.click(submitBtn);
+    expect(signUpMock).not.toHaveBeenCalled();
+    expect(screen.getByText(TRANSLATIONS.fr.termsConsentRequiredError)).toBeInTheDocument();
+    expect(hasPendingTermsAcceptedIntent()).toBe(false);
+
+    // Check consent checkbox and resubmit -> succeeds & records pending consent intent
+    const checkbox = screen.getByRole('checkbox');
+    await user.click(checkbox);
+    await user.click(submitBtn);
+
+    await waitFor(() => {
+      expect(signUpMock).toHaveBeenCalledWith('nadia@example.ma', 'Password123!', 'provider');
+    });
+    expect(hasPendingTermsAcceptedIntent()).toBe(true);
+    clearTermsAcceptedIntent();
+  });
+
+  it('AUD-013: acceptProposalAndCreateBooking auto-rejects competing pending proposals and notifies competing providers', async () => {
+    const { getDocs, runTransaction, writeBatch, setDoc } = await import('firebase/firestore');
+    const { useJobPosts } = await import('../hooks/useJobPosts');
+
+    const runTxMock = vi.mocked(runTransaction);
+    const getDocsMock = vi.mocked(getDocs);
+    const writeBatchMock = vi.mocked(writeBatch);
+    const setDocMock = vi.mocked(setDoc);
+    runTxMock.mockReset();
+    getDocsMock.mockReset();
+    writeBatchMock.mockReset();
+    setDocMock.mockClear();
+
+    const batchUpdate = vi.fn();
+    const batchCommit = vi.fn().mockResolvedValue(undefined);
+    writeBatchMock.mockReturnValue({
+      update: batchUpdate,
+      set: vi.fn(),
+      delete: vi.fn(),
+      commit: batchCommit,
+    } as never);
+
+    const mockJob = {
+      id: 'job-aud13',
+      jobRef: 'JOB-AUD13',
+      clientId: 'client-1',
+      clientName: 'Salma',
+      clientPhone: '+212661234567',
+      title: 'Fuite tuyau cuisine',
+      category: 'Plomberie' as const,
+      city: 'Casablanca' as const,
+      neighborhood: 'Maârif',
+      description: 'Remplacement urgent du tuyau sous évier.',
+      budgetMad: 400,
+      urgency: 'urgent' as const,
+      preferredDate: '2026-12-15',
+      preferredTimeSlot: '09:00 - 12:00' as const,
+      status: 'open' as const,
+      proposalCount: 3,
+      createdAtIso: '2026-11-23',
+    };
+
+    const winningProposal = {
+      id: 'prov-1',
+      jobId: 'job-aud13',
+      clientId: 'client-1',
+      providerId: 'prov-1',
+      providerName: 'Maâlem Karim',
+      providerPhone: '+212661111111',
+      providerCategory: 'Plomberie' as const,
+      providerCity: 'Casablanca' as const,
+      providerRating: 4.9,
+      providerVerified: true,
+      proposedPriceMad: 350,
+      estimatedDuration: '2h',
+      message: 'Intervention rapide.',
+      status: 'pending' as const,
+      createdAtIso: '2026-11-23',
+    };
+
+    runTxMock.mockImplementation(async (_db, updater) => {
+      const tx = {
+        get: vi.fn(async (ref: { path: string }) => {
+          if (ref.path === 'jobPosts/job-aud13') {
+            return { exists: () => true, data: () => ({ ...mockJob, status: 'open' }) };
+          }
+          if (ref.path === 'jobPosts/job-aud13/proposals/prov-1') {
+            return { exists: () => true, data: () => ({ ...winningProposal, status: 'pending' }) };
+          }
+          return { exists: () => false, data: () => undefined };
+        }),
+        update: vi.fn(),
+        set: vi.fn(),
+      };
+      return updater(tx as never);
+    });
+
+    const competingRef2 = { path: 'jobPosts/job-aud13/proposals/prov-2' };
+    const competingRef3 = { path: 'jobPosts/job-aud13/proposals/prov-3' };
+    const withdrawnRef4 = { path: 'jobPosts/job-aud13/proposals/prov-4' };
+    const winnerRef1 = { path: 'jobPosts/job-aud13/proposals/prov-1' };
+
+    getDocsMock.mockResolvedValue({
+      docs: [
+        { id: 'prov-1', ref: winnerRef1, data: () => ({ providerId: 'prov-1', status: 'pending' }) },
+        { id: 'prov-2', ref: competingRef2, data: () => ({ providerId: 'prov-2', status: 'pending' }) },
+        { id: 'prov-3', ref: competingRef3, data: () => ({ providerId: 'prov-3', status: 'pending' }) },
+        { id: 'prov-4', ref: withdrawnRef4, data: () => ({ providerId: 'prov-4', status: 'withdrawn' }) },
+      ],
+    } as never);
+
+    const clientUser = { uid: 'client-1', email: 'salma@test.ma', emailVerified: true } as unknown as User;
+    const clientProfile: UserProfileRecord = {
+      uid: 'client-1',
+      role: 'client',
+      fullName: 'Salma',
+      phone: '+212661234567',
+      city: 'Casablanca',
+      neighborhood: 'Maârif',
+      languagePref: 'fr',
+      verifiedBadge: false,
+    };
+
+    let hookApi: ReturnType<typeof useJobPosts> | null = null;
+    const Harness: React.FC = () => {
+      hookApi = useJobPosts({
+        firebaseUser: clientUser,
+        authReady: false,
+        isVerified: true,
+        userProfile: clientProfile,
+        ownProvider: null,
+        lang: 'fr',
+      });
+      return <div data-testid="job-posts-ready">ready</div>;
+    };
+
+    render(<Harness />);
+    expect(screen.getByTestId('job-posts-ready')).toHaveTextContent('ready');
+
+    let bookingRef = '';
+    await act(async () => {
+      bookingRef = await hookApi!.acceptProposalAndCreateBooking(mockJob, winningProposal);
+    });
+    expect(bookingRef).toMatch(/^MK-/);
+
+    // Only competing pending proposals (prov-2 & prov-3) are rejected in a single writeBatch
+    expect(batchUpdate).toHaveBeenCalledTimes(2);
+    expect(batchUpdate).toHaveBeenCalledWith(competingRef2, {
+      status: 'rejected',
+      updatedAt: 'SERVER_TIMESTAMP',
+    });
+    expect(batchUpdate).toHaveBeenCalledWith(competingRef3, {
+      status: 'rejected',
+      updatedAt: 'SERVER_TIMESTAMP',
+    });
+    expect(batchCommit).toHaveBeenCalledTimes(1);
+
+    // Notifications dispatched: quote_accepted for prov-1 and quote_rejected for prov-2 & prov-3
+    const notificationPayloads = setDocMock.mock.calls
+      .filter(([ref]) => String((ref as { path?: string })?.path || '').startsWith('notifications/'))
+      .map(([, data]) => data as Record<string, unknown>);
+    expect(
+      notificationPayloads.some((n) => n.userId === 'prov-1' && n.type === 'quote_accepted')
+    ).toBe(true);
+    expect(
+      notificationPayloads.some((n) => n.userId === 'prov-2' && n.type === 'quote_rejected')
+    ).toBe(true);
+    expect(
+      notificationPayloads.some((n) => n.userId === 'prov-3' && n.type === 'quote_rejected')
+    ).toBe(true);
+  });
+
+  it('AUD-016: ProviderCard masks phone numbers until explicit click-to-reveal and AdminSettingsSection displays App Check status', async () => {
+    const user = userEvent.setup();
+    const { ProviderCard } = await import('../components/ProviderCard');
+    const { AdminSettingsSection } = await import(
+      '../components/admin/AdminUsersReviewsSection'
+    );
+
+    const providerWithPhone = {
+      ...VETTED_PROVIDERS[0],
+      phone: '+212661428910',
+    };
+
+    const { container, unmount } = render(
+      <ProviderCard
+        provider={providerWithPhone}
+        lang="fr"
+        t={TRANSLATIONS.fr}
+        onViewDetails={vi.fn()}
+        onBookProvider={vi.fn()}
+      />
+    );
+
+    // Initial public DOM must NOT expose raw phone or tel:/wa.me links
+    expect(container.innerHTML).not.toContain('+212661428910');
+    expect(container.innerHTML).not.toContain('tel:');
+    expect(container.innerHTML).not.toContain('https://wa.me/');
+
+    const revealBtn = screen.getByTestId('reveal-provider-phone-btn');
+    expect(revealBtn).toHaveTextContent('+212 6•• ••• •10');
+
+    // Clicking reveal exposes direct call + WhatsApp links
+    await user.click(revealBtn);
+    expect(screen.queryByTestId('reveal-provider-phone-btn')).not.toBeInTheDocument();
+    const callLink = screen.getByRole('link', { name: /Appeler/i });
+    expect(callLink).toHaveAttribute('href', 'tel:+212661428910');
+    const waLink = screen.getByRole('link', { name: /WhatsApp/i });
+    expect(waLink.getAttribute('href')).toMatch(/^https:\/\/wa\.me\/212661428910\?text=/);
+    unmount();
+
+    // Provider without a valid phone renders neither reveal button nor links
+    const { unmount: unmountEmpty } = render(
+      <ProviderCard
+        provider={{ ...VETTED_PROVIDERS[0], phone: '' }}
+        lang="fr"
+        t={TRANSLATIONS.fr}
+        onViewDetails={vi.fn()}
+        onBookProvider={vi.fn()}
+      />
+    );
+    expect(screen.queryByTestId('reveal-provider-phone-btn')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /WhatsApp/i })).not.toBeInTheDocument();
+    unmountEmpty();
+
+    // Admin settings displays read-only Firebase App Check readiness status
+    render(
+      <AdminSettingsSection
+        lang="fr"
+        settings={DEFAULT_SYSTEM_SETTINGS}
+        onSaveSettings={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+    expect(screen.getByTestId('admin-app-check-status')).toHaveTextContent(/Firebase App Check/i);
+  });
 });
+

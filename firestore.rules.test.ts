@@ -1941,4 +1941,252 @@ test('Wave 0 Live Firebase Firestore Emulator Execution: AUD-001, AUD-002, AUD-0
     403,
     'SystemSettings: Non-admin write to /systemSettings/global must remain rejected'
   );
+
+  // --- AUD-011: Law 09-08 termsAcceptedAt consent timestamp enforcement on /users/{uid} create ---
+  const termsOkToken = makeJwt({ uid: 'u_terms_ok', email: 'termsok@test.ma' });
+  const createUserWithTermsTs = await commitWrite({
+    token: termsOkToken,
+    docPath: 'users/u_terms_ok',
+    data: {
+      uid: 'u_terms_ok',
+      role: 'client',
+      fullName: 'Nadia Consent',
+      phone: '+212661556677',
+      city: 'Rabat',
+      neighborhood: 'Agdal',
+      languagePref: 'fr',
+      verifiedBadge: false,
+    },
+    requestTimeFields: ['termsAcceptedAt', 'createdAt', 'updatedAt'],
+    currentDocumentExists: false,
+  });
+  assert.equal(
+    createUserWithTermsTs.status,
+    200,
+    `AUD-011: Initial user creation with serverTimestamp termsAcceptedAt must succeed: ${createUserWithTermsTs.body}`
+  );
+
+  const termsForgedToken = makeJwt({ uid: 'u_terms_forged', email: 'termsforged@test.ma' });
+  const createUserWithForgedTermsTs = await commitWrite({
+    token: termsForgedToken,
+    docPath: 'users/u_terms_forged',
+    data: {
+      uid: 'u_terms_forged',
+      role: 'client',
+      fullName: 'Forged Consent',
+      phone: '+212661556678',
+      city: 'Rabat',
+      neighborhood: 'Agdal',
+      languagePref: 'fr',
+      verifiedBadge: false,
+    },
+    rawTimestampFields: { termsAcceptedAt: '2020-01-01T00:00:00.000Z' },
+    requestTimeFields: ['createdAt', 'updatedAt'],
+    currentDocumentExists: false,
+  });
+  assert.equal(
+    createUserWithForgedTermsTs.status,
+    403,
+    'AUD-011: Forged/backdated termsAcceptedAt timestamp on user create must be rejected'
+  );
+
+  // --- AUD-013: Atomic proposal acceptance + auto-rejection of competing pending proposals ---
+  assert.equal(
+    (
+      await commitWrite({
+        token: 'owner',
+        docPath: 'users/prov2',
+        data: {
+          uid: 'prov2',
+          role: 'provider',
+          fullName: 'Maâlem Hassan Second',
+          phone: '+212662112233',
+          city: 'Casablanca',
+          neighborhood: 'Anfa',
+          languagePref: 'fr',
+          verifiedBadge: true,
+        },
+        rawTimestampFields: { createdAt: fixedCreatedIso, updatedAt: fixedCreatedIso },
+      })
+    ).status,
+    200
+  );
+  assert.equal(
+    (
+      await commitWrite({
+        token: 'owner',
+        docPath: 'providers/prov2',
+        data: {
+          uid: 'prov2',
+          fullNameFr: 'Maâlem Hassan Second',
+          fullNameAr: 'المعلم حسن الثاني',
+          category: 'Plomberie',
+          bioFr: 'Plombier qualifié à Casablanca disponible rapidement.',
+          bioAr: 'رصاص مؤهل في الدار البيضاء متاح بسرعة.',
+          hourlyRateMAD: 160,
+          fixedVisitFeeMAD: 60,
+          experienceYears: 7,
+          skills: ['Plomberie'],
+          portfolioImages: ['https://example.com/p2.jpg'],
+          ratingAvg: 4.9,
+          reviewCount: 4,
+          isAvailableNow: true,
+          verifiedBadge: true,
+          phone: '+212662112233',
+          location: { lat: 33.5883, lng: -7.6325, city: 'Casablanca', quartier: 'Anfa' },
+        },
+        rawTimestampFields: { createdAt: fixedCreatedIso, updatedAt: fixedCreatedIso },
+      })
+    ).status,
+    200
+  );
+
+  const aud13JobBase = {
+    jobRef: 'JOB-AUD013',
+    clientId: 'client1',
+    clientName: 'Salma Client',
+    clientPhone: '+212661234567',
+    title: 'Remplacement robinetterie cuisine',
+    category: 'Plomberie',
+    city: 'Casablanca',
+    neighborhood: 'Maârif',
+    description: 'Besoin de remplacer le mitigeur de cuisine qui fuit fortement.',
+    budgetMad: 400,
+    urgency: 'this_week',
+    preferredDate: '2026-12-10',
+    preferredTimeSlot: '09:00 - 12:00',
+    status: 'open',
+    proposalCount: 2,
+  };
+  assert.equal(
+    (
+      await commitWrite({
+        token: 'owner',
+        docPath: 'jobPosts/job_aud013',
+        data: aud13JobBase,
+        rawTimestampFields: { createdAt: fixedCreatedIso, updatedAt: fixedCreatedIso },
+      })
+    ).status,
+    200
+  );
+
+  const prop1Aud13 = {
+    ...baseProposalData,
+    jobId: 'job_aud013',
+    providerId: 'prov1',
+    status: 'pending',
+  };
+  const prop2Aud13 = {
+    ...baseProposalData,
+    jobId: 'job_aud013',
+    providerId: 'prov2',
+    providerName: 'Maâlem Hassan Second',
+    providerPhone: '+212662112233',
+    proposedPriceMad: 380,
+    laborCostMad: 280,
+    materialsCostMad: 100,
+    status: 'pending',
+  };
+
+  const p1Create = await commitWrite({
+    token: providerToken,
+    docPath: 'jobPosts/job_aud013/proposals/prov1',
+    data: prop1Aud13,
+    requestTimeFields: ['createdAt', 'updatedAt'],
+    currentDocumentExists: false,
+  });
+  assert.equal(p1Create.status, 200, `AUD-013: Seed prov1 proposal failed: ${p1Create.body}`);
+  const p1CreatedIso =
+    JSON.parse(p1Create.body).writeResults?.[0]?.transformResults?.[0]?.timestampValue ??
+    fixedCreatedIso;
+
+  const p2Create = await commitWrite({
+    token: provider2Token,
+    docPath: 'jobPosts/job_aud013/proposals/prov2',
+    data: prop2Aud13,
+    requestTimeFields: ['createdAt', 'updatedAt'],
+    currentDocumentExists: false,
+  });
+  assert.equal(p2Create.status, 200, `AUD-013: Seed prov2 proposal failed: ${p2Create.body}`);
+  const p2CreatedIso =
+    JSON.parse(p2Create.body).writeResults?.[0]?.transformResults?.[0]?.timestampValue ??
+    fixedCreatedIso;
+
+  // Standalone accept without atomically assigning jobPosts/job_aud013 must be rejected
+  const standaloneAccept = await commitWrite({
+    token: clientToken,
+    docPath: 'jobPosts/job_aud013/proposals/prov1',
+    data: { ...prop1Aud13, status: 'accepted' },
+    rawTimestampFields: { createdAt: p1CreatedIso },
+    requestTimeFields: ['updatedAt'],
+    currentDocumentExists: true,
+  });
+  assert.equal(
+    standaloneAccept.status,
+    403,
+    'AUD-013: Accepting a proposal without atomically assigning parent job must be rejected'
+  );
+
+  // Atomic acceptance batch (assigns job to prov1 + marks prov1 proposal accepted) succeeds
+  const atomicAccept = await commitBatch({
+    token: clientToken,
+    ops: [
+      {
+        docPath: 'jobPosts/job_aud013',
+        data: {
+          ...aud13JobBase,
+          status: 'assigned',
+          assignedProviderId: 'prov1',
+          assignedProviderName: prop1Aud13.providerName,
+          assignedBookingId: 'bk_aud013',
+        },
+        rawTimestampFields: { createdAt: fixedCreatedIso },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: true,
+      },
+      {
+        docPath: 'jobPosts/job_aud013/proposals/prov1',
+        data: { ...prop1Aud13, status: 'accepted' },
+        rawTimestampFields: { createdAt: p1CreatedIso },
+        requestTimeFields: ['updatedAt'],
+        currentDocumentExists: true,
+      },
+    ],
+  });
+  assert.equal(
+    atomicAccept.status,
+    200,
+    `AUD-013: Atomic acceptance of winning proposal must succeed: ${atomicAccept.body}`
+  );
+
+  // Accepting competing proposal prov2 after job is already assigned must be rejected
+  const doubleAcceptCompeting = await commitWrite({
+    token: clientToken,
+    docPath: 'jobPosts/job_aud013/proposals/prov2',
+    data: { ...prop2Aud13, status: 'accepted' },
+    rawTimestampFields: { createdAt: p2CreatedIso },
+    requestTimeFields: ['updatedAt'],
+    currentDocumentExists: true,
+  });
+  assert.equal(
+    doubleAcceptCompeting.status,
+    403,
+    'AUD-013: Accepting competing proposal after job is assigned must be rejected'
+  );
+
+  // Auto-rejecting competing pending proposal prov2 after job assignment succeeds
+  const autoRejectCompeting = await commitWrite({
+    token: clientToken,
+    docPath: 'jobPosts/job_aud013/proposals/prov2',
+    data: { ...prop2Aud13, status: 'rejected' },
+    rawTimestampFields: { createdAt: p2CreatedIso },
+    requestTimeFields: ['updatedAt'],
+    currentDocumentExists: true,
+  });
+  assert.equal(
+    autoRejectCompeting.status,
+    200,
+    `AUD-013: Client auto-rejecting competing pending proposal after assignment must succeed: ${autoRejectCompeting.body}`
+  );
 });
+

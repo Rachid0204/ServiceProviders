@@ -7,6 +7,7 @@ import {
   onSnapshot,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   updateDoc,
   writeBatch,
@@ -26,6 +27,7 @@ import {
   isQuotationExpired,
   isSafeImageUrl,
   parseProviderAvailabilitySnapshot,
+  selectCompetingPendingProposals,
   type JobPostRecord,
   type JobPostStatus,
   type JobProposalRecord,
@@ -307,6 +309,7 @@ export function useJobPosts(params: {
           const batch = writeBatch(db);
           batch.set(doc(db, 'users', firebaseUser.uid), {
             ...bootstrapProfile,
+            termsAcceptedAt: serverTimestamp(),
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });
@@ -697,6 +700,56 @@ export function useJobPosts(params: {
           bodyAr: `قبل ${job.clientName} عرضك بقيمة ${proposal.proposedPriceMad} د.م. لطلب « ${job.title} ».`,
           linkPath: '/provider/missions',
         });
+
+        // Auto-reject competing pending proposals and notify those providers (AUD-013)
+        try {
+          const pendingSnap = await getDocs(
+            query(
+              collection(db, 'jobPosts', job.id, 'proposals'),
+              where('status', '==', 'pending'),
+              limit(50)
+            )
+          );
+          const competingProposals = selectCompetingPendingProposals(
+            pendingSnap.docs.map((d) => ({
+              id: d.id,
+              providerId: String(d.data().providerId || d.id),
+              status: String(d.data().status || ''),
+              ref: d.ref,
+            })),
+            proposal.providerId
+          );
+
+          if (competingProposals.length > 0) {
+            const rejectBatch = writeBatch(db);
+            for (const competing of competingProposals) {
+              rejectBatch.update(competing.ref, {
+                status: 'rejected',
+                updatedAt: serverTimestamp(),
+              });
+            }
+            await rejectBatch.commit();
+
+            for (const competing of competingProposals) {
+              void dispatchUserNotification({
+                recipientUserId: competing.providerId,
+                actorUserId: firebaseUser.uid,
+                type: 'quote_rejected',
+                titleFr: 'Demande attribuée à un autre Maâlem',
+                titleAr: 'تم إسناد الطلب لمعلم آخر',
+                bodyFr: `Le client a retenu un autre devis pour « ${job.title} ». Consultez d’autres demandes ouvertes dans votre ville.`,
+                bodyAr: `اختار الزبون عرضاً آخر لطلب « ${job.title} ». يمكنك تصفح طلبات أخرى متاحة في مدينتك.`,
+                linkPath: '/provider/jobs',
+              });
+            }
+          }
+        } catch (cleanupErr) {
+          reportFirestoreError(
+            cleanupErr,
+            OperationType.UPDATE,
+            `jobPosts/${job.id}/proposals`
+          );
+        }
 
         return bookingRef;
       } catch (err) {

@@ -215,3 +215,20 @@ test('Phase 7 Production Hardening: HSTS header, 12-category sitemap, private ro
   assert.ok(ciContent.includes('npm run build'));
   assert.ok(ciContent.includes('npm test'));
 });
+
+test('AUD-012: Firebase auto-deploy workflow watches and deploys storage.rules alongside Firestore rules and indexes', () => {
+  const firebaseDeployPath = path.join(ROOT, '.github/workflows/firebase-deploy.yml');
+  assert.ok(fs.existsSync(firebaseDeployPath), 'Missing .github/workflows/firebase-deploy.yml');
+  const deployYaml = fs.readFileSync(firebaseDeployPath, 'utf8');
+
+  assert.ok(deployYaml.includes("'storage.rules'"), 'firebase-deploy.yml must trigger on storage.rules changes');
+  assert.ok(deployYaml.includes("'firestore,storage'"), 'firebase-deploy.yml default target must include storage');
+  assert.ok(deployYaml.includes('npm run lint:rules'), 'firebase-deploy.yml must lint rules before deploy');
+
+  const firebaseJson = JSON.parse(
+    fs.readFileSync(path.join(ROOT, 'firebase.json'), 'utf8')
+  ) as { storage?: { rules?: string } };
+  assert.equal(firebaseJson.storage?.rules, 'storage.rules');
+  assert.ok(fs.existsSync(path.join(ROOT, 'storage.rules')), 'storage.rules file must exist');
+});
+

@@ -28,6 +28,7 @@ import {
   persistSignupRoleIntent,
   readSignupRoleIntent,
   clearSignupRoleIntent,
+  clearTermsAcceptedIntent,
   preserveProtectedUserFields,
   preserveProtectedProviderFields,
 } from '../utils/authHelpers';
@@ -405,6 +406,7 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
 
     setUserProfile(record);
     setSignupRoleIntent(null);
+    clearTermsAcceptedIntent();
     try {
       localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(record));
     } catch {
@@ -587,6 +589,7 @@ export function useMarketplaceAuth(onLanguageSync: (lang: LanguageCode) => void)
 
       setUserProfile(userRecord);
       setSignupRoleIntent(null);
+      clearTermsAcceptedIntent();
       try {
         localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(userRecord));
       } catch {

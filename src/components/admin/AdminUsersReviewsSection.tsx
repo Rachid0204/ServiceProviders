@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import {
   Search,
   ShieldCheck,
+  ShieldAlert,
   Star,
   Trash2,
   History,
@@ -12,6 +13,7 @@ import {
   Settings,
   Save,
 } from 'lucide-react';
+import { appCheckStatus } from '../../firebase';
 import {
   formatMadCurrency,
   type LanguageCode,
@@ -588,6 +590,44 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
                 : `Dernière mise à jour par ${settings.updatedByEmail} (${settings.updatedAtIso})`}
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Firebase App Check Readiness Diagnostics (AUD-016 — read-only runtime status) */}
+      <div
+        data-testid="admin-app-check-status"
+        className={`flex items-start gap-2.5 p-3.5 rounded-xl border text-xs ${
+          appCheckStatus.active
+            ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+            : 'bg-amber-50 border-amber-200 text-amber-900'
+        }`}
+      >
+        {appCheckStatus.active ? (
+          <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+        ) : (
+          <ShieldAlert className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
+        )}
+        <div className="space-y-0.5">
+          <div className="font-semibold">
+            {appCheckStatus.active
+              ? isAr
+                ? 'Firebase App Check : مفعّل (reCAPTCHA v3)'
+                : 'Firebase App Check : Actif (reCAPTCHA v3)'
+              : appCheckStatus.siteKeyPresent
+              ? isAr
+                ? 'Firebase App Check : مفتاح reCAPTCHA موجود (في انتظار التهيئة)'
+                : 'Firebase App Check : Clé reCAPTCHA détectée (initialisation en attente)'
+              : isAr
+              ? 'Firebase App Check : غير مهيأ في هذه البيئة'
+              : 'Firebase App Check : Non configuré (VITE_FIREBASE_RECAPTCHA_SITE_KEY absente)'}
+          </div>
+          {!appCheckStatus.active && (
+            <p className="text-[11px] opacity-90">
+              {isAr
+                ? 'لتفعيل الحماية ضد الاستخراج الآلي للبيانات، أضف المتغير VITE_FIREBASE_RECAPTCHA_SITE_KEY في إعدادات Vercel وفعّل App Check Enforcement في لوحة Firebase.'
+                : 'Pour protéger Firestore contre le scraping automatisé, provisionnez VITE_FIREBASE_RECAPTCHA_SITE_KEY sur Vercel puis activez l’enforcement dans la console Firebase.'}
+            </p>
+          )}
         </div>
       </div>
 

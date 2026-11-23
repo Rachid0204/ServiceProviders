@@ -283,3 +283,86 @@ test('AUD-003 & AUD-004: isSuspendedUserProfile, preserveProtectedUserFields, an
   assert.equal(newProvider.completedJobs, 0);
 });
 
+test('AUD-011: preserveProtectedUserFields stamps termsAcceptedAt on new user creation and consent intent helpers track sessionStorage state', async () => {
+  const {
+    preserveProtectedUserFields,
+    persistTermsAcceptedIntent,
+    hasPendingTermsAcceptedIntent,
+    clearTermsAcceptedIntent,
+  } = await import('./authHelpers');
+
+  // New user creation (existingData === null) automatically stamps termsAcceptedAt using fallback serverTimestamp
+  const createdWithDefault = preserveProtectedUserFields(
+    {
+      uid: 'u-new-1',
+      role: 'client',
+      fullName: 'Nadia',
+      phone: '+212661234567',
+      city: 'Rabat',
+      neighborhood: 'Agdal',
+      languagePref: 'fr',
+      verifiedBadge: false,
+      updatedAt: 'SERVER_TS',
+    },
+    null,
+    'SERVER_TS'
+  );
+  assert.equal(createdWithDefault.createdAt, 'SERVER_TS');
+  assert.equal(createdWithDefault.termsAcceptedAt, 'SERVER_TS');
+  assert.equal('accountStatus' in createdWithDefault, false);
+
+  // Explicit termsAcceptedAt on new user creation is preserved
+  const createdWithExplicit = preserveProtectedUserFields(
+    {
+      uid: 'u-new-2',
+      role: 'provider',
+      fullName: 'Karim',
+      termsAcceptedAt: 'EXPLICIT_TERMS_TS',
+    },
+    null,
+    'SERVER_TS'
+  );
+  assert.equal(createdWithExplicit.termsAcceptedAt, 'EXPLICIT_TERMS_TS');
+
+  // In Node (no window), consent intent helpers degrade safely
+  assert.equal(hasPendingTermsAcceptedIntent(), false);
+  persistTermsAcceptedIntent();
+  clearTermsAcceptedIntent();
+  assert.equal(hasPendingTermsAcceptedIntent(), false);
+
+  // With mocked browser window.sessionStorage, consent intent persists and clears cleanly
+  const store = new Map<string, string>();
+  const originalWindow = globalThis.window;
+  Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+      sessionStorage: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          store.set(k, v);
+        },
+        removeItem: (k: string) => {
+          store.delete(k);
+        },
+      },
+    },
+  });
+  try {
+    assert.equal(hasPendingTermsAcceptedIntent(), false);
+    persistTermsAcceptedIntent();
+    assert.equal(hasPendingTermsAcceptedIntent(), true);
+    clearTermsAcceptedIntent();
+    assert.equal(hasPendingTermsAcceptedIntent(), false);
+  } finally {
+    if (originalWindow === undefined) {
+      delete (globalThis as { window?: unknown }).window;
+    } else {
+      Object.defineProperty(globalThis, 'window', {
+        configurable: true,
+        value: originalWindow,
+      });
+    }
+  }
+});
+
+

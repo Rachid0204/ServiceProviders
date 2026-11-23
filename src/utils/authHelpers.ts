@@ -426,9 +426,39 @@ export function isSuspendedUserProfile(
   return Boolean(profile && profile.accountStatus === 'suspended');
 }
 
+const TERMS_ACCEPTED_INTENT_KEY = 'moul_lkhedma_terms_accepted';
+
+export function persistTermsAcceptedIntent(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.setItem(TERMS_ACCEPTED_INTENT_KEY, '1');
+  } catch {
+    // ignore storage errors
+  }
+}
+
+export function hasPendingTermsAcceptedIntent(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.sessionStorage.getItem(TERMS_ACCEPTED_INTENT_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function clearTermsAcceptedIntent(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.sessionStorage.removeItem(TERMS_ACCEPTED_INTENT_KEY);
+  } catch {
+    // ignore storage errors
+  }
+}
+
 /**
  * Preserves protected fields (`accountStatus`, `termsAcceptedAt`, `verifiedBadge`, `createdAt`)
- * when writing `/users/{uid}` so profile saves never fail `affectedKeys().hasOnly(...)` in `firestore.rules` (AUD-004).
+ * when updating `/users/{uid}` so profile saves never fail `affectedKeys().hasOnly(...)` in `firestore.rules` (AUD-004),
+ * and stamps `termsAcceptedAt` on initial user creation for Law 09-08 compliance (AUD-011).
  */
 export function preserveProtectedUserFields(
   target: Record<string, unknown>,
@@ -447,10 +477,14 @@ export function preserveProtectedUserFields(
     delete result.accountStatus;
   }
 
-  if (existingData && ('termsAcceptedAt' in existingData) && existingData.termsAcceptedAt !== undefined) {
-    result.termsAcceptedAt = existingData.termsAcceptedAt;
+  if (existingData) {
+    if ('termsAcceptedAt' in existingData && existingData.termsAcceptedAt !== undefined) {
+      result.termsAcceptedAt = existingData.termsAcceptedAt;
+    } else {
+      delete result.termsAcceptedAt;
+    }
   } else {
-    delete result.termsAcceptedAt;
+    result.termsAcceptedAt = target.termsAcceptedAt ?? fallbackCreatedAt;
   }
 
   return result;
