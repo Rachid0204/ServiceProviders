@@ -303,42 +303,11 @@ export const AdminOverviewSection: React.FC<AdminOverviewSectionProps> = ({
             </button>
           </div>
 
-          {escrowBookings.length === 0 ? (
-            <p className="text-xs text-slate-500 py-4">
-              {isAr
-                ? 'تم صرف جميع مبالغ ضمان CMI بنجاح.'
-                : 'Tous les séquestres CMI ont été réglés.'}
-            </p>
-          ) : (
-            <div className="divide-y divide-slate-100">
-              {escrowBookings.slice(0, 4).map((b) => (
-                <div
-                  key={b.id}
-                  className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3"
-                >
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-slate-900 truncate">
-                      <span className="font-mono-tabular">#{b.bookingRef}</span> · {b.providerName}
-                    </div>
-                    <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                      {b.clientName} · {t.cities[b.city]} ·{' '}
-                      <span className="font-bold text-slate-800 tabular-nums">
-                        {formatMadCurrency(b.estimatedMad, lang)}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onReleaseEscrow(b)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-900 bg-amber-400 hover:bg-amber-500 rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                  >
-                    <CreditCard className="w-3.5 h-3.5" />
-                    <span>{isAr ? 'صرف الضمان' : 'Libérer CMI'}</span>
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
+          <p className="text-xs text-slate-500 py-4">
+            {isAr
+              ? 'بوابة الدفع الإلكتروني CMI غير مفعلة حالياً (يعتمد الدفع نقداً عند انتهاء الخدمة COD بعمولة 0%).'
+              : 'La passerelle CMI est désactivée (règlement en espèces à la fin de la prestation COD · 0% frais).'}
+          </p>
         </div>
       </div>
     </div>

@@ -705,5 +705,72 @@ test('Phase 5 Payments Adapter (0% Default Commission), Bilingual Receipts & Str
   );
 });
 
+test('AUD-001: computeProviderEarningsBreakdown excludes COD earnings from platform-held withdrawable balance and prevents duplicate pending withdrawals', async () => {
+  const { computeProviderEarningsBreakdown } = await import('./marketplace');
+
+  // Completed COD bookings must increase cashCollectedDirectlyMad and NEVER platformHeldWithdrawableMad
+  const codBreakdown = computeProviderEarningsBreakdown({
+    bookings: [
+      {
+        paymentMethod: 'cash_on_completion',
+        paymentStatus: 'paid',
+        estimatedMad: 1500,
+      },
+      {
+        paymentMethod: 'cash_on_completion',
+        paymentStatus: 'unpaid_cod',
+        estimatedMad: 800,
+      },
+    ],
+    withdrawals: [],
+    platformFeePct: 0,
+    minWithdrawalMad: 200,
+  });
+
+  assert.equal(codBreakdown.cashCollectedDirectlyMad, 1500);
+  assert.equal(codBreakdown.platformHeldWithdrawableMad, 0);
+  assert.equal(codBreakdown.canRequestWithdrawal, false);
+
+  // Even if legacy cmi_escrow records exist, while cmiEscrowEnabled is false (default), platformHeldWithdrawableMad stays 0
+  const disabledEscrowBreakdown = computeProviderEarningsBreakdown({
+    bookings: [
+      {
+        paymentMethod: 'cmi_escrow',
+        paymentStatus: 'paid',
+        estimatedMad: 2000,
+        providerPayoutMad: 1800,
+      },
+    ],
+    withdrawals: [],
+    platformFeePct: 10,
+    minWithdrawalMad: 200,
+    cmiEscrowEnabled: false,
+  });
+
+  assert.equal(disabledEscrowBreakdown.platformHeldWithdrawableMad, 0);
+  assert.equal(disabledEscrowBreakdown.canRequestWithdrawal, false);
+
+  // When a pending withdrawal already exists, canRequestWithdrawal is false
+  const pendingWithdrawalBreakdown = computeProviderEarningsBreakdown({
+    bookings: [
+      {
+        paymentMethod: 'cmi_escrow',
+        paymentStatus: 'paid',
+        estimatedMad: 2000,
+        providerPayoutMad: 1800,
+      },
+    ],
+    withdrawals: [{ amountMad: 500, status: 'pending' }],
+    platformFeePct: 10,
+    minWithdrawalMad: 200,
+    cmiEscrowEnabled: true,
+  });
+
+  assert.equal(pendingWithdrawalBreakdown.hasPendingWithdrawal, true);
+  assert.equal(pendingWithdrawalBreakdown.platformHeldWithdrawableMad, 1300);
+  assert.equal(pendingWithdrawalBreakdown.canRequestWithdrawal, false);
+});
+
+
 
 

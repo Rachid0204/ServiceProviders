@@ -189,7 +189,7 @@ export function useDisputes(
       void dispatchUserNotification({
         recipientUserId: counterpartyId,
         actorUserId: uid,
-        type: 'system',
+        type: 'dispute_opened',
         titleFr: `Litige ouvert sur #${params.booking.bookingRef}`,
         titleAr: `تم فتح نزاع بخصوص الحجز #${params.booking.bookingRef}`,
         bodyFr: 'Un dossier de médiation a été ouvert. Consultez le centre de litiges pour suivre son traitement.',

@@ -103,7 +103,7 @@ test('Firebase Env & Cloud Run Port: resolveFirebaseConfig reads VITE_FIREBASE_*
 test('Hardened Workflow Rules: sequential booking state machine, deterministic reviewId, atomic rating aggregation, and Storage DB ID', () => {
   assert.ok(rulesContent.includes("existing().status == 'in_progress'"));
   assert.ok(rulesContent.includes("existing().paymentMethod == 'cash_on_completion' && incoming().paymentStatus == 'paid'"));
-  assert.ok(rulesContent.includes("existing().paymentMethod == 'cmi_escrow' && incoming().paymentStatus == existing().paymentStatus"));
+  assert.ok(rulesContent.includes("incoming().paymentMethod == 'cash_on_completion'"));
   assert.ok(rulesContent.includes('reviewId == incoming().bookingId'));
   assert.ok(rulesContent.includes("getAfter(/databases/$(database)/documents/bookings/$(reviewId)).data.status == 'reviewed'"));
   assert.ok(rulesContent.includes('incoming().reviewCount == existing().reviewCount + 1'));
@@ -139,10 +139,10 @@ test('Architect Audit Hardening: safe asset URLs, full array validation, financi
   assert.ok(rulesContent.includes('function isValidSkillList(skills)'));
   assert.ok(rulesContent.includes('function isValidPortfolioList(images)'));
 
-  // Dynamic fee lookup + strict escrow payout/fee/refund invariants + reviewed escrow release
+  // Dynamic fee lookup + strict COD booking invariants + atomic completedJobs increment
   assert.ok(rulesContent.includes('function getConfiguredPlatformFeePct()'));
   assert.ok(rulesContent.includes('incoming().providerId != request.auth.uid'));
-  assert.ok(rulesContent.includes("existing().status == 'completed' || existing().status == 'reviewed'"));
+  assert.ok(rulesContent.includes("incoming().paymentStatus == 'unpaid_cod'"));
   assert.ok(rulesContent.includes("incoming().completedJobs == (('completedJobs' in existing()) ? existing().completedJobs : 0) + 1"));
   assert.ok(rulesContent.includes("getAfter(/databases/$(database)/documents/bookings/$(incoming().lastCompletedBookingId)).data.status == 'completed'"));
 
@@ -296,6 +296,510 @@ test('Phase 6 Complete Admin Portal Rules: CNDP document_viewed audit logs, KYC 
     assert.ok(rulesContent.includes(`data.targetCollection == '${col}'`), `Missing adminLog targetCollection ${col}`);
   }
 });
+
+test('Wave 0 Live Firebase Firestore Emulator Execution: AUD-001, AUD-002, AUD-003, AUD-004, AUD-005', async (t) => {
+  const { spawn } = await import('node:child_process');
+  const http = await import('node:http');
+  const os = await import('node:os');
+
+  const jarPath = path.join(
+    os.homedir(),
+    '.cache',
+    'firebase',
+    'emulators',
+    'cloud-firestore-emulator-v1.19.8.jar'
+  );
+  if (!fs.existsSync(jarPath)) {
+    t.skip('Firestore Emulator JAR not cached locally; skipping live emulator execution');
+    return;
+  }
+
+  const port = 8091;
+  const projectId = 'serviceproviders-test';
+  const dbBase = `/v1/projects/${projectId}/databases/(default)/documents`;
+
+  const proc = spawn('java', [
+    '-jar',
+    jarPath,
+    '--host',
+    '127.0.0.1',
+    '--port',
+    String(port),
+    '--rules',
+    path.resolve(process.cwd(), 'firestore.rules'),
+  ]);
+
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      proc.kill();
+      reject(new Error('Timed out waiting for Firestore Emulator startup'));
+    }, 10000);
+    const onOut = (chunk: Buffer) => {
+      if (chunk.toString().includes('Dev App Server is now running')) {
+        clearTimeout(timer);
+        resolve();
+      }
+    };
+    proc.stdout.on('data', onOut);
+    proc.stderr.on('data', onOut);
+    proc.on('error', (err) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+
+  t.after(() => {
+    proc.kill();
+  });
+
+  function makeJwt(claims: {
+    uid: string;
+    email?: string;
+    email_verified?: boolean;
+    admin?: boolean;
+  }): string {
+    const header = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url');
+    const payload = Buffer.from(
+      JSON.stringify({
+        sub: claims.uid,
+        user_id: claims.uid,
+        aud: projectId,
+        iss: `https://securetoken.google.com/${projectId}`,
+        email: claims.email ?? `${claims.uid}@test.ma`,
+        email_verified: claims.email_verified ?? true,
+        ...(claims.admin !== undefined ? { admin: claims.admin } : {}),
+      })
+    ).toString('base64url');
+    return `${header}.${payload}.`;
+  }
+
+  function toFirestoreValue(val: unknown): Record<string, unknown> {
+    if (typeof val === 'string') return { stringValue: val };
+    if (typeof val === 'boolean') return { booleanValue: val };
+    if (typeof val === 'number') {
+      return Number.isInteger(val) ? { integerValue: String(val) } : { doubleValue: val };
+    }
+    if (Array.isArray(val)) {
+      return { arrayValue: { values: val.map((item) => toFirestoreValue(item)) } };
+    }
+    if (val && typeof val === 'object') {
+      const fields: Record<string, unknown> = {};
+      for (const [k, v] of Object.entries(val)) {
+        fields[k] = toFirestoreValue(v);
+      }
+      return { mapValue: { fields } };
+    }
+    return { nullValue: null };
+  }
+
+  function buildDocFields(data: Record<string, unknown>): Record<string, unknown> {
+    const fields: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(data)) {
+      fields[k] = toFirestoreValue(v);
+    }
+    return fields;
+  }
+
+  async function commitWrite(params: {
+    token: string;
+    docPath: string;
+    data: Record<string, unknown>;
+    requestTimeFields?: string[];
+    rawTimestampFields?: Record<string, string>;
+    currentDocumentExists?: boolean;
+  }): Promise<{ status: number; body: string }> {
+    const fields = buildDocFields(params.data);
+    if (params.rawTimestampFields) {
+      for (const [k, iso] of Object.entries(params.rawTimestampFields)) {
+        fields[k] = { timestampValue: iso };
+      }
+    }
+    const writes: unknown[] = [
+      {
+        update: {
+          name: `projects/${projectId}/databases/(default)/documents/${params.docPath}`,
+          fields,
+        },
+        ...(params.requestTimeFields && params.requestTimeFields.length > 0
+          ? {
+              updateTransforms: params.requestTimeFields.map((fp) => ({
+                fieldPath: fp,
+                setToServerValue: 'REQUEST_TIME',
+              })),
+            }
+          : {}),
+        ...(params.currentDocumentExists !== undefined
+          ? { currentDocument: { exists: params.currentDocumentExists } }
+          : {}),
+      },
+    ];
+
+    return new Promise((resolve, reject) => {
+      const req = http.request(
+        {
+          hostname: '127.0.0.1',
+          port,
+          path: `${dbBase}:commit`,
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${params.token}`,
+            'Content-Type': 'application/json',
+          },
+        },
+        (res) => {
+          let body = '';
+          res.on('data', (c) => (body += c));
+          res.on('end', () => resolve({ status: res.statusCode ?? 500, body }));
+        }
+      );
+      req.on('error', reject);
+      req.write(JSON.stringify({ writes }));
+      req.end();
+    });
+  }
+
+  const fixedCreatedIso = '2026-11-20T10:00:00Z';
+  const clientToken = makeJwt({ uid: 'client1' });
+  const providerToken = makeJwt({ uid: 'prov1' });
+  const suspendedToken = makeJwt({ uid: 'susp1' });
+  const adminToken = makeJwt({ uid: 'admin1', admin: true });
+
+  // Seed initial users and provider with owner token
+  const seedClient = await commitWrite({
+    token: 'owner',
+    docPath: 'users/client1',
+    data: {
+      uid: 'client1',
+      role: 'client',
+      fullName: 'Salma Bennani',
+      phone: '+212661234567',
+      city: 'Casablanca',
+      neighborhood: 'Maârif',
+      languagePref: 'fr',
+      verifiedBadge: false,
+      accountStatus: 'active',
+    },
+    rawTimestampFields: {
+      createdAt: fixedCreatedIso,
+      termsAcceptedAt: fixedCreatedIso,
+    },
+  });
+  assert.equal(seedClient.status, 200, `Seed client failed: ${seedClient.body}`);
+
+  const seedSuspended = await commitWrite({
+    token: 'owner',
+    docPath: 'users/susp1',
+    data: {
+      uid: 'susp1',
+      role: 'client',
+      fullName: 'Suspended User',
+      phone: '+212661234568',
+      city: 'Casablanca',
+      neighborhood: 'Anfa',
+      languagePref: 'fr',
+      verifiedBadge: false,
+      accountStatus: 'suspended',
+    },
+    rawTimestampFields: { createdAt: fixedCreatedIso },
+  });
+  assert.equal(seedSuspended.status, 200);
+
+  const seedProviderUser = await commitWrite({
+    token: 'owner',
+    docPath: 'users/prov1',
+    data: {
+      uid: 'prov1',
+      role: 'provider',
+      fullName: 'Maâlem Karim',
+      phone: '+212661987654',
+      city: 'Casablanca',
+      neighborhood: 'Maârif',
+      languagePref: 'fr',
+      verifiedBadge: true,
+      accountStatus: 'active',
+    },
+    rawTimestampFields: { createdAt: fixedCreatedIso },
+  });
+  assert.equal(seedProviderUser.status, 200);
+
+  const seedProvider = await commitWrite({
+    token: 'owner',
+    docPath: 'providers/prov1',
+    data: {
+      uid: 'prov1',
+      fullNameFr: 'Maâlem Karim',
+      fullNameAr: 'المعلم كريم',
+      category: 'Plomberie',
+      bioFr: 'Plombier professionnel certifié à Casablanca Maârif.',
+      bioAr: 'سباك محترف ومعتمد في الدار البيضاء المعاريف.',
+      hourlyRateMAD: 150,
+      fixedVisitFeeMAD: 70,
+      experienceYears: 8,
+      skills: ['Plomberie'],
+      portfolioImages: ['/src/assets/images/service_plumbing_repair_1794980477189.jpg'],
+      ratingAvg: 5,
+      reviewCount: 0,
+      isAvailableNow: true,
+      verifiedBadge: true,
+      phone: '+212661987654',
+      location: { lat: 33.5883, lng: -7.6325, city: 'Casablanca', quartier: 'Maârif' },
+    },
+    rawTimestampFields: { createdAt: fixedCreatedIso, updatedAt: fixedCreatedIso },
+  });
+  assert.equal(seedProvider.status, 200);
+
+  // --- AUD-001: Unauthorized COD provider withdrawal rejected by Firestore rules ---
+  const unauthorizedWithdrawal = await commitWrite({
+    token: providerToken,
+    docPath: 'withdrawals/wd_prov1',
+    data: {
+      providerId: 'prov1',
+      providerName: 'Maâlem Karim',
+      city: 'Casablanca',
+      bankName: 'Attijariwafa Bank',
+      ribMasked: '•••• 123456',
+      amountMad: 500,
+      status: 'pending',
+    },
+    requestTimeFields: ['createdAt', 'updatedAt'],
+    currentDocumentExists: false,
+  });
+  assert.equal(
+    unauthorizedWithdrawal.status,
+    403,
+    'AUD-001: Provider without server-verified withdrawableBalanceMad must be rejected'
+  );
+
+  // --- AUD-002: Client cmi_escrow booking creation rejected; cash_on_completion allowed ---
+  const baseBookingData = {
+    bookingRef: 'MK-TEST01',
+    clientId: 'client1',
+    clientName: 'Salma Bennani',
+    clientPhone: '+212661234567',
+    providerId: 'prov1',
+    providerName: 'Maâlem Karim',
+    providerPhone: '+212661987654',
+    category: 'Plomberie',
+    serviceType: 'Réparation fuite',
+    city: 'Casablanca',
+    neighborhood: 'Maârif',
+    addressPin: 'Maârif, Casablanca',
+    description: 'Fuite importante sous évier de cuisine.',
+    preferredDate: '2026-11-28',
+    preferredTimeSlot: '09:00 - 12:00',
+    estimatedMad: 350,
+    status: 'pending',
+  };
+
+  const cmiBookingAttempt = await commitWrite({
+    token: clientToken,
+    docPath: 'bookings/bk_cmi_1',
+    data: {
+      ...baseBookingData,
+      paymentMethod: 'cmi_escrow',
+      paymentStatus: 'escrow_held',
+    },
+    requestTimeFields: ['createdAt', 'updatedAt'],
+    currentDocumentExists: false,
+  });
+  assert.equal(
+    cmiBookingAttempt.status,
+    403,
+    'AUD-002: Client attempt to create cmi_escrow booking must be rejected'
+  );
+
+  const codBookingAttempt = await commitWrite({
+    token: clientToken,
+    docPath: 'bookings/bk_cod_1',
+    data: {
+      ...baseBookingData,
+      paymentMethod: 'cash_on_completion',
+      paymentStatus: 'unpaid_cod',
+    },
+    requestTimeFields: ['createdAt', 'updatedAt'],
+    currentDocumentExists: false,
+  });
+  assert.equal(
+    codBookingAttempt.status,
+    200,
+    `AUD-002: Client cash_on_completion booking creation must succeed: ${codBookingAttempt.body}`
+  );
+
+  // --- AUD-003: Suspended account blocked from creating bookings or updating own profile ---
+  const suspendedBookingAttempt = await commitWrite({
+    token: suspendedToken,
+    docPath: 'bookings/bk_susp_1',
+    data: {
+      ...baseBookingData,
+      clientId: 'susp1',
+      paymentMethod: 'cash_on_completion',
+      paymentStatus: 'unpaid_cod',
+    },
+    requestTimeFields: ['createdAt', 'updatedAt'],
+    currentDocumentExists: false,
+  });
+  assert.equal(
+    suspendedBookingAttempt.status,
+    403,
+    'AUD-003: Suspended account must be blocked from creating bookings'
+  );
+
+  const suspendedSelfUnsuspend = await commitWrite({
+    token: suspendedToken,
+    docPath: 'users/susp1',
+    data: {
+      uid: 'susp1',
+      role: 'client',
+      fullName: 'Suspended User',
+      phone: '+212661234568',
+      city: 'Casablanca',
+      neighborhood: 'Anfa',
+      languagePref: 'fr',
+      verifiedBadge: false,
+      accountStatus: 'active',
+    },
+    rawTimestampFields: { createdAt: fixedCreatedIso },
+    requestTimeFields: ['updatedAt'],
+    currentDocumentExists: true,
+  });
+  assert.equal(
+    suspendedSelfUnsuspend.status,
+    403,
+    'AUD-003: Suspended account must not be able to update or unsuspend itself'
+  );
+
+  // --- AUD-004: Active user with accountStatus & termsAcceptedAt can update profile; provider without prior completedJobs can update card ---
+  const activeProfileSave = await commitWrite({
+    token: clientToken,
+    docPath: 'users/client1',
+    data: {
+      uid: 'client1',
+      role: 'client',
+      fullName: 'Salma Bennani Updated',
+      phone: '+212661234567',
+      city: 'Casablanca',
+      neighborhood: 'Bourgogne',
+      languagePref: 'fr',
+      verifiedBadge: false,
+      accountStatus: 'active',
+    },
+    rawTimestampFields: {
+      createdAt: fixedCreatedIso,
+      termsAcceptedAt: fixedCreatedIso,
+    },
+    requestTimeFields: ['updatedAt'],
+    currentDocumentExists: true,
+  });
+  assert.equal(
+    activeProfileSave.status,
+    200,
+    `AUD-004: Active user preserving accountStatus & termsAcceptedAt must save cleanly: ${activeProfileSave.body}`
+  );
+
+  const providerCardSaveWithZeroCompleted = await commitWrite({
+    token: providerToken,
+    docPath: 'providers/prov1',
+    data: {
+      uid: 'prov1',
+      fullNameFr: 'Maâlem Karim Pro',
+      fullNameAr: 'المعلم كريم',
+      category: 'Plomberie',
+      bioFr: 'Plombier professionnel certifié à Casablanca Maârif.',
+      bioAr: 'سباك محترف ومعتمد في الدار البيضاء المعاريف.',
+      hourlyRateMAD: 180,
+      fixedVisitFeeMAD: 70,
+      experienceYears: 9,
+      skills: ['Plomberie', 'Chauffe-eau'],
+      portfolioImages: ['/src/assets/images/service_plumbing_repair_1794980477189.jpg'],
+      ratingAvg: 5,
+      reviewCount: 0,
+      isAvailableNow: true,
+      verifiedBadge: true,
+      phone: '+212661987654',
+      completedJobs: 0,
+      location: { lat: 33.5883, lng: -7.6325, city: 'Casablanca', quartier: 'Maârif' },
+    },
+    rawTimestampFields: { createdAt: fixedCreatedIso },
+    requestTimeFields: ['updatedAt'],
+    currentDocumentExists: true,
+  });
+  assert.equal(
+    providerCardSaveWithZeroCompleted.status,
+    200,
+    `AUD-004: Provider saving card with completedJobs == 0 must succeed: ${providerCardSaveWithZeroCompleted.body}`
+  );
+
+  // --- AUD-005: Non-admin blocked from spoofing kyc_updated / system notifications; workflow notifications allowed ---
+  const spoofedKycNotif = await commitWrite({
+    token: clientToken,
+    docPath: 'notifications/notif_spoof_1',
+    data: {
+      userId: 'prov1',
+      actorId: 'client1',
+      type: 'kyc_updated',
+      titleFr: 'Fake KYC',
+      titleAr: 'توثيق مزيف',
+      bodyFr: 'Fake body',
+      bodyAr: 'نص مزيف',
+      linkPath: '/provider/dashboard',
+      isRead: false,
+    },
+    requestTimeFields: ['createdAt'],
+    currentDocumentExists: false,
+  });
+  assert.equal(
+    spoofedKycNotif.status,
+    403,
+    'AUD-005: Non-admin user must be rejected when creating kyc_updated notification'
+  );
+
+  const legitimateWorkflowNotif = await commitWrite({
+    token: clientToken,
+    docPath: 'notifications/notif_legit_1',
+    data: {
+      userId: 'prov1',
+      actorId: 'client1',
+      type: 'booking_created',
+      titleFr: 'Nouvelle demande',
+      titleAr: 'طلب حجز جديد',
+      bodyFr: 'Salma demande une intervention.',
+      bodyAr: 'طلبت سلمى تدخلاً.',
+      linkPath: '/provider/missions',
+      isRead: false,
+    },
+    requestTimeFields: ['createdAt'],
+    currentDocumentExists: false,
+  });
+  assert.equal(
+    legitimateWorkflowNotif.status,
+    200,
+    `AUD-005: Legitimate booking_created notification must succeed: ${legitimateWorkflowNotif.body}`
+  );
+
+  const adminKycNotif = await commitWrite({
+    token: adminToken,
+    docPath: 'notifications/notif_admin_1',
+    data: {
+      userId: 'prov1',
+      actorId: 'admin1',
+      type: 'kyc_updated',
+      titleFr: 'Identité CIN vérifiée !',
+      titleAr: 'تم التحقق من بطاقتك الوطنية!',
+      bodyFr: 'Votre dossier CIN a été validé.',
+      bodyAr: 'تمت المصادقة على ملف البطاقة الوطنية.',
+      linkPath: '/provider/dashboard',
+      isRead: false,
+    },
+    requestTimeFields: ['createdAt'],
+    currentDocumentExists: false,
+  });
+  assert.equal(
+    adminKycNotif.status,
+    200,
+    `AUD-005: Admin creating kyc_updated notification must succeed: ${adminKycNotif.body}`
+  );
+});
+
 
 
 

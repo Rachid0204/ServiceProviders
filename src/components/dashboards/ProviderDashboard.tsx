@@ -51,6 +51,7 @@ import {
   MOROCCAN_CITIES,
   SERVICE_CATEGORIES,
   calculateEscrowSplit,
+  computeProviderEarningsBreakdown,
   computeQuotationTotals,
   formatMadCurrency,
   getDefaultQuoteValidUntilIso,
@@ -392,27 +393,28 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
     let pendingCount = 0;
     let activeCount = 0;
     let completedCount = 0;
-    let settledEarningsMad = 0;
-    let escrowHeldMad = 0;
 
     for (const b of providerBookings) {
       if (b.status === 'pending') pendingCount++;
       if (b.status === 'accepted' || b.status === 'in_progress') activeCount++;
       if (b.status === 'completed' || b.status === 'reviewed') completedCount++;
-
-      if (b.paymentStatus === 'paid') {
-        const split = calculateEscrowSplit(b.estimatedMad, systemSettings.platformFeePct, 100);
-        settledEarningsMad +=
-          b.paymentMethod === 'cmi_escrow'
-            ? b.providerPayoutMad ?? split.providerPayoutMad
-            : b.estimatedMad;
-      } else if (b.paymentMethod === 'cmi_escrow' && b.paymentStatus === 'escrow_held') {
-        const split = calculateEscrowSplit(b.estimatedMad, systemSettings.platformFeePct, 100);
-        escrowHeldMad += split.providerPayoutMad;
-      }
     }
-    return { pendingCount, activeCount, completedCount, settledEarningsMad, escrowHeldMad };
-  }, [providerBookings, systemSettings.platformFeePct]);
+
+    const earnings = computeProviderEarningsBreakdown({
+      bookings: providerBookings,
+      withdrawals,
+      platformFeePct: systemSettings.platformFeePct,
+      minWithdrawalMad: systemSettings.minWithdrawalMad,
+      cmiEscrowEnabled: false,
+    });
+
+    return {
+      pendingCount,
+      activeCount,
+      completedCount,
+      ...earnings,
+    };
+  }, [providerBookings, withdrawals, systemSettings.platformFeePct, systemSettings.minWithdrawalMad]);
 
   const withdrawnTotalMad = useMemo(
     () =>
@@ -742,6 +744,16 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
     if (!firebaseUser || !ownProvider) return;
     setWithdrawalNotice(null);
 
+    if (metrics.hasPendingWithdrawal) {
+      setWithdrawalNotice({
+        type: 'error',
+        text: isAr
+          ? 'لديك طلب سحب بنكي قيد المعالجة بالفعل. يرجى انتظار معالجته قبل إرسال طلب جديد.'
+          : 'Une demande de virement est déjà en cours de traitement.',
+      });
+      return;
+    }
+
     if (systemSettings.requireKycForEscrowPayout && !ownProvider.verifiedBadge) {
       setWithdrawalNotice({
         type: 'error',
@@ -754,6 +766,21 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
 
     const minAllowed = Math.max(100, systemSettings.minWithdrawalMad);
     const roundedAmount = Math.round(withdrawAmount);
+
+    if (
+      !metrics.canRequestWithdrawal ||
+      metrics.platformHeldWithdrawableMad < minAllowed ||
+      roundedAmount > metrics.platformHeldWithdrawableMad
+    ) {
+      setWithdrawalNotice({
+        type: 'error',
+        text: isAr
+          ? 'الأرباح النقدية (الدفع عند انتهاء الخدمة) تُحصّل مباشرة من الزبون ولا تمر عبر حساب المنصة. رصيدك المحتفظ به لدى المنصة والقابل للسحب البنكي هو 0 د.م.'
+          : 'Les paiements en espèces (COD) sont encaissés directement auprès du client. Votre solde détenu par la plateforme disponible pour virement est de 0 DH.',
+      });
+      return;
+    }
+
     if (Number.isNaN(roundedAmount) || roundedAmount < minAllowed || roundedAmount > 100000) {
       setWithdrawalNotice({
         type: 'error',
@@ -780,7 +807,7 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
         ? `${cleanRib.slice(0, 4)} •••• •••• ${cleanRib.slice(-4)}`
         : `•••• ${cleanRib.slice(-6)}`;
 
-    const withdrawalId = `wd-${firebaseUser.uid.slice(0, 8)}-${Date.now()}`;
+    const withdrawalId = `wd_${firebaseUser.uid}`;
     setIsSubmittingWithdrawal(true);
     try {
       await setDoc(doc(db, 'withdrawals', withdrawalId), {
@@ -1601,10 +1628,10 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
             </div>
             <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-1">
               <div className="text-xs font-medium text-slate-500">
-                {isAr ? 'الأرباح المحصلة' : 'Revenus encaissés'}
+                {isAr ? 'المحصل نقداً (COD)' : 'Encaissé en espèces (COD)'}
               </div>
               <div className="text-2xl font-bold tabular-nums text-emerald-700">
-                {formatMadCurrency(metrics.settledEarningsMad, lang)}
+                {formatMadCurrency(metrics.cashCollectedDirectlyMad, lang)}
               </div>
             </div>
           </div>
@@ -2321,17 +2348,27 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
 
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-                <div className="text-emerald-800">{isAr ? 'الأرباح المحصلة' : 'Encaissé'}</div>
+                <div className="text-emerald-800">
+                  {isAr ? 'محصل نقداً مباشرة (COD)' : 'Encaissé direct (Espèces COD)'}
+                </div>
                 <div className="text-base font-bold tabular-nums text-emerald-900 mt-0.5">
-                  {formatMadCurrency(metrics.settledEarningsMad, lang)}
+                  {formatMadCurrency(metrics.cashCollectedDirectlyMad, lang)}
                 </div>
               </div>
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
-                <div className="text-amber-800">{isAr ? 'في ضمان CMI' : 'En séquestre CMI'}</div>
-                <div className="text-base font-bold tabular-nums text-amber-900 mt-0.5">
-                  {formatMadCurrency(metrics.escrowHeldMad, lang)}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <div className="text-slate-700">
+                  {isAr ? 'رصيد المنصة القابل للسحب' : 'Solde plateforme retirable'}
+                </div>
+                <div className="text-base font-bold tabular-nums text-slate-900 mt-0.5">
+                  {formatMadCurrency(metrics.platformHeldWithdrawableMad, lang)}
                 </div>
               </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900">
+              {isAr
+                ? 'ملاحظة: مداخيل الدفع نقداً عند انتهاء الخدمة (COD) يستلمها المعلم مباشرة من الزبون (0% عمولة)، وبالتالي لا تُحتسب ضمن رصيد التحويل البنكي للمنصة.'
+                : 'Note : Les revenus payés en espèces en fin de chantier (COD) sont perçus directement auprès du client (0% commission) et ne constituent pas un solde détenu par la plateforme.'}
             </div>
 
             {withdrawalNotice && (
@@ -2400,8 +2437,8 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
 
               <button
                 type="submit"
-                disabled={isSubmittingWithdrawal}
-                className="w-full py-2.5 text-xs font-semibold text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 disabled:opacity-60 cursor-pointer"
+                disabled={isSubmittingWithdrawal || !metrics.canRequestWithdrawal}
+                className="w-full py-2.5 text-xs font-semibold text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
               >
                 {isSubmittingWithdrawal
                   ? isAr
