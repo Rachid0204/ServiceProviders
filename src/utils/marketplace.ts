@@ -423,6 +423,22 @@ export function isValidMoroccanPhone(phone: string): boolean {
 }
 
 /**
+ * Masks a valid Moroccan phone number for public catalog views (AUD-016) so raw phone numbers
+ * are not exposed in initial public DOM markup (e.g. "+212661428910" -> "+212 6•• ••• •10").
+ * Returns empty string `''` when the phone is missing or invalid.
+ */
+export function maskMoroccanPhone(phone: string): string {
+  if (!phone || !isValidMoroccanPhone(phone)) {
+    return '';
+  }
+  const normalized = normalizeMoroccanPhone(phone);
+  const countryCode = normalized.slice(0, 4); // +212
+  const firstDigit = normalized.slice(4, 5); // 5, 6, or 7
+  const lastTwo = normalized.slice(-2);
+  return `${countryCode} ${firstDigit}•• ••• •${lastTwo}`;
+}
+
+/**
  * Formats a Moroccan phone number into digits-only `212...` and builds a `https://wa.me/{phone}?text={encoded}` link
  * pre-filled in French or Arabic with the booking reference and service category.
  * Returns empty string `''` when no valid Moroccan phone number is provided (AUD-010: never dial a fake fallback number).
@@ -1796,4 +1812,17 @@ export function filterJobPosts(
       }
       return b.createdAtIso.localeCompare(a.createdAtIso);
     });
+}
+
+/**
+ * Selects competing pending proposals that should be auto-rejected after a customer
+ * accepts a winning quote on a job post (AUD-013).
+ */
+export function selectCompetingPendingProposals<
+  T extends { id: string; providerId?: string; status: string }
+>(proposals: T[], acceptedProviderId: string): T[] {
+  return proposals.filter((proposal) => {
+    const pid = proposal.providerId || proposal.id;
+    return proposal.status === 'pending' && pid !== acceptedProviderId;
+  });
 }

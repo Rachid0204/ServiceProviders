@@ -31,6 +31,7 @@ import {
   buildWhatsAppUrl,
   formatMadCurrency,
   isSafeImageUrl,
+  maskMoroccanPhone,
   type ProviderReview,
   type WeekdayKey,
 } from '../../utils/marketplace';
@@ -78,6 +79,7 @@ export const ProviderPublicProfilePage: React.FC = () => {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [liveReviews, setLiveReviews] = useState<ProviderReview[]>([]);
   const [reportedReviewFeedback, setReportedReviewFeedback] = useState<string | null>(null);
+  const [contactRevealed, setContactRevealed] = useState(false);
 
   const provider = useMemo(
     () => (id ? allProviders.find((p) => p.id === id || p.uid === id) ?? null : null),
@@ -112,6 +114,7 @@ export const ProviderPublicProfilePage: React.FC = () => {
     setActiveImageIndex(0);
     setLiveReviews([]);
     setReportedReviewFeedback(null);
+    setContactRevealed(false);
     if (!provider?.id) return;
 
     const q = query(
@@ -186,13 +189,20 @@ export const ProviderPublicProfilePage: React.FC = () => {
     ? provider.location.quartierAr || provider.location.quartier
     : provider.location.quartier;
 
-  const providerWhatsappUrl = buildWhatsAppUrl({
-    phone: provider.phone,
-    lang,
-    providerName: displayName,
-    category: t.categories[provider.category],
-  });
-  const telHref = `tel:${provider.phone.replace(/[^\d+]/g, '')}`;
+  const maskedPhone = maskMoroccanPhone(provider.phone);
+  const providerWhatsappUrl =
+    contactRevealed && maskedPhone
+      ? buildWhatsAppUrl({
+          phone: provider.phone,
+          lang,
+          providerName: displayName,
+          category: t.categories[provider.category],
+        })
+      : '';
+  const telHref =
+    contactRevealed && maskedPhone
+      ? `tel:${provider.phone.replace(/[^\d+]/g, '')}`
+      : '';
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -364,26 +374,45 @@ export const ProviderPublicProfilePage: React.FC = () => {
               >
                 <Heart className={`w-4 h-4 ${isFavorite ? 'fill-rose-600 text-rose-600' : ''}`} />
               </button>
-              {providerWhatsappUrl && (
-                <a
-                  href={providerWhatsappUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-emerald-900 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl transition-colors"
-                >
-                  <MessageCircle className="w-4 h-4 text-emerald-700" />
-                  <span>WhatsApp</span>
-                </a>
-              )}
-              {provider.phone && (
-                <a
-                  href={telHref}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-slate-800 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors"
-                >
-                  <Phone className="w-4 h-4 text-slate-600" />
-                  <span>{isAr ? 'اتصال' : 'Appeler'}</span>
-                </a>
-              )}
+              {maskedPhone &&
+                (!contactRevealed ? (
+                  <button
+                    type="button"
+                    data-testid="reveal-provider-phone-btn"
+                    onClick={() => setContactRevealed(true)}
+                    aria-label={`${isAr ? 'إظهار رقم هاتف' : 'Afficher le numéro de'} ${displayName}`}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-slate-800 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors cursor-pointer"
+                  >
+                    <Phone className="w-4 h-4 text-emerald-700" />
+                    <span>{isAr ? 'إظهار رقم التواصل' : 'Afficher le contact'}</span>
+                    <span className="font-mono-tabular text-slate-500 text-xs" dir="ltr">
+                      {maskedPhone}
+                    </span>
+                  </button>
+                ) : (
+                  <>
+                    {providerWhatsappUrl && (
+                      <a
+                        href={providerWhatsappUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-emerald-900 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-xl transition-colors"
+                      >
+                        <MessageCircle className="w-4 h-4 text-emerald-700" />
+                        <span>WhatsApp</span>
+                      </a>
+                    )}
+                    <a
+                      href={telHref}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-3 text-sm font-semibold text-slate-800 bg-white border border-slate-300 hover:bg-slate-50 rounded-xl transition-colors"
+                    >
+                      <Phone className="w-4 h-4 text-slate-600" />
+                      <span className="font-mono-tabular" dir="ltr">
+                        {provider.phone}
+                      </span>
+                    </a>
+                  </>
+                ))}
             </div>
           </div>
         </div>

@@ -823,3 +823,36 @@ test('AUD-006 & AUD-010: parseProviderAvailabilitySnapshot normalizes provider a
   assert.ok(validWa.startsWith('https://wa.me/212661234567?text='));
   assert.ok(!validWa.includes('212661000000'));
 });
+
+test('AUD-013 & AUD-016: selectCompetingPendingProposals isolates competing pending quotes and maskMoroccanPhone hides raw middle digits', async () => {
+  const { selectCompetingPendingProposals, maskMoroccanPhone } = await import('./marketplace');
+
+  // AUD-013: only competing pending proposals are selected for auto-rejection
+  const competing = selectCompetingPendingProposals(
+    [
+      { id: 'prov-winner', providerId: 'prov-winner', status: 'pending' },
+      { id: 'prov-b', providerId: 'prov-b', status: 'pending' },
+      { id: 'prov-c', status: 'pending' },
+      { id: 'prov-withdrawn', providerId: 'prov-withdrawn', status: 'withdrawn' },
+      { id: 'prov-rejected', providerId: 'prov-rejected', status: 'rejected' },
+      { id: 'prov-accepted', providerId: 'prov-accepted', status: 'accepted' },
+    ],
+    'prov-winner'
+  );
+  assert.deepEqual(
+    competing.map((p) => p.id),
+    ['prov-b', 'prov-c']
+  );
+
+  // AUD-016: maskMoroccanPhone hides middle 6 digits and returns '' for empty/invalid inputs
+  assert.equal(maskMoroccanPhone('+212661428910'), '+212 6•• ••• •10');
+  assert.equal(maskMoroccanPhone('06 61 42 89 10'), '+212 6•• ••• •10');
+  assert.equal(maskMoroccanPhone('+212700112233'), '+212 7•• ••• •33');
+  assert.equal(maskMoroccanPhone('+212522987654'), '+212 5•• ••• •54');
+  assert.equal(maskMoroccanPhone('+212661428910').includes('614289'), false);
+  assert.equal(maskMoroccanPhone(''), '');
+  assert.equal(maskMoroccanPhone('   '), '');
+  assert.equal(maskMoroccanPhone('+33612345678'), '');
+  assert.equal(maskMoroccanPhone('12345'), '');
+});
+

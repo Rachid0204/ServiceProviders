@@ -590,6 +590,7 @@ service cloud.firestore {
         incoming().uid == request.auth.uid &&
         isValidUserProfile(incoming()) &&
         incoming().createdAt == request.time &&
+        (!('termsAcceptedAt' in incoming()) || incoming().termsAcceptedAt == request.time) &&
         (!('updatedAt' in incoming()) || incoming().updatedAt == request.time) &&
         (!('accountStatus' in incoming()) || incoming().accountStatus == 'active' || isAdmin()) &&
         (incoming().verifiedBadge == false || isAdmin());
@@ -1310,12 +1311,20 @@ service cloud.firestore {
           incoming().createdAt == existing().createdAt &&
           incoming().updatedAt == request.time && (
             isAdmin() ||
-            // Client owner accepts or rejects a pending proposal (price locked)
+            // Client owner accepts a pending proposal (on an open job) or rejects competing pending proposals (AUD-013)
             (
               request.auth.uid == existing().clientId &&
               existing().status == 'pending' &&
               incoming().proposedPriceMad == existing().proposedPriceMad &&
-              (incoming().status == 'accepted' || incoming().status == 'rejected') &&
+              (
+                incoming().status == 'rejected' ||
+                (
+                  incoming().status == 'accepted' &&
+                  get(/databases/$(database)/documents/jobPosts/$(jobId)).data.status == 'open' &&
+                  getAfter(/databases/$(database)/documents/jobPosts/$(jobId)).data.status == 'assigned' &&
+                  getAfter(/databases/$(database)/documents/jobPosts/$(jobId)).data.assignedProviderId == existing().providerId
+                )
+              ) &&
               incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
             ) ||
             // Proposing Maâlem withdraws their own pending proposal

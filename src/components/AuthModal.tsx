@@ -14,6 +14,7 @@ import type { LanguageCode, UserRole } from '../utils/marketplace';
 import type { Translations } from '../i18n/translations';
 import {
   mapFirebaseAuthError,
+  persistTermsAcceptedIntent,
   validateEmailPasswordInput,
 } from '../utils/authHelpers';
 import {
@@ -48,6 +49,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [selectedRole, setSelectedRole] = useState<UserRole>(intent);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -63,6 +65,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const handleGoogle = async () => {
     setError(null);
     setNotice(null);
+    if (mode === 'signup') {
+      if (!termsAccepted) {
+        setError(t.termsConsentRequiredError);
+        return;
+      }
+      persistTermsAcceptedIntent();
+    }
     onSelectRoleIntent(selectedRole);
     setIsSubmitting(true);
     try {
@@ -80,6 +89,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     e.preventDefault();
     setError(null);
     setNotice(null);
+
+    if (mode === 'signup' && !termsAccepted) {
+      setError(t.termsConsentRequiredError);
+      return;
+    }
 
     const check = validateEmailPasswordInput({
       email,
@@ -100,6 +114,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
         onAuthSuccess(selectedRole, false);
         onClose();
       } else if (mode === 'signup') {
+        persistTermsAcceptedIntent();
         onSelectRoleIntent(selectedRole);
         await signUpWithEmail(check.normalizedEmail, password, selectedRole);
         setPassword('');
@@ -283,6 +298,41 @@ export const AuthModal: React.FC<AuthModalProps> = ({
               })}
             </div>
           </div>
+        )}
+
+        {/* Law 09-08 / Terms & Privacy Explicit Consent (Required in Sign Up mode) */}
+        {mode === 'signup' && (
+          <label className="flex items-start gap-2.5 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(e) => {
+                setTermsAccepted(e.target.checked);
+                if (e.target.checked) setError(null);
+              }}
+              className="mt-0.5 w-4 h-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600 shrink-0"
+            />
+            <span className="leading-relaxed">
+              {t.termsConsentLabel}{' '}
+              <a
+                href="/terms"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-700 font-semibold hover:underline"
+              >
+                {isAr ? 'شروط الاستخدام' : 'CGU'}
+              </a>{' '}
+              ·{' '}
+              <a
+                href="/privacy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-700 font-semibold hover:underline"
+              >
+                {isAr ? 'الخصوصية (قانون 09-08)' : 'Confidentialité (Loi 09-08)'}
+              </a>
+            </span>
+          </label>
         )}
 
         {/* Google One-Click Auth */}

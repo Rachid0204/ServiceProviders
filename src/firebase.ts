@@ -149,16 +149,37 @@ export function resolveFirebaseConfig(
 
 export const firebaseConfig = resolveFirebaseConfig();
 
+export interface AppCheckStatus {
+  configured: boolean;
+  active: boolean;
+  siteKeyPresent: boolean;
+  error?: string;
+}
+
+export const appCheckStatus: AppCheckStatus = {
+  configured: Boolean(firebaseConfig.recaptchaSiteKey),
+  active: false,
+  siteKeyPresent: Boolean(firebaseConfig.recaptchaSiteKey),
+};
+
 const app = initializeApp(firebaseConfig);
 // Activate Firebase App Check automatically in browsers when a reCAPTCHA v3 site key is provisioned
-if (typeof window !== 'undefined' && firebaseConfig.recaptchaSiteKey) {
-  try {
-    initializeAppCheck(app, {
-      provider: new ReCaptchaV3Provider(firebaseConfig.recaptchaSiteKey),
-      isTokenAutoRefreshEnabled: true,
-    });
-  } catch (err) {
-    console.warn('Firebase App Check initialization skipped:', err);
+if (typeof window !== 'undefined') {
+  if (firebaseConfig.recaptchaSiteKey) {
+    try {
+      initializeAppCheck(app, {
+        provider: new ReCaptchaV3Provider(firebaseConfig.recaptchaSiteKey),
+        isTokenAutoRefreshEnabled: true,
+      });
+      appCheckStatus.active = true;
+    } catch (err) {
+      appCheckStatus.error = err instanceof Error ? err.message : String(err);
+      console.warn('Firebase App Check initialization skipped:', err);
+    }
+  } else if ((import.meta as unknown as { env?: { PROD?: boolean } }).env?.PROD) {
+    console.warn(
+      '[Security / AUD-016] Firebase App Check is not active because VITE_FIREBASE_RECAPTCHA_SITE_KEY is not configured.'
+    );
   }
 }
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);

@@ -26,6 +26,7 @@ import { db, reportFirestoreError, OperationType } from '../firebase';
 import {
   buildWhatsAppUrl,
   formatMadCurrency,
+  maskMoroccanPhone,
   type LanguageCode,
   type ProviderReview,
   type VettedProvider,
@@ -60,10 +61,12 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
 }) => {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [liveReviews, setLiveReviews] = useState<ProviderReview[]>([]);
+  const [contactRevealed, setContactRevealed] = useState(false);
 
   useEffect(() => {
     setActiveImageIndex(0);
     setLiveReviews([]);
+    setContactRevealed(false);
     const q = query(
       collection(db, 'reviews'),
       where('providerId', '==', provider.id),
@@ -108,13 +111,20 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
   const displayQuartier = isAr
     ? provider.location.quartierAr || provider.location.quartier
     : provider.location.quartier;
-  const providerWhatsappUrl = buildWhatsAppUrl({
-    phone: provider.phone,
-    lang,
-    providerName: displayName,
-    category: t.categories[provider.category],
-  });
-  const telHref = `tel:${provider.phone.replace(/[^\d+]/g, '')}`;
+  const maskedPhone = maskMoroccanPhone(provider.phone);
+  const providerWhatsappUrl =
+    contactRevealed && maskedPhone
+      ? buildWhatsAppUrl({
+          phone: provider.phone,
+          lang,
+          providerName: displayName,
+          category: t.categories[provider.category],
+        })
+      : '';
+  const telHref =
+    contactRevealed && maskedPhone
+      ? `tel:${provider.phone.replace(/[^\d+]/g, '')}`
+      : '';
 
   return (
     <div
@@ -431,23 +441,46 @@ export const ProviderDetailModal: React.FC<ProviderDetailModalProps> = ({
                 : t.freeCallout}
             </span>
           </div>
-          <div className="grid grid-cols-3 sm:flex items-center gap-2">
-            <a
-              href={telHref}
-              className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[42px] text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap"
-            >
-              <Phone className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
-              <span>{isAr ? 'اتصال' : 'Appeler'}</span>
-            </a>
-            <a
-              href={providerWhatsappUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[42px] text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors whitespace-nowrap"
-            >
-              <MessageCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span>WhatsApp</span>
-            </a>
+          <div className="grid grid-cols-2 sm:flex items-center gap-2">
+            {maskedPhone &&
+              (!contactRevealed ? (
+                <button
+                  type="button"
+                  data-testid="reveal-provider-phone-btn"
+                  onClick={() => setContactRevealed(true)}
+                  aria-label={`${isAr ? 'إظهار رقم هاتف' : 'Afficher le numéro de'} ${displayName}`}
+                  className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[42px] text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap cursor-pointer"
+                >
+                  <Phone className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                  <span>{isAr ? 'إظهار الهاتف' : 'Afficher contact'}</span>
+                  <span className="font-mono-tabular text-slate-500 hidden sm:inline" dir="ltr">
+                    {maskedPhone}
+                  </span>
+                </button>
+              ) : (
+                <>
+                  <a
+                    href={telHref}
+                    className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[42px] text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-100 transition-colors whitespace-nowrap"
+                  >
+                    <Phone className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
+                    <span className="font-mono-tabular" dir="ltr">
+                      {provider.phone}
+                    </span>
+                  </a>
+                  {providerWhatsappUrl && (
+                    <a
+                      href={providerWhatsappUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-1.5 px-3 min-h-[42px] text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors whitespace-nowrap"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span>WhatsApp</span>
+                    </a>
+                  )}
+                </>
+              ))}
             <button
               type="button"
               onClick={() => {

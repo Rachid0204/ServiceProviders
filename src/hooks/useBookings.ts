@@ -354,6 +354,7 @@ export function useBookings(params: {
           });
           tx.set(userRef, {
             ...bootstrappedProfile,
+            termsAcceptedAt: serverTimestamp(),
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           });

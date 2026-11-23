@@ -6,6 +6,7 @@ import { useMarketplace } from '../../app/providers/MarketplaceContext';
 import { ROUTE_PATHS } from '../../app/routePaths';
 import {
   mapFirebaseAuthError,
+  persistTermsAcceptedIntent,
   validateEmailPasswordInput,
 } from '../../utils/authHelpers';
 import { signUpWithEmail } from '../../firebase';
@@ -31,6 +32,7 @@ export const RegisterPage: React.FC = () => {
       setError(t.termsConsentRequiredError);
       return;
     }
+    persistTermsAcceptedIntent();
     setSignupRoleIntent(selectedRole);
     setIsSubmitting(true);
     try {
@@ -60,6 +62,7 @@ export const RegisterPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
+      persistTermsAcceptedIntent();
       setSignupRoleIntent(selectedRole);
       await signUpWithEmail(check.normalizedEmail, password, selectedRole);
       setPassword('');
