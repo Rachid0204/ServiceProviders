@@ -65,7 +65,7 @@ export function useSystemSettings(firebaseUser: User | null, authReady: boolean)
               ? data.requireKycForEscrowPayout
               : DEFAULT_SYSTEM_SETTINGS.requireKycForEscrowPayout,
           supportWhatsAppPhone:
-            typeof data.supportWhatsAppPhone === 'string' && data.supportWhatsAppPhone
+            typeof data.supportWhatsAppPhone === 'string'
               ? data.supportWhatsAppPhone
               : DEFAULT_SYSTEM_SETTINGS.supportWhatsAppPhone,
           updatedByEmail:

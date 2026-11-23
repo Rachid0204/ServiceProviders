@@ -32,11 +32,10 @@ import {
   type WithdrawalStatus,
 } from '../utils/adminMetrics';
 import { hasAdminCustomClaim, isVerifiedAuthUser } from '../utils/authHelpers';
+import { validateOptionalSupportWhatsAppPhone } from '../utils/systemSettings';
 import {
   calculateEscrowSplit,
   getNextPaymentStatus,
-  isValidMoroccanPhone,
-  normalizeMoroccanPhone,
   type BookingRecord,
   type BookingStatus,
   type MoroccanCity,
@@ -990,13 +989,15 @@ export function useAdminData(params: {
   // Action 8: Persist System Settings to Firestore systemSettings/global (with strict validation)
   const saveSystemSettings = async (patch: Partial<SystemSettingsRecord>) => {
     if (!isLiveAdmin || !firebaseUser) return;
-    const normalizedPhone = normalizeMoroccanPhone(
-      patch.supportWhatsAppPhone ?? systemSettings.supportWhatsAppPhone
-    );
-    if (!isValidMoroccanPhone(normalizedPhone)) {
+    const rawSupportPhone =
+      patch.supportWhatsAppPhone !== undefined
+        ? patch.supportWhatsAppPhone
+        : systemSettings.supportWhatsAppPhone;
+    const phoneCheck = validateOptionalSupportWhatsAppPhone(rawSupportPhone);
+    if (!phoneCheck.valid) {
       showToast({
-        fr: 'Numéro WhatsApp support invalide (format marocain +212 requis).',
-        ar: 'رقم واتساب الدعم غير صالح (صيغة +212 مطلوبة).',
+        fr: 'Numéro WhatsApp support invalide (laissez vide ou utilisez le format marocain +212).',
+        ar: 'رقم واتساب الدعم غير صالح (اتركه فارغاً أو استخدم الصيغة المغربية +212).',
         variant: 'error',
       });
       return;
@@ -1009,7 +1010,7 @@ export function useAdminData(params: {
       ...patch,
       platformFeePct: Math.max(0, Math.min(50, Math.round(patch.platformFeePct ?? systemSettings.platformFeePct))),
       minWithdrawalMad: Math.max(50, Math.min(20000, Math.round(patch.minWithdrawalMad ?? systemSettings.minWithdrawalMad))),
-      supportWhatsAppPhone: normalizedPhone,
+      supportWhatsAppPhone: phoneCheck.normalized,
       updatedByEmail: firebaseUser.email || DEFAULT_ADMIN_EMAIL_PLACEHOLDER,
       updatedAtIso,
     };

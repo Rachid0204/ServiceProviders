@@ -309,10 +309,10 @@ test('Wave 0 Live Firebase Firestore Emulator Execution: AUD-001, AUD-002, AUD-0
     'emulators',
     'cloud-firestore-emulator-v1.19.8.jar'
   );
-  if (!fs.existsSync(jarPath)) {
-    t.skip('Firestore Emulator JAR not cached locally; skipping live emulator execution');
-    return;
-  }
+  assert.ok(
+    fs.existsSync(jarPath),
+    `Firestore Emulator JAR missing at ${jarPath}; live Firestore rules verification cannot be skipped`
+  );
 
   const port = 8091;
   const projectId = 'serviceproviders-test';
@@ -1818,5 +1818,127 @@ test('Wave 0 Live Firebase Firestore Emulator Execution: AUD-001, AUD-002, AUD-0
     200,
     `AUD-007: Provider revising and resubmitting withdrawn proposal must succeed: ${reviseProposal.body}`
   );
-});
 
+  // --- SystemSettings: optional supportWhatsAppPhone ('') vs strict Moroccan phone & existing bounds ---
+  const baseSystemSettings = {
+    platformFeePct: 0,
+    minWithdrawalMad: 200,
+    autoRefundOnProviderCancel: true,
+    requireKycForEscrowPayout: true,
+    updatedByEmail: 'admin1@test.ma',
+  };
+
+  // 1. Empty supportWhatsAppPhone ('') accepted for admin
+  const settingsEmptyPhone = await commitWrite({
+    token: adminToken,
+    docPath: 'systemSettings/global',
+    data: {
+      ...baseSystemSettings,
+      supportWhatsAppPhone: '',
+    },
+    requestTimeFields: ['updatedAt'],
+  });
+  assert.equal(
+    settingsEmptyPhone.status,
+    200,
+    `SystemSettings: Admin saving empty supportWhatsAppPhone must succeed: ${settingsEmptyPhone.body}`
+  );
+
+  // 2. Valid Moroccan supportWhatsAppPhone accepted for admin
+  const settingsValidPhone = await commitWrite({
+    token: adminToken,
+    docPath: 'systemSettings/global',
+    data: {
+      ...baseSystemSettings,
+      supportWhatsAppPhone: '+212661234567',
+    },
+    requestTimeFields: ['updatedAt'],
+  });
+  assert.equal(
+    settingsValidPhone.status,
+    200,
+    `SystemSettings: Admin saving valid Moroccan supportWhatsAppPhone must succeed: ${settingsValidPhone.body}`
+  );
+
+  // 3. Invalid non-empty supportWhatsAppPhone values rejected by Firestore rules
+  for (const invalidPhone of ['0661234567', '+33612345678', '+212123456789', 'abc', '   ']) {
+    const settingsBadPhone = await commitWrite({
+      token: adminToken,
+      docPath: 'systemSettings/global',
+      data: {
+        ...baseSystemSettings,
+        supportWhatsAppPhone: invalidPhone,
+      },
+      requestTimeFields: ['updatedAt'],
+    });
+    assert.equal(
+      settingsBadPhone.status,
+      403,
+      `SystemSettings: Invalid non-empty supportWhatsAppPhone "${invalidPhone}" must be rejected`
+    );
+  }
+
+  // 4. Existing systemSettings validations & admin-only RBAC remain strictly enforced
+  const settingsOutOfRangeFee = await commitWrite({
+    token: adminToken,
+    docPath: 'systemSettings/global',
+    data: {
+      ...baseSystemSettings,
+      platformFeePct: 55,
+      supportWhatsAppPhone: '',
+    },
+    requestTimeFields: ['updatedAt'],
+  });
+  assert.equal(
+    settingsOutOfRangeFee.status,
+    403,
+    'SystemSettings: platformFeePct > 50 must still be rejected'
+  );
+
+  const settingsLowMinWithdrawal = await commitWrite({
+    token: adminToken,
+    docPath: 'systemSettings/global',
+    data: {
+      ...baseSystemSettings,
+      minWithdrawalMad: 25,
+      supportWhatsAppPhone: '',
+    },
+    requestTimeFields: ['updatedAt'],
+  });
+  assert.equal(
+    settingsLowMinWithdrawal.status,
+    403,
+    'SystemSettings: minWithdrawalMad < 50 must still be rejected'
+  );
+
+  const settingsExtraField = await commitWrite({
+    token: adminToken,
+    docPath: 'systemSettings/global',
+    data: {
+      ...baseSystemSettings,
+      supportWhatsAppPhone: '',
+      unexpectedExtraField: true,
+    },
+    requestTimeFields: ['updatedAt'],
+  });
+  assert.equal(
+    settingsExtraField.status,
+    403,
+    'SystemSettings: Unexpected extra keys must still be rejected'
+  );
+
+  const settingsNonAdmin = await commitWrite({
+    token: clientToken,
+    docPath: 'systemSettings/global',
+    data: {
+      ...baseSystemSettings,
+      supportWhatsAppPhone: '',
+    },
+    requestTimeFields: ['updatedAt'],
+  });
+  assert.equal(
+    settingsNonAdmin.status,
+    403,
+    'SystemSettings: Non-admin write to /systemSettings/global must remain rejected'
+  );
+});

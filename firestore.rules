@@ -562,7 +562,13 @@ service cloud.firestore {
         data.minWithdrawalMad is int && data.minWithdrawalMad >= 50 && data.minWithdrawalMad <= 20000 &&
         data.autoRefundOnProviderCancel is bool &&
         data.requireKycForEscrowPayout is bool &&
-        data.supportWhatsAppPhone is string && data.supportWhatsAppPhone.size() >= 12 && data.supportWhatsAppPhone.size() <= 16 && data.supportWhatsAppPhone.matches('^\\+212[5-7][0-9]{8}$') &&
+        data.supportWhatsAppPhone is string && (
+          data.supportWhatsAppPhone == '' || (
+            data.supportWhatsAppPhone.size() >= 12 &&
+            data.supportWhatsAppPhone.size() <= 16 &&
+            data.supportWhatsAppPhone.matches('^\\+212[5-7][0-9]{8}$')
+          )
+        ) &&
         data.updatedByEmail is string && data.updatedByEmail.size() >= 5 && data.updatedByEmail.size() <= 160 &&
         data.updatedAt is timestamp;
     }
