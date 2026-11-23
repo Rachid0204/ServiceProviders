@@ -66,7 +66,7 @@ export interface AdminAuditLog {
   createdAtIso: string;
 }
 
-export type WithdrawalStatus = 'pending' | 'approved' | 'frozen' | 'rejected';
+export type WithdrawalStatus = 'pending' | 'approved' | 'completed' | 'frozen' | 'rejected';
 
 export interface WithdrawalRecord {
   id: string;

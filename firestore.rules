@@ -514,7 +514,7 @@ service cloud.firestore {
         data.createdAt is timestamp;
     }
 
-    // 9. Validation Blueprint: WithdrawalRequest (/withdrawals/{withdrawalId})
+    // 9. Validation Blueprint: WithdrawalRequest (/withdrawals/{withdrawalId}) & Active Lock (/withdrawalLocks/{providerId})
     function isValidWithdrawal(data) {
       return data.keys().hasAll([
           'providerId',
@@ -539,7 +539,7 @@ service cloud.firestore {
           'createdAt',
           'updatedAt'
         ]) &&
-        data.providerId is string && data.providerId.size() >= 1 && data.providerId.size() <= 128 && data.providerId.matches('^[a-zA-Z0-9_\\-]+$') &&
+        isValidId(data.providerId) &&
         data.providerName is string && data.providerName.size() >= 2 && data.providerName.size() <= 80 &&
         isValidCity(data.city) &&
         data.bankName is string && data.bankName.size() >= 2 && data.bankName.size() <= 64 &&
@@ -548,11 +548,20 @@ service cloud.firestore {
         data.status is string && data.status.size() <= 24 && (
           data.status == 'pending' ||
           data.status == 'approved' ||
+          data.status == 'completed' ||
           data.status == 'frozen' ||
           data.status == 'rejected'
         ) &&
         (!('adminNote' in data) || (data.adminNote is string && data.adminNote.size() <= 300)) &&
         data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidWithdrawalLock(data) {
+      return data.keys().hasAll(['providerId', 'activeWithdrawalId', 'updatedAt']) &&
+        data.keys().hasOnly(['providerId', 'activeWithdrawalId', 'updatedAt']) &&
+        isValidId(data.providerId) &&
+        isValidId(data.activeWithdrawalId) &&
         data.updatedAt is timestamp;
     }
 
@@ -970,7 +979,9 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // 18. Match: /withdrawals/{withdrawalId} (Server-enforced platform-held balance & single pending withdrawal per provider — AUD-001)
+    // 18. Match: /withdrawals/{withdrawalId} & /withdrawalLocks/{providerId}
+    // Enforces server-controlled platform-held balance, single active pending request per provider,
+    // new requests after terminal status (approved/rejected/completed), and immutable withdrawal history (AUD-001).
     match /withdrawals/{withdrawalId} {
       allow get: if isVerifiedUser() &&
         isValidId(withdrawalId) &&
@@ -985,12 +996,13 @@ service cloud.firestore {
         incoming().createdAt == request.time &&
         incoming().updatedAt == request.time && (
           isAdmin() || (
-            withdrawalId == 'wd_' + request.auth.uid &&
             incoming().providerId == request.auth.uid &&
             exists(/databases/$(database)/documents/providers/$(request.auth.uid)) &&
             'withdrawableBalanceMad' in get(/databases/$(database)/documents/providers/$(request.auth.uid)).data &&
             get(/databases/$(database)/documents/providers/$(request.auth.uid)).data.withdrawableBalanceMad is int &&
             incoming().amountMad <= get(/databases/$(database)/documents/providers/$(request.auth.uid)).data.withdrawableBalanceMad &&
+            existsAfter(/databases/$(database)/documents/withdrawalLocks/$(request.auth.uid)) &&
+            getAfter(/databases/$(database)/documents/withdrawalLocks/$(request.auth.uid)).data.activeWithdrawalId == withdrawalId &&
             (
               !exists(/databases/$(database)/documents/systemSettings/global) || (
                 incoming().amountMad >= get(/databases/$(database)/documents/systemSettings/global).data.minWithdrawalMad &&
@@ -1010,7 +1022,52 @@ service cloud.firestore {
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time;
 
-      allow delete: if isAdmin() && isValidId(withdrawalId);
+      allow delete: if false;
+    }
+
+    match /withdrawalLocks/{providerId} {
+      allow get: if isVerifiedUser() &&
+        isValidId(providerId) &&
+        (request.auth.uid == providerId || isAdmin());
+
+      allow list: if isAdmin();
+
+      allow create: if isActiveVerifiedUser() &&
+        isValidId(providerId) &&
+        isValidWithdrawalLock(incoming()) &&
+        incoming().providerId == providerId &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            request.auth.uid == providerId &&
+            !exists(/databases/$(database)/documents/withdrawals/$(incoming().activeWithdrawalId)) &&
+            existsAfter(/databases/$(database)/documents/withdrawals/$(incoming().activeWithdrawalId)) &&
+            getAfter(/databases/$(database)/documents/withdrawals/$(incoming().activeWithdrawalId)).data.providerId == request.auth.uid &&
+            getAfter(/databases/$(database)/documents/withdrawals/$(incoming().activeWithdrawalId)).data.status == 'pending'
+          )
+        );
+
+      allow update: if isActiveVerifiedUser() &&
+        isValidId(providerId) &&
+        isValidWithdrawalLock(incoming()) &&
+        incoming().providerId == existing().providerId &&
+        incoming().updatedAt == request.time && (
+          isAdmin() || (
+            request.auth.uid == providerId &&
+            incoming().activeWithdrawalId != existing().activeWithdrawalId &&
+            exists(/databases/$(database)/documents/withdrawals/$(existing().activeWithdrawalId)) &&
+            (
+              get(/databases/$(database)/documents/withdrawals/$(existing().activeWithdrawalId)).data.status == 'approved' ||
+              get(/databases/$(database)/documents/withdrawals/$(existing().activeWithdrawalId)).data.status == 'rejected' ||
+              get(/databases/$(database)/documents/withdrawals/$(existing().activeWithdrawalId)).data.status == 'completed'
+            ) &&
+            !exists(/databases/$(database)/documents/withdrawals/$(incoming().activeWithdrawalId)) &&
+            existsAfter(/databases/$(database)/documents/withdrawals/$(incoming().activeWithdrawalId)) &&
+            getAfter(/databases/$(database)/documents/withdrawals/$(incoming().activeWithdrawalId)).data.providerId == request.auth.uid &&
+            getAfter(/databases/$(database)/documents/withdrawals/$(incoming().activeWithdrawalId)).data.status == 'pending'
+          )
+        );
+
+      allow delete: if isAdmin() && isValidId(providerId);
     }
 
     // 19. Match: /systemSettings/{configId} (Authenticated users read; verified administrators write)

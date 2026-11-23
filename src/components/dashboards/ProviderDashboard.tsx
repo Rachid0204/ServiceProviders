@@ -38,7 +38,7 @@ import {
   limit,
   onSnapshot,
   doc,
-  setDoc,
+  runTransaction,
   serverTimestamp,
   type Timestamp,
 } from 'firebase/firestore';
@@ -50,6 +50,7 @@ import {
   DEFAULT_CATEGORY_IMAGE,
   MOROCCAN_CITIES,
   SERVICE_CATEGORIES,
+  buildWithdrawalRequestId,
   calculateEscrowSplit,
   computeProviderEarningsBreakdown,
   computeQuotationTotals,
@@ -94,7 +95,7 @@ interface ProviderWithdrawalItem {
   bankName: string;
   ribMasked: string;
   amountMad: number;
-  status: 'pending' | 'approved' | 'frozen' | 'rejected';
+  status: 'pending' | 'approved' | 'completed' | 'frozen' | 'rejected';
   adminNote?: string;
   createdAtIso: string;
 }
@@ -807,19 +808,67 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
         ? `${cleanRib.slice(0, 4)} •••• •••• ${cleanRib.slice(-4)}`
         : `•••• ${cleanRib.slice(-6)}`;
 
-    const withdrawalId = `wd_${firebaseUser.uid}`;
+    const withdrawalId = buildWithdrawalRequestId(firebaseUser.uid);
+    const withdrawalRef = doc(db, 'withdrawals', withdrawalId);
+    const lockRef = doc(db, 'withdrawalLocks', firebaseUser.uid);
+    const providerRef = doc(db, 'providers', firebaseUser.uid);
+
     setIsSubmittingWithdrawal(true);
     try {
-      await setDoc(doc(db, 'withdrawals', withdrawalId), {
-        providerId: firebaseUser.uid,
-        providerName: isAr ? ownProvider.fullNameAr : ownProvider.fullNameFr,
-        city: ownProvider.location.city,
-        bankName,
-        ribMasked: maskedRib.slice(0, 40),
-        amountMad: roundedAmount,
-        status: 'pending',
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+      await runTransaction(db, async (tx) => {
+        const [providerSnap, lockSnap] = await Promise.all([
+          tx.get(providerRef),
+          tx.get(lockRef),
+        ]);
+
+        const serverWithdrawableMad = providerSnap.exists()
+          ? Number(providerSnap.data().withdrawableBalanceMad ?? 0)
+          : 0;
+        if (roundedAmount > serverWithdrawableMad || serverWithdrawableMad < minAllowed) {
+          throw new Error(
+            isAr
+              ? 'رصيدك المعتمد لدى المنصة غير كافٍ لإجراء عملية السحب البنكي.'
+              : 'Solde disponible détenu par la plateforme insuffisant pour ce virement.'
+          );
+        }
+
+        if (lockSnap.exists()) {
+          const prevWithdrawalId = String(lockSnap.data().activeWithdrawalId || '');
+          if (prevWithdrawalId) {
+            const prevSnap = await tx.get(doc(db, 'withdrawals', prevWithdrawalId));
+            if (prevSnap.exists()) {
+              const prevStatus = String(prevSnap.data().status || 'pending');
+              if (
+                prevStatus !== 'approved' &&
+                prevStatus !== 'rejected' &&
+                prevStatus !== 'completed'
+              ) {
+                throw new Error(
+                  isAr
+                    ? 'لديك طلب سحب بنكي قيد المعالجة بالفعل. يرجى انتظار معالجته قبل إرسال طلب جديد.'
+                    : 'Une demande de virement est déjà en cours de traitement.'
+                );
+              }
+            }
+          }
+        }
+
+        tx.set(withdrawalRef, {
+          providerId: firebaseUser.uid,
+          providerName: isAr ? ownProvider.fullNameAr : ownProvider.fullNameFr,
+          city: ownProvider.location.city,
+          bankName,
+          ribMasked: maskedRib.slice(0, 40),
+          amountMad: roundedAmount,
+          status: 'pending',
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+        tx.set(lockRef, {
+          providerId: firebaseUser.uid,
+          activeWithdrawalId: withdrawalId,
+          updatedAt: serverTimestamp(),
+        });
       });
       setRibInput('');
       setWithdrawalNotice({
