@@ -553,7 +553,8 @@ export function useBookings(params: {
     bookingId: string,
     rating: number,
     comment: string,
-    _reviewCategories?: ReviewCategoryBreakdown
+    _reviewCategories?: ReviewCategoryBreakdown,
+    photoUrls?: string[]
   ) => {
     setBookingActionError(null);
     if (!firebaseUser) return;
@@ -576,6 +577,10 @@ export function useBookings(params: {
       );
     }
 
+    const safePhotoUrls = Array.isArray(photoUrls)
+      ? photoUrls.filter((u) => isSafeImageUrl(u)).slice(0, 3)
+      : [];
+
     const targetProvider = allProviders.find((p) => p.id === targetBooking.providerId);
     const newReview = {
       id: bookingId,
@@ -585,6 +590,7 @@ export function useBookings(params: {
       date: new Date().toISOString().slice(0, 10),
       commentFr: safeComment,
       commentAr: safeComment,
+      ...(safePhotoUrls.length > 0 ? { photoUrls: safePhotoUrls } : {}),
     };
 
     const reviewPath = `reviews/${bookingId}`;
@@ -613,6 +619,7 @@ export function useBookings(params: {
           quartier: targetBooking.neighborhood,
           rating: safeRating,
           comment: safeComment,
+          ...(safePhotoUrls.length > 0 ? { photoUrls: safePhotoUrls } : {}),
           createdAt: serverTimestamp(),
         });
 

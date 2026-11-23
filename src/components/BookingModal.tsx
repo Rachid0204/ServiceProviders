@@ -742,7 +742,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               )}
             </div>
 
-            {/* Payment Method Selector: Cash on Completion vs Card / CMI Online Escrow */}
+            {/* Payment Method Selector: Cash on Completion (Live, 0% launch fee) vs CMI Online Gateway (Coming Soon) */}
             <div className="space-y-2">
               <label className="block text-xs font-semibold text-slate-700">
                 {t.paymentMethodLabel} <span className="text-rose-600">*</span>
@@ -751,38 +751,41 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setPaymentMethod('cash_on_completion')}
-                  className={`p-3.5 rounded-xl border text-start transition-colors cursor-pointer flex items-start gap-3 ${
-                    paymentMethod === 'cash_on_completion'
-                      ? 'bg-emerald-50/70 border-emerald-600 ring-1 ring-emerald-600'
-                      : 'bg-white border-slate-200 hover:bg-slate-50'
-                  }`}
+                  className="p-3.5 rounded-xl border text-start transition-colors cursor-pointer flex items-start gap-3 bg-emerald-50/70 border-emerald-600 ring-1 ring-emerald-600"
                 >
                   <Banknote className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
                   <div>
-                    <div className="text-xs font-bold text-slate-900">{t.paymentCashLabel}</div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-900">{t.paymentCashLabel}</span>
+                      <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800">
+                        {lang === 'ar' ? '0% رسوم' : '0% frais'}
+                      </span>
+                    </div>
                     <div className="text-[11px] text-slate-600 mt-0.5 leading-snug">
                       {t.paymentCashDesc}
                     </div>
                   </div>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => setPaymentMethod('cmi_escrow')}
-                  className={`p-3.5 rounded-xl border text-start transition-colors cursor-pointer flex items-start gap-3 ${
-                    paymentMethod === 'cmi_escrow'
-                      ? 'bg-emerald-50/70 border-emerald-600 ring-1 ring-emerald-600'
-                      : 'bg-white border-slate-200 hover:bg-slate-50'
-                  }`}
+                <div
+                  aria-disabled="true"
+                  className="p-3.5 rounded-xl border border-dashed border-slate-200 bg-slate-50/70 text-start flex items-start gap-3 opacity-75 cursor-not-allowed"
                 >
-                  <CreditCard className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />
+                  <CreditCard className="w-5 h-5 text-slate-400 shrink-0 mt-0.5" />
                   <div>
-                    <div className="text-xs font-bold text-slate-900">{t.paymentCmiLabel}</div>
-                    <div className="text-[11px] text-slate-600 mt-0.5 leading-snug">
-                      {t.paymentCmiDesc}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-700">{t.paymentCmiLabel}</span>
+                      <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded-full bg-slate-200 text-slate-700">
+                        {t.paymentCmiComingSoonBadge}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                      {lang === 'ar'
+                        ? 'سيتم تفعيل الدفع الإلكتروني عبر بوابة CMI المعتمدة قريباً.'
+                        : 'Activation prochaine via passerelle CMI certifiée côté serveur.'}
                     </div>
                   </div>
-                </button>
+                </div>
               </div>
             </div>
 

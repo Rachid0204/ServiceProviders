@@ -11,7 +11,7 @@ export interface SystemSettingsRecord {
 }
 
 export const DEFAULT_SYSTEM_SETTINGS: SystemSettingsRecord = {
-  platformFeePct: 10,
+  platformFeePct: 0,
   minWithdrawalMad: 200,
   autoRefundOnProviderCancel: true,
   requireKycForEscrowPayout: true,

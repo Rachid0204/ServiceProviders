@@ -192,6 +192,9 @@ function createMockContext(
     updateConversationOnMessage: vi.fn().mockResolvedValue(undefined),
     toggleBlockConversation: vi.fn().mockResolvedValue(undefined),
     submitChatReport: vi.fn().mockResolvedValue(undefined),
+    disputes: [],
+    openDisputesCount: 0,
+    openDispute: vi.fn().mockResolvedValue('disp-1'),
     authModalIntent: null,
     setAuthModalIntent: vi.fn(),
     isPostJobModalOpen: false,
@@ -582,6 +585,25 @@ describe('Phase 1 Routing Acceptance Tests (Spec §2B)', () => {
     });
     expect(
       await screen.findByRole('heading', { name: TRANSLATIONS.fr.notificationsTitle })
+    ).toBeInTheDocument();
+  });
+
+  it('guards /disputes behind verified auth and renders DisputesPage for verified clients and providers', async () => {
+    const { unmount: unmountGuest } = renderAtRoute(['/disputes'], { firebaseUser: null });
+    expect(
+      await screen.findByRole('heading', { name: TRANSLATIONS.fr.loginPageTitle })
+    ).toBeInTheDocument();
+    expect(screen.getByTestId('current-location').textContent).toBe('/login?redirect=%2Fdisputes');
+    unmountGuest();
+
+    const clientUser = createMockUser('client-p5', 'client-p5@example.ma', true);
+    renderAtRoute(['/disputes'], {
+      firebaseUser: clientUser,
+      userProfile: createMockProfile('client-p5', 'client'),
+      isVerified: true,
+    });
+    expect(
+      await screen.findByRole('heading', { name: TRANSLATIONS.fr.disputesTitle })
     ).toBeInTheDocument();
   });
 

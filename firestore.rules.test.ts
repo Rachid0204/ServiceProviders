@@ -262,5 +262,27 @@ test('Phase 4 Messaging & Notifications Security Rules and Composite Indexes', (
   assert.ok(groups.has('conversations'), 'Missing composite index for conversations');
 });
 
+test('Phase 5 Trust, Disputes, Review Photos/Reports & Immutable Payments Ledger Rules', () => {
+  assert.ok(rulesContent.includes("'photoUrls'"));
+  assert.ok(rulesContent.includes('function isValidDispute(data)'));
+  assert.ok(rulesContent.includes('match /disputes/{disputeId}'));
+  assert.ok(rulesContent.includes('function isValidReviewReport(data)'));
+  assert.ok(rulesContent.includes('match /reviewReports/{reportId}'));
+  assert.ok(rulesContent.includes('function isValidPaymentRecord(data)'));
+  assert.ok(rulesContent.includes('match /payments/{paymentId}'));
+  assert.ok(rulesContent.includes('match /refunds/{refundId}'));
+
+  // Storage rules for verified review photos and private dispute evidence
+  assert.ok(storageRulesContent.includes('match /reviews/{bookingId}/{userId}/{fileName}'));
+  assert.ok(storageRulesContent.includes('match /disputes/{disputeId}/{userId}/{fileName}'));
+
+  const indexesRaw = fs.readFileSync(path.resolve(import.meta.dirname, 'firestore.indexes.json'), 'utf8');
+  const parsed = JSON.parse(indexesRaw) as { indexes: Array<{ collectionGroup: string }> };
+  const groups = new Set(parsed.indexes.map((i) => i.collectionGroup));
+  assert.ok(groups.has('disputes'), 'Missing composite index for disputes');
+  assert.ok(groups.has('payments'), 'Missing composite index for payments');
+});
+
+
 
 

@@ -164,6 +164,7 @@ export interface ProviderReview {
   date: string;
   commentFr: string;
   commentAr: string;
+  photoUrls?: string[];
 }
 
 export interface VettedProvider {
@@ -1131,6 +1132,92 @@ export function isConversationUnreadForUser(
 export function sanitizeNotificationLinkPath(raw: string | undefined): string {
   if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return '/dashboard';
   return raw.slice(0, 160);
+}
+
+// --- Phase 5: Structured Disputes & Review Moderation Contracts ---
+
+export type DisputeStatus =
+  | 'open'
+  | 'under_review'
+  | 'waiting_for_client'
+  | 'waiting_for_provider'
+  | 'resolved'
+  | 'closed';
+
+export type DisputeReason =
+  | 'quality_issue'
+  | 'no_show'
+  | 'pricing_mismatch'
+  | 'property_damage'
+  | 'payment_issue'
+  | 'other';
+
+export const DISPUTE_REASONS: DisputeReason[] = [
+  'quality_issue',
+  'no_show',
+  'pricing_mismatch',
+  'property_damage',
+  'payment_issue',
+  'other',
+];
+
+export interface DisputeRecord {
+  id: string;
+  bookingId: string;
+  bookingRef: string;
+  clientId: string;
+  providerId: string;
+  openedByUid: string;
+  openedByRole: 'client' | 'provider';
+  reason: DisputeReason;
+  description: string;
+  evidenceUrls: string[];
+  status: DisputeStatus;
+  resolutionSummary?: string;
+  resolvedByUid?: string;
+  createdAtIso: string;
+  updatedAtIso?: string;
+}
+
+const VALID_DISPUTE_TRANSITIONS: Record<DisputeStatus, DisputeStatus[]> = {
+  open: ['under_review', 'waiting_for_client', 'waiting_for_provider', 'resolved', 'closed'],
+  under_review: ['waiting_for_client', 'waiting_for_provider', 'resolved', 'closed'],
+  waiting_for_client: ['under_review', 'resolved', 'closed'],
+  waiting_for_provider: ['under_review', 'resolved', 'closed'],
+  resolved: ['closed'],
+  closed: [],
+};
+
+export function canTransitionDisputeStatus(from: DisputeStatus, to: DisputeStatus): boolean {
+  return VALID_DISPUTE_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
+export function validateDisputeInput(
+  input: {
+    bookingId: string;
+    reason: string;
+    description: string;
+    evidenceUrls?: string[];
+  },
+  lang: LanguageCode
+): { valid: boolean; errors: Partial<Record<'bookingId' | 'reason' | 'description', string>> } {
+  const errors: Partial<Record<'bookingId' | 'reason' | 'description', string>> = {};
+  if (!input.bookingId || !UID_REGEX.test(input.bookingId)) {
+    errors.bookingId =
+      lang === 'ar' ? 'يرجى اختيار حجز صالح.' : 'Veuillez sélectionner une réservation valide.';
+  }
+  if (!DISPUTE_REASONS.includes(input.reason as DisputeReason)) {
+    errors.reason =
+      lang === 'ar' ? 'يرجى اختيار سبب النزاع.' : 'Veuillez sélectionner un motif de litige.';
+  }
+  const desc = input.description.trim();
+  if (desc.length < 15 || desc.length > 1000) {
+    errors.description =
+      lang === 'ar'
+        ? 'يرجى شرح تفاصيل النزاع (بين 15 و 1000 حرف).'
+        : 'Veuillez expliquer le litige en détail (entre 15 et 1000 caractères).';
+  }
+  return { valid: Object.keys(errors).length === 0, errors };
 }
 
 export const CATEGORY_SUGGESTED_SKILLS: Record<ServiceCategory, string[]> = {

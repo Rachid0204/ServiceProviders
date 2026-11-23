@@ -29,6 +29,7 @@ import { useJobPosts } from '../../hooks/useJobPosts';
 import { useFavorites } from '../../hooks/useFavorites';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useConversations } from '../../hooks/useConversations';
+import { useDisputes } from '../../hooks/useDisputes';
 import { ROUTE_PATHS } from '../routePaths';
 import type { SystemSettingsRecord } from '../../utils/systemSettings';
 
@@ -120,6 +121,11 @@ export interface MarketplaceContextValue {
   updateConversationOnMessage: ReturnType<typeof useConversations>['updateConversationOnMessage'];
   toggleBlockConversation: ReturnType<typeof useConversations>['toggleBlockConversation'];
   submitChatReport: ReturnType<typeof useConversations>['submitChatReport'];
+
+  // Phase 5: Structured Disputes
+  disputes: ReturnType<typeof useDisputes>['disputes'];
+  openDisputesCount: number;
+  openDispute: ReturnType<typeof useDisputes>['openDispute'];
 
   // Global Modal Controls
   authModalIntent: UserRole | null;
@@ -283,6 +289,13 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     toggleBlockConversation,
     submitChatReport,
   } = useConversations(firebaseUser, authReady, isVerified);
+
+  const { disputes, openDisputesCount, openDispute } = useDisputes(
+    firebaseUser,
+    authReady,
+    isVerified,
+    lang
+  );
 
   const effectiveRole: UserRole | null = userProfile?.role ?? signupRoleIntent ?? null;
   const isPureProvider = Boolean(firebaseUser && effectiveRole === 'provider');
@@ -502,6 +515,9 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       updateConversationOnMessage,
       toggleBlockConversation,
       submitChatReport,
+      disputes,
+      openDisputesCount,
+      openDispute,
       authModalIntent,
       setAuthModalIntent,
       isPostJobModalOpen,
@@ -597,6 +613,9 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       updateConversationOnMessage,
       toggleBlockConversation,
       submitChatReport,
+      disputes,
+      openDisputesCount,
+      openDispute,
       authModalIntent,
       isPostJobModalOpen,
       detailProvider,

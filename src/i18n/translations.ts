@@ -234,6 +234,20 @@ export interface Translations {
   notificationsPreferencesTitle: string;
   notificationsPreferencesSubtitle: string;
   notificationsPrefSaved: string;
+  navDisputes: string;
+  disputesTitle: string;
+  disputesSubtitle: string;
+  disputesOpenBtn: string;
+  disputesEmpty: string;
+  disputesEvidenceLabel: string;
+  disputesSubmitBtn: string;
+  disputesSuccessNotice: string;
+  downloadReceiptBtn: string;
+  openDisputeBtn: string;
+  reviewAttachPhotosLabel: string;
+  reviewReportBtn: string;
+  reviewReportedNotice: string;
+  paymentCmiComingSoonBadge: string;
   cities: Record<MoroccanCity, string>;
   categories: Record<ServiceCategory, string>;
 }
@@ -501,6 +515,21 @@ export const TRANSLATIONS: Record<LanguageCode, Translations> = {
     notificationsPreferencesSubtitle:
       'Choisissez les canaux et alertes que vous souhaitez recevoir.',
     notificationsPrefSaved: 'Préférences enregistrées.',
+    navDisputes: 'Litiges & Support',
+    disputesTitle: 'Centre de médiation & litiges',
+    disputesSubtitle:
+      'Déclarez un incident lié à une intervention, joignez vos justificatifs et suivez la résolution.',
+    disputesOpenBtn: 'Ouvrir un litige',
+    disputesEmpty: 'Aucun litige en cours. Toutes vos interventions se déroulent sereinement.',
+    disputesEvidenceLabel: 'Preuves & justificatifs (photos, jusqu’à 4 fichiers)',
+    disputesSubmitBtn: 'Soumettre le dossier de litige',
+    disputesSuccessNotice: 'Votre dossier de litige a été transmis à notre équipe de médiation.',
+    downloadReceiptBtn: 'Télécharger le reçu',
+    openDisputeBtn: 'Signaler un litige',
+    reviewAttachPhotosLabel: 'Ajouter des photos du résultat (optionnel, max 3)',
+    reviewReportBtn: 'Signaler cet avis',
+    reviewReportedNotice: 'Avis signalé pour vérification par notre équipe.',
+    paymentCmiComingSoonBadge: 'Bientôt disponible',
     cities: {
       Casablanca: 'Casablanca',
       Rabat: 'Rabat',
@@ -780,6 +809,21 @@ export const TRANSLATIONS: Record<LanguageCode, Translations> = {
     notificationsPreferencesSubtitle:
       'اختر القنوات والتنبيهات التي ترغب في تلقيها.',
     notificationsPrefSaved: 'تم حفظ التفضيلات بنجاح.',
+    navDisputes: 'النزاعات والدعم',
+    disputesTitle: 'مركز الوساطة وحل النزاعات',
+    disputesSubtitle:
+      'صرح بأي مشكل متعلق بتدخل معين، أرفق الأدلة والصور وتابع مسار الحل.',
+    disputesOpenBtn: 'فتح ملف نزاع',
+    disputesEmpty: 'لا توجد نزاعات مفتوحة حالياً.',
+    disputesEvidenceLabel: 'الأدلة والمستندات (صور، حتى 4 ملفات)',
+    disputesSubmitBtn: 'إرسال ملف النزاع',
+    disputesSuccessNotice: 'تم إرسال ملف النزاع إلى فريق الوساطة بنجاح.',
+    downloadReceiptBtn: 'تحميل الوصل',
+    openDisputeBtn: 'التبليغ عن نزاع',
+    reviewAttachPhotosLabel: 'إرفاق صور للعمل المنجز (اختياري، 3 كحد أقصى)',
+    reviewReportBtn: 'الإبلاغ عن هذا التقييم',
+    reviewReportedNotice: 'تم الإبلاغ عن التقييم للمراجعة من طرف فريقنا.',
+    paymentCmiComingSoonBadge: 'قريباً',
     cities: {
       Casablanca: 'الدار البيضاء',
       Rabat: 'الرباط',

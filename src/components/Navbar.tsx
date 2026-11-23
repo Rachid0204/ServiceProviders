@@ -19,6 +19,7 @@ import {
   Bell,
   MessageSquare,
   CheckCheck,
+  Scale,
 } from 'lucide-react';
 import { useMarketplace } from '../app/providers/MarketplaceContext';
 import { ROUTE_PATHS, getProviderTabFromPathname } from '../app/routePaths';
@@ -533,6 +534,15 @@ export const Navbar: React.FC = () => {
                             ? 'ملفي الشخصي والأمان'
                             : 'Mon Profil & Sécurité'}
                         </span>
+                      </Link>
+
+                      <Link
+                        to={ROUTE_PATHS.DISPUTES}
+                        role="menuitem"
+                        className="w-full px-4 py-2 text-start text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 flex items-center gap-2.5"
+                      >
+                        <Scale className="w-4 h-4 text-amber-600" />
+                        <span>{t.navDisputes}</span>
                       </Link>
 
                       {hasAdminAccess && (
