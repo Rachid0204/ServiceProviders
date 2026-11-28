@@ -171,12 +171,19 @@ class CdpSession {
 
   async waitFor(sessionId, predicateExpr, timeoutMs = 10_000) {
     const deadline = Date.now() + timeoutMs;
+    let lastErr = null;
     while (Date.now() < deadline) {
-      const ok = await this.evalJs(sessionId, `Boolean(${predicateExpr})`);
-      if (ok) return;
+      try {
+        const ok = await this.evalJs(sessionId, `Boolean(${predicateExpr})`);
+        if (ok) return;
+        lastErr = null;
+      } catch (err) {
+        lastErr = err;
+      }
       await sleep(100);
     }
-    throw new Error(`Timed out waiting for condition: ${predicateExpr}`);
+    const suffix = lastErr ? ` (last error: ${lastErr instanceof Error ? lastErr.message : String(lastErr)})` : '';
+    throw new Error(`Timed out waiting for condition: ${predicateExpr}${suffix}`);
   }
 }
 
@@ -251,11 +258,17 @@ async function run() {
 
     // 4. Navigate to /privacy (Law 09-08) and verify content renders
     await cdp.send('Page.navigate', { url: `${baseUrl}/privacy` }, sessionId);
-    await cdp.waitFor(sessionId, `document.body.innerText.includes('09-08')`);
+    await cdp.waitFor(
+      sessionId,
+      `window.location.pathname === '/privacy' && document.body && (document.body.innerText || '').includes('09-08')`
+    );
 
     // 5. Navigate to /register and verify Law 09-08 consent checkbox exists (AUD-011)
     await cdp.send('Page.navigate', { url: `${baseUrl}/register` }, sessionId);
-    await cdp.waitFor(sessionId, `Boolean(document.querySelector('input[type="checkbox"]'))`);
+    await cdp.waitFor(
+      sessionId,
+      `window.location.pathname === '/register' && Boolean(document.querySelector('input[type="checkbox"]'))`
+    );
 
     assert.equal(
       cdp.exceptions.length,

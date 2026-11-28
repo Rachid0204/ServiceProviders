@@ -271,23 +271,31 @@ test('AUD-014: Dead Express server and duplicate ChatDrawerModal/ProviderDetailM
   }
 });
 
-test('AUD-019 & AUD-021: proposals.providerId COLLECTION_GROUP index override and headless Chromium smoke E2E script are configured in CI', () => {
+test('AUD-019 & AUD-021: proposals COLLECTION_GROUP composite index (Enterprise Edition safe) and headless Chromium smoke E2E script are configured in CI', () => {
   const indexesJson = JSON.parse(
     fs.readFileSync(path.join(ROOT, 'firestore.indexes.json'), 'utf8')
   ) as {
-    fieldOverrides?: Array<{
+    indexes?: Array<{
       collectionGroup: string;
-      fieldPath: string;
-      indexes: Array<{ queryScope: string; order?: string }>;
+      queryScope: string;
+      fields: Array<{ fieldPath: string; order?: string }>;
     }>;
+    fieldOverrides?: Array<unknown>;
   };
-  const proposalOverride = (indexesJson.fieldOverrides || []).find(
-    (o) => o.collectionGroup === 'proposals' && o.fieldPath === 'providerId'
+  assert.equal(
+    (indexesJson.fieldOverrides || []).length,
+    0,
+    'Firestore Enterprise Edition rejects fieldOverrides during firebase deploy; keep fieldOverrides empty'
   );
-  assert.ok(proposalOverride, 'Missing proposals.providerId fieldOverride in firestore.indexes.json');
+  const proposalCompositeIndex = (indexesJson.indexes || []).find(
+    (idx) =>
+      idx.collectionGroup === 'proposals' &&
+      idx.queryScope === 'COLLECTION_GROUP' &&
+      idx.fields.some((f) => f.fieldPath === 'providerId')
+  );
   assert.ok(
-    proposalOverride.indexes.some((idx) => idx.queryScope === 'COLLECTION_GROUP'),
-    'proposals.providerId override must enable COLLECTION_GROUP queryScope'
+    proposalCompositeIndex,
+    'Missing proposals COLLECTION_GROUP composite index for providerId in firestore.indexes.json'
   );
 
   assert.ok(fs.existsSync(path.join(ROOT, 'scripts/e2e-smoke.mjs')), 'Missing scripts/e2e-smoke.mjs');

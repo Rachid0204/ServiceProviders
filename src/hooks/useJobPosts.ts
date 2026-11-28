@@ -4,6 +4,7 @@ import {
   collectionGroup,
   query,
   where,
+  orderBy,
   limit,
   onSnapshot,
   doc,
@@ -229,6 +230,7 @@ export function useJobPosts(params: {
           query(
             collectionGroup(db, 'proposals'),
             where('providerId', '==', firebaseUser.uid),
+            orderBy('createdAt', 'desc'),
             limit(100)
           )
         );

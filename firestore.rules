@@ -121,12 +121,6 @@ service cloud.firestore {
         (images.size() < 6 || isSafeAssetUrl(images[5]));
     }
 
-    function getConfiguredPlatformFeePct() {
-      return exists(/databases/$(database)/documents/systemSettings/global)
-        ? get(/databases/$(database)/documents/systemSettings/global).data.platformFeePct
-        : 10;
-    }
-
     function isValidLocationMap(loc) {
       return loc is map &&
         loc.keys().hasAll(['lat', 'lng', 'city', 'quartier']) &&
