@@ -144,6 +144,7 @@ export function useProviders(
   const [lastVisibleDoc, setLastVisibleDoc] =
     useState<QueryDocumentSnapshot<DocumentData> | null>(null);
   const [hasMoreProviders, setHasMoreProviders] = useState(false);
+  const [isLoadingProviders, setIsLoadingProviders] = useState(true);
   const [isLoadingMoreProviders, setIsLoadingMoreProviders] = useState(false);
   const [providerOverrides, setProviderOverrides] = useState<Record<string, ProviderOverride>>({});
 
@@ -151,6 +152,7 @@ export function useProviders(
   useEffect(() => {
     let active = true;
     const providersPath = 'providers';
+    setIsLoadingProviders(true);
     const q = query(collection(db, providersPath), limit(PROVIDERS_PAGE_SIZE));
     void getDocs(q)
       .then((snapshot) => {
@@ -163,6 +165,11 @@ export function useProviders(
       .catch((err) => {
         if (active) {
           reportFirestoreError(err, OperationType.LIST, providersPath);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoadingProviders(false);
         }
       });
     return () => {
@@ -393,6 +400,7 @@ export function useProviders(
   return {
     allProviders,
     firestoreProviders,
+    isLoadingProviders,
     hasMoreProviders,
     isLoadingMoreProviders,
     loadMoreProviders,

@@ -532,7 +532,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
           <button
             type="button"
             onClick={onOpenPostJob}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 transition-colors cursor-pointer shadow-2xs"
+            className="inline-flex items-center gap-2 min-h-[40px] px-4 py-2 text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>{uiText(isAr).common.publierUnBesoin}</span>
@@ -540,7 +540,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
           <button
             type="button"
             onClick={onExploreProviders}
-            className="inline-flex items-center gap-2 px-4 py-2.5 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors cursor-pointer"
+            className="inline-flex items-center gap-2 min-h-[40px] px-4 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors cursor-pointer"
           >
             <Compass className="w-4 h-4 text-emerald-700" />
             <span>{uiText(isAr).common.explorerLesMaalems}</span>
@@ -721,19 +721,22 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
       )}
 
       {/* Client Workspace Tabs */}
-      <div role="tablist" className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3">
+      <div
+        role="tablist"
+        className="flex items-center gap-2 overflow-x-auto no-scrollbar sm:flex-wrap border-b border-slate-200 pb-3"
+      >
         <button
           type="button"
           role="tab"
           aria-selected={activeTab === 'jobs'}
           onClick={() => setActiveTab('jobs')}
-          className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-colors cursor-pointer ${
+          className={`inline-flex items-center gap-2 min-h-[40px] px-4 py-2 text-xs font-semibold rounded-lg whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
             activeTab === 'jobs'
-              ? 'bg-emerald-700 text-white shadow-2xs'
+              ? 'bg-emerald-700 text-white'
               : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
           }`}
         >
-          <Briefcase className="w-4 h-4" />
+          <Briefcase className="w-4 h-4 shrink-0" />
           <span>
             {interpolateCopy(uiText(isAr).client.mesBesoinsPubliesDevis, { v0: myClientJobPosts.length })}
           </span>
@@ -744,13 +747,13 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
           role="tab"
           aria-selected={activeTab === 'bookings'}
           onClick={() => setActiveTab('bookings')}
-          className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-colors cursor-pointer ${
+          className={`inline-flex items-center gap-2 min-h-[40px] px-4 py-2 text-xs font-semibold rounded-lg whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
             activeTab === 'bookings'
-              ? 'bg-emerald-700 text-white shadow-2xs'
+              ? 'bg-emerald-700 text-white'
               : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
           }`}
         >
-          <Calendar className="w-4 h-4" />
+          <Calendar className="w-4 h-4 shrink-0" />
           <span>
             {interpolateCopy(uiText(isAr).client.mesReservations, { v0: clientBookings.length })}
           </span>

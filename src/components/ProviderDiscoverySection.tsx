@@ -2,17 +2,17 @@ import { uiText } from '../i18n/uiCopy';
 import React, { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  ShieldCheck,
   Search,
   MapPin,
   Wrench,
-  Clock,
   Navigation,
   Map as MapIcon,
   LayoutGrid,
   Columns,
-  Heart,
   ArrowUpDown,
+  LayoutList,
+  ArrowRight,
+  ArrowLeft,
 } from 'lucide-react';
 import {
   MOROCCAN_CITIES,
@@ -25,6 +25,11 @@ import {
   type ServiceCategory,
   type VettedProvider,
 } from '../utils/marketplace';
+import {
+  TRADE_META,
+  getTradeShortLabel,
+  formatProviderResultsLabel,
+} from '../utils/tradeMeta';
 import { useMarketplace } from '../app/providers/MarketplaceContext';
 import {
   ROUTE_PATHS,
@@ -52,6 +57,8 @@ interface ProviderDiscoverySectionProps {
   routeCategory?: ServiceCategory | 'ALL';
   /** When true, clicking category tabs navigates between `/services` and `/services/:category` and syncs query params. */
   syncUrl?: boolean;
+  /** When true (e.g. on HomePage), renders the unified 12-trade section heading above the discovery bar. */
+  showSectionHeader?: boolean;
   /** External trigger counter or active near-me state when invoked from hero/mobile sticky bar. */
   nearMeActive?: boolean;
   isLocating?: boolean;
@@ -60,9 +67,43 @@ interface ProviderDiscoverySectionProps {
   onUpdateUserCoords?: (coords: { lat: number; lng: number; label: string } | null) => void;
 }
 
+const ProviderCardSkeleton: React.FC = () => (
+  <div
+    aria-hidden="true"
+    className="bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col justify-between animate-pulse"
+  >
+    <div>
+      <div className="h-44 bg-slate-200" />
+      <div className="p-4 sm:p-5 space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="h-3.5 w-24 bg-slate-200 rounded" />
+          <div className="h-3.5 w-20 bg-slate-100 rounded" />
+        </div>
+        <div className="h-5 w-44 bg-slate-200 rounded" />
+        <div className="space-y-1.5">
+          <div className="h-3 w-full bg-slate-100 rounded" />
+          <div className="h-3 w-4/5 bg-slate-100 rounded" />
+        </div>
+        <div className="h-3 w-2/3 bg-slate-100 rounded" />
+      </div>
+    </div>
+    <div className="px-4 sm:px-5 py-3.5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-2">
+      <div className="space-y-1.5">
+        <div className="h-3 w-20 bg-slate-200 rounded" />
+        <div className="h-4 w-24 bg-slate-200 rounded" />
+      </div>
+      <div className="flex items-center gap-1.5">
+        <div className="h-10 w-20 bg-slate-200 rounded-lg" />
+        <div className="h-10 w-24 bg-slate-200 rounded-lg" />
+      </div>
+    </div>
+  </div>
+);
+
 export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> = ({
   routeCategory,
   syncUrl = false,
+  showSectionHeader = false,
   nearMeActive: externalNearMe,
   isLocating: externalLocating,
   userCoords: externalCoords,
@@ -74,6 +115,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
     t,
     isAr,
     allProviders,
+    isLoadingProviders,
     hasMoreProviders,
     isLoadingMoreProviders,
     loadMoreProviders,
@@ -266,6 +308,33 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
     }
   }, [currentPage, totalPages]);
 
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (selectedCity !== 'ALL') count += 1;
+    if (selectedCategory !== 'ALL') count += 1;
+    if (quartierQuery.trim() !== '') count += 1;
+    if (maxHourlyRateMAD < sliderMaxHourlyRate) count += 1;
+    if (searchQuery.trim() !== '') count += 1;
+    if (verifiedOnly) count += 1;
+    if (availableNowOnly) count += 1;
+    if (favoritesOnly) count += 1;
+    if (sortBy !== 'recommended') count += 1;
+    if (nearMeActive) count += 1;
+    return count;
+  }, [
+    selectedCity,
+    selectedCategory,
+    quartierQuery,
+    maxHourlyRateMAD,
+    sliderMaxHourlyRate,
+    searchQuery,
+    verifiedOnly,
+    availableNowOnly,
+    favoritesOnly,
+    sortBy,
+    nearMeActive,
+  ]);
+
   const resetAllFilters = () => {
     setSelectedCity('ALL');
     setLocalCategory('ALL');
@@ -289,24 +358,146 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
   };
 
   const preservedSearch = searchParams.toString() ? `?${searchParams.toString()}` : '';
+  const showInitialSkeleton = isLoadingProviders && allProviders.length === 0;
+  const ArrowIcon = isAr ? ArrowLeft : ArrowRight;
 
   return (
-    <section id="providers" className="py-10 lg:py-14">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
-        <div className="bg-white border border-slate-200 rounded-xl p-5 shadow-2xs space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3.5">
+    <section id="providers" className="py-8 sm:py-10 lg:py-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-5">
+        {showSectionHeader && (
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2">
+            <div>
+              <h2 className="text-lg sm:text-xl font-bold text-slate-900">
+                {t.categoriesExplorerTitle}
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 mt-0.5">
+                {t.categoriesExplorerSubtitle}
+              </p>
+            </div>
+            <Link
+              to={ROUTE_PATHS.SERVICES}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:text-emerald-800 hover:underline whitespace-nowrap"
+            >
+              <span>{t.allServicesTab}</span>
+              <ArrowIcon className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        )}
+
+        {/* Unified 12-Trade Selector with Unique Icons (zero duplication, no mid-word truncation) */}
+        <div className="relative">
+          <div
+            role="group"
+            aria-label="Service Categories"
+            className="flex sm:flex-wrap items-center gap-2 overflow-x-auto sm:overflow-visible no-scrollbar scroll-smooth pb-1 sm:pb-0 pe-8 sm:pe-0"
+          >
+            {syncUrl ? (
+              <>
+                <Link
+                  to={`${ROUTE_PATHS.SERVICES}${preservedSearch}`}
+                  className={`inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap shrink-0 ${
+                    selectedCategory === 'ALL'
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <LayoutList className="w-3.5 h-3.5 shrink-0" />
+                  <span>{t.filterAllCategories}</span>
+                </Link>
+                {SERVICE_CATEGORIES.map((category) => {
+                  const Icon = TRADE_META[category].icon;
+                  const active = selectedCategory === category;
+                  return (
+                    <Link
+                      key={category}
+                      to={`${buildServiceCategoryPath(category)}${preservedSearch}`}
+                      className={`inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap shrink-0 ${
+                        active
+                          ? 'bg-emerald-700 text-white border-emerald-700'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/40'
+                      }`}
+                    >
+                      <Icon
+                        className={`w-3.5 h-3.5 shrink-0 ${
+                          active ? 'text-white' : 'text-emerald-700'
+                        }`}
+                      />
+                      <span>{getTradeShortLabel(category, lang)}</span>
+                    </Link>
+                  );
+                })}
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLocalCategory('ALL');
+                    setCurrentPage(1);
+                  }}
+                  aria-pressed={selectedCategory === 'ALL'}
+                  className={`inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                    selectedCategory === 'ALL'
+                      ? 'bg-slate-900 text-white border-slate-900'
+                      : 'bg-white text-slate-700 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+                  }`}
+                >
+                  <LayoutList className="w-3.5 h-3.5 shrink-0" />
+                  <span>{t.filterAllCategories}</span>
+                </button>
+                {SERVICE_CATEGORIES.map((category) => {
+                  const Icon = TRADE_META[category].icon;
+                  const active = selectedCategory === category;
+                  return (
+                    <button
+                      key={category}
+                      type="button"
+                      onClick={() => {
+                        setLocalCategory(category);
+                        setCurrentPage(1);
+                      }}
+                      aria-pressed={active}
+                      className={`inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                        active
+                          ? 'bg-emerald-700 text-white border-emerald-700'
+                          : 'bg-white text-slate-700 border-slate-200 hover:border-emerald-300 hover:bg-emerald-50/40'
+                      }`}
+                    >
+                      <Icon
+                        className={`w-3.5 h-3.5 shrink-0 ${
+                          active ? 'text-white' : 'text-emerald-700'
+                        }`}
+                      />
+                      <span>{getTradeShortLabel(category, lang)}</span>
+                    </button>
+                  );
+                })}
+              </>
+            )}
+          </div>
+          {/* Soft scroll-edge fade cue on mobile horizontal scroll */}
+          <div
+            aria-hidden="true"
+            className="sm:hidden pointer-events-none absolute inset-y-0 end-0 w-8 bg-gradient-to-l from-slate-50 to-transparent"
+          />
+        </div>
+
+        {/* Clean Search, Filter & View-Mode Bar */}
+        <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-3">
             <div className="lg:col-span-4 relative">
-              <Search className="w-4 h-4 text-slate-400 absolute top-3 start-3.5 pointer-events-none" />
+              <Search className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3.5 pointer-events-none" />
               <input
                 type="search"
                 aria-label={t.searchPlaceholder}
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchQuery(e.target.value);
+                  setCurrentPage(1);
                   updateQueryParam('q', e.target.value);
                 }}
                 placeholder={t.searchPlaceholder}
-                className="w-full ps-10 pe-3.5 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                className="w-full min-h-[40px] ps-10 pe-3.5 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
               />
             </div>
 
@@ -317,6 +508,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                 onChange={(e) => {
                   const val = e.target.value as MoroccanCity | 'ALL';
                   setSelectedCity(val);
+                  setCurrentPage(1);
                   updateQueryParam('city', val === 'ALL' ? null : val);
                   if (nearMeActive && val !== 'ALL') {
                     const ref = CITY_COORDINATES[val];
@@ -327,7 +519,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                     });
                   }
                 }}
-                className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                className="w-full min-h-[40px] px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
               >
                 <option value="ALL">{t.filterAllCities}</option>
                 {MOROCCAN_CITIES.map((city) => (
@@ -339,21 +531,22 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
             </div>
 
             <div className="lg:col-span-3 relative">
-              <MapPin className="w-4 h-4 text-slate-400 absolute top-3 start-3.5 pointer-events-none" />
+              <MapPin className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3.5 pointer-events-none" />
               <input
                 type="text"
                 aria-label={t.quartierFilterPlaceholder}
                 value={quartierQuery}
                 onChange={(e) => {
                   setQuartierQuery(e.target.value);
+                  setCurrentPage(1);
                   updateQueryParam('quartier', e.target.value);
                 }}
                 placeholder={t.quartierFilterPlaceholder}
-                className="w-full ps-9 pe-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                className="w-full min-h-[40px] ps-9 pe-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
               />
             </div>
 
-            <div className="lg:col-span-3 flex flex-col justify-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
+            <div className="lg:col-span-3 flex flex-col justify-center bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 min-h-[40px]">
               <div className="flex items-center justify-between text-xs">
                 <span className="text-slate-600 font-medium">{t.maxPriceLabel}</span>
                 <span className="font-bold tabular-nums text-slate-900">
@@ -367,105 +560,46 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                 max={sliderMaxHourlyRate}
                 step={10}
                 value={maxHourlyRateMAD}
-                onChange={(e) => setMaxHourlyRateMAD(Number(e.target.value))}
+                onChange={(e) => {
+                  setMaxHourlyRateMAD(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
                 className="w-full accent-emerald-700 mt-1 cursor-pointer"
               />
             </div>
           </div>
 
-          <div
-            role="group"
-            aria-label="Service Categories"
-            className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-1"
-          >
-            {syncUrl ? (
-              <>
-                <Link
-                  to={`${ROUTE_PATHS.SERVICES}${preservedSearch}`}
-                  className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 ${
-                    selectedCategory === 'ALL'
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  {t.filterAllCategories}
-                </Link>
-                {SERVICE_CATEGORIES.map((category) => (
-                  <Link
-                    key={category}
-                    to={`${buildServiceCategoryPath(category)}${preservedSearch}`}
-                    className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 ${
-                      selectedCategory === category
-                        ? 'bg-emerald-700 text-white'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {t.categories[category]}
-                  </Link>
-                ))}
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setLocalCategory('ALL')}
-                  className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                    selectedCategory === 'ALL'
-                      ? 'bg-slate-900 text-white'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  {t.filterAllCategories}
-                </button>
-                {SERVICE_CATEGORIES.map((category) => (
-                  <button
-                    key={category}
-                    type="button"
-                    onClick={() => setLocalCategory(category)}
-                    className={`px-3.5 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                      selectedCategory === category
-                        ? 'bg-emerald-700 text-white'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {t.categories[category]}
-                  </button>
-                ))}
-              </>
-            )}
-          </div>
-
-          <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-4">
-              <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
+          <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+              <label className="inline-flex items-center gap-2 min-h-[40px] text-xs font-medium text-slate-700 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={verifiedOnly}
                   onChange={(e) => {
                     setVerifiedOnly(e.target.checked);
+                    setCurrentPage(1);
                     updateQueryParam('verified', e.target.checked ? '1' : null);
                   }}
-                  className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
+                  className="w-4 h-4 rounded border-slate-300 accent-emerald-700"
                 />
-                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>{t.filterVerifiedOnly}</span>
               </label>
 
-              <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
+              <label className="inline-flex items-center gap-2 min-h-[40px] text-xs font-medium text-slate-700 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={availableNowOnly}
                   onChange={(e) => {
                     setAvailableNowOnly(e.target.checked);
+                    setCurrentPage(1);
                     updateQueryParam('available', e.target.checked ? '1' : null);
                   }}
-                  className="w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-600"
+                  className="w-4 h-4 rounded border-slate-300 accent-emerald-700"
                 />
-                <Clock className="w-4 h-4 text-amber-600 shrink-0" />
                 <span>{t.filterAvailableNow}</span>
               </label>
 
-              <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-700 cursor-pointer select-none">
+              <label className="inline-flex items-center gap-2 min-h-[40px] text-xs font-medium text-slate-700 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={favoritesOnly}
@@ -474,9 +608,8 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                     setCurrentPage(1);
                     updateQueryParam('favorites', e.target.checked ? '1' : null);
                   }}
-                  className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-600"
+                  className="w-4 h-4 rounded border-slate-300 accent-emerald-700"
                 />
-                <Heart className="w-4 h-4 text-rose-600 shrink-0" />
                 <span>
                   {t.favoritesOnlyLabel}
                   {favoriteProviderIds.length > 0 ? ` (${favoriteProviderIds.length})` : ''}
@@ -487,7 +620,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                 type="button"
                 onClick={handleToggleNearMe}
                 aria-pressed={nearMeActive}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                className={`inline-flex items-center gap-1.5 min-h-[40px] px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                   nearMeActive
                     ? 'bg-emerald-700 text-white border-emerald-700'
                     : 'bg-white text-slate-800 border-slate-300 hover:bg-slate-50'
@@ -499,7 +632,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
 
               {nearMeActive && userCoords && (
                 <span className="text-xs text-emerald-700 font-medium">
-                  {t.nearMeActiveBadge} ({userCoords.label})
+                  {t.nearMeActiveBadge} · {userCoords.label}
                 </span>
               )}
             </div>
@@ -516,7 +649,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                     setCurrentPage(1);
                     updateQueryParam('sort', nextSort === 'recommended' ? null : nextSort);
                   }}
-                  className="px-2.5 py-1.5 text-xs font-medium bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  className="min-h-[40px] px-2.5 py-1.5 text-xs font-medium bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
                 >
                   <option value="recommended">{t.sortRecommended}</option>
                   <option value="rating_desc">{t.sortRatingDesc}</option>
@@ -535,7 +668,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                 <button
                   type="button"
                   onClick={() => setViewMode('grid')}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                  className={`inline-flex items-center gap-1.5 min-h-[34px] px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
                     viewMode === 'grid'
                       ? 'bg-white text-slate-900 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -547,7 +680,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                 <button
                   type="button"
                   onClick={() => setViewMode('split')}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                  className={`inline-flex items-center gap-1.5 min-h-[34px] px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
                     viewMode === 'split'
                       ? 'bg-white text-slate-900 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -559,7 +692,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                 <button
                   type="button"
                   onClick={() => setViewMode('map')}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
+                  className={`inline-flex items-center gap-1.5 min-h-[34px] px-2.5 py-1 text-xs font-medium rounded-md transition-colors whitespace-nowrap cursor-pointer ${
                     viewMode === 'map'
                       ? 'bg-white text-slate-900 shadow-2xs'
                       : 'text-slate-600 hover:text-slate-900'
@@ -573,42 +706,49 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
           </div>
         </div>
 
-        <div className="flex items-center justify-between text-xs text-slate-600">
+        {/* Results Status Line & Filter Reset */}
+        <div className="flex items-center justify-between text-xs text-slate-600 min-h-[24px]">
           <div>
-            <span className="font-bold tabular-nums text-slate-900">
-              {filteredProviders.length}
-            </span>{' '}
-            <span>{t.resultsShowing}</span>
+            {showInitialSkeleton ? (
+              <span
+                aria-label={t.routeLoadingLabel}
+                className="inline-block h-4 w-44 rounded bg-slate-200 animate-pulse align-middle"
+              />
+            ) : (
+              <span className="font-semibold text-slate-800 tabular-nums">
+                {formatProviderResultsLabel(filteredProviders.length, lang, verifiedOnly)}
+              </span>
+            )}
           </div>
-          {(selectedCity !== 'ALL' ||
-            selectedCategory !== 'ALL' ||
-            quartierQuery.trim() !== '' ||
-            maxHourlyRateMAD < sliderMaxHourlyRate ||
-            searchQuery.trim() !== '' ||
-            verifiedOnly ||
-            availableNowOnly ||
-            favoritesOnly ||
-            sortBy !== 'recommended' ||
-            nearMeActive) && (
+          {activeFiltersCount > 0 && (
             <button
               type="button"
               onClick={resetAllFilters}
               className="text-emerald-700 font-semibold hover:underline cursor-pointer"
             >
-              {t.resetFilters}
+              {t.resetFilters} ({activeFiltersCount})
             </button>
           )}
         </div>
 
-        {filteredProviders.length === 0 ? (
-          <div className="bg-white border border-slate-200 rounded-xl p-12 text-center space-y-3">
+        {/* Cards / Skeletons / Empty State */}
+        {showInitialSkeleton ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <ProviderCardSkeleton key={idx} />
+            ))}
+          </div>
+        ) : filteredProviders.length === 0 ? (
+          <div className="bg-white border border-slate-200 rounded-xl p-10 sm:p-12 text-center space-y-3">
             <Wrench className="w-8 h-8 text-slate-400 mx-auto" />
             <h3 className="text-base font-bold text-slate-900">{t.emptyResultsTitle}</h3>
-            <p className="text-xs text-slate-600 max-w-md mx-auto">{t.emptyResultsDesc}</p>
+            <p className="text-xs sm:text-sm text-slate-600 max-w-md mx-auto">
+              {t.emptyResultsDesc}
+            </p>
             <button
               type="button"
               onClick={resetAllFilters}
-              className="px-4 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              className="min-h-[40px] px-4 py-2 text-xs font-semibold text-white bg-slate-900 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
             >
               {t.resetFilters}
             </button>
@@ -686,7 +826,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                     setCurrentPage(nextPage);
                     updateQueryParam('page', nextPage <= 1 ? null : String(nextPage));
                   }}
-                  className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+                  className="min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
                 >
                   {t.paginationPrev}
                 </button>
@@ -701,7 +841,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                     setCurrentPage(nextPage);
                     updateQueryParam('page', String(nextPage));
                   }}
-                  className="px-3.5 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
+                  className="min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 disabled:opacity-40 cursor-pointer"
                 >
                   {t.paginationNext}
                 </button>
@@ -716,7 +856,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                   onClick={() => {
                     void loadMoreProviders();
                   }}
-                  className="px-5 py-2.5 text-xs font-semibold rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 disabled:opacity-50 transition-colors cursor-pointer"
+                  className="min-h-[44px] px-5 py-2.5 text-xs font-semibold rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-900 hover:bg-emerald-100 disabled:opacity-50 transition-colors cursor-pointer"
                 >
                   {isLoadingMoreProviders
                     ? uiText(isAr).publicUi.chargement

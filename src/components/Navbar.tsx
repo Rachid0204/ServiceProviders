@@ -145,11 +145,11 @@ export const Navbar: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-30 bg-white/95 backdrop-blur-xs border-b border-slate-200">
-      <div className="max-w-7xl mx-auto flex items-center justify-between gap-3 sm:gap-5 px-4 sm:px-6 lg:px-8 h-16">
+      <div className="max-w-7xl mx-auto flex items-center justify-between gap-2 sm:gap-5 px-3 sm:px-6 lg:px-8 h-16">
         {/* Zone 1: Brand Wordmark (routes pure Maâlem to /provider/dashboard, others to /) */}
         <Link
           to={isPureProvider ? ROUTE_PATHS.PROVIDER_DASHBOARD : ROUTE_PATHS.HOME}
-          className="inline-flex items-center gap-2 text-base sm:text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0"
+          className="inline-flex items-center gap-2 text-sm sm:text-lg font-bold tracking-tight text-slate-900 whitespace-nowrap shrink-0"
         >
           <span className="w-7 h-7 rounded-lg bg-emerald-700 text-white inline-flex items-center justify-center text-xs font-extrabold">
             M
@@ -182,13 +182,17 @@ export const Navbar: React.FC = () => {
               {uiText(isAr).publicUi.verificationEMailEnAttente}
             </Link>
           ) : isPureProvider ? (
-            /* Pure Maâlem Navigation: ZERO "Explorer other Maâlems" link! */
+            /* Pure Maâlem Navigation: 4 streamlined core destinations (+ Admin if granted) */
             <>
               <NavLink
                 to={ROUTE_PATHS.PROVIDER_DASHBOARD}
                 className={() =>
-                  `inline-flex items-center gap-1.5 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 ${
-                    isProviderRoute && activeProviderTab === 'jobs'
+                  `inline-flex items-center gap-1.5 min-h-[40px] hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 ${
+                    isProviderRoute &&
+                    (activeProviderTab === 'jobs' ||
+                      activeProviderTab === 'services' ||
+                      activeProviderTab === 'calendar' ||
+                      activeProviderTab === 'verification')
                       ? 'text-emerald-700 font-semibold'
                       : ''
                   }`
@@ -196,30 +200,21 @@ export const Navbar: React.FC = () => {
               >
                 <span>{uiText(isAr).publicUi.offresClients}</span>
                 {openJobsCount > 0 && (
-                  <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 tabular-nums">
-                    {openJobsCount}
+                  <span className="text-xs font-semibold text-emerald-700 tabular-nums">
+                    ({openJobsCount})
                   </span>
                 )}
               </NavLink>
               <NavLink to={ROUTE_PATHS.PROVIDER_MISSIONS} className={navLinkClass}>
                 <span>{uiText(isAr).publicUi.mesMissions}</span>
                 {providerPendingCount > 0 && (
-                  <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-900 tabular-nums">
-                    {providerPendingCount}
+                  <span className="text-xs font-semibold text-amber-700 tabular-nums">
+                    ({providerPendingCount})
                   </span>
                 )}
               </NavLink>
               <NavLink to={ROUTE_PATHS.PROVIDER_CARD} className={navLinkClass}>
                 {uiText(isAr).publicUi.maFicheMaalem}
-              </NavLink>
-              <NavLink to={ROUTE_PATHS.PROVIDER_SERVICES} className={navLinkClass}>
-                {t.providerServicesTab}
-              </NavLink>
-              <NavLink to={ROUTE_PATHS.PROVIDER_CALENDAR} className={navLinkClass}>
-                {t.providerCalendarTab}
-              </NavLink>
-              <NavLink to={ROUTE_PATHS.PROVIDER_VERIFICATION} className={navLinkClass}>
-                {t.providerVerificationTab}
               </NavLink>
               <NavLink to={ROUTE_PATHS.PROVIDER_EARNINGS} className={navLinkClass}>
                 {uiText(isAr).publicUi.revenus}
@@ -242,8 +237,8 @@ export const Navbar: React.FC = () => {
                 <NavLink to={ROUTE_PATHS.CUSTOMER_DASHBOARD} className={navLinkClass}>
                   <span>{uiText(isAr).publicUi.espaceClient}</span>
                   {clientActiveCount > 0 && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 tabular-nums">
-                      {clientActiveCount}
+                    <span className="text-xs font-semibold text-emerald-700 tabular-nums">
+                      ({clientActiveCount})
                     </span>
                   )}
                 </NavLink>
@@ -252,15 +247,15 @@ export const Navbar: React.FC = () => {
                 <NavLink
                   to={ROUTE_PATHS.PROVIDER_DASHBOARD}
                   className={() =>
-                    `inline-flex items-center gap-1.5 hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 ${
+                    `inline-flex items-center gap-1.5 min-h-[40px] hover:text-slate-900 transition-colors whitespace-nowrap shrink-0 ${
                       isProviderRoute ? 'text-emerald-700 font-semibold' : ''
                     }`
                   }
                 >
                   <span>{t.providerDashboardTab}</span>
                   {providerPendingCount > 0 && (
-                    <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-900 tabular-nums">
-                      {providerPendingCount}
+                    <span className="text-xs font-semibold text-amber-700 tabular-nums">
+                      ({providerPendingCount})
                     </span>
                   )}
                 </NavLink>
@@ -275,12 +270,12 @@ export const Navbar: React.FC = () => {
         </nav>
 
         {/* Zone 3: Quick Action + Messages + Notification Bell + Language + Auth / Account Dropdown */}
-        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
           {firebaseUser && isVerified && isClientCapable && (
             <button
               type="button"
               onClick={() => setIsPostJobModalOpen(true)}
-              className="hidden lg:inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+              className="hidden lg:inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>{uiText(isAr).publicUi.publierUnBesoin}</span>
@@ -292,7 +287,7 @@ export const Navbar: React.FC = () => {
               <Link
                 to={ROUTE_PATHS.MESSAGES}
                 aria-label={t.navMessages}
-                className={`relative p-2 rounded-lg transition-colors shrink-0 ${
+                className={`relative inline-flex items-center justify-center min-w-[40px] min-h-[40px] rounded-lg transition-colors shrink-0 ${
                   location.pathname.startsWith(ROUTE_PATHS.MESSAGES)
                     ? 'bg-emerald-50 text-emerald-700'
                     : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -300,7 +295,7 @@ export const Navbar: React.FC = () => {
               >
                 <MessageSquare className="w-4 h-4" />
                 {unreadConversationsCount > 0 && (
-                  <span className="absolute -top-0.5 -end-0.5 min-w-[16px] h-4 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-bold inline-flex items-center justify-center tabular-nums">
+                  <span className="absolute top-1 end-1 min-w-[16px] h-4 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-bold inline-flex items-center justify-center tabular-nums">
                     {unreadConversationsCount > 9 ? '9+' : unreadConversationsCount}
                   </span>
                 )}
@@ -313,7 +308,7 @@ export const Navbar: React.FC = () => {
                   aria-label={t.navNotifications}
                   aria-expanded={notifOpen}
                   aria-haspopup="menu"
-                  className={`relative p-2 rounded-lg transition-colors shrink-0 cursor-pointer ${
+                  className={`relative inline-flex items-center justify-center min-w-[40px] min-h-[40px] rounded-lg transition-colors shrink-0 cursor-pointer ${
                     notifOpen || location.pathname === ROUTE_PATHS.NOTIFICATIONS
                       ? 'bg-emerald-50 text-emerald-700'
                       : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
@@ -321,7 +316,7 @@ export const Navbar: React.FC = () => {
                 >
                   <Bell className="w-4 h-4" />
                   {unreadNotificationCount > 0 && (
-                    <span className="absolute -top-0.5 -end-0.5 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold inline-flex items-center justify-center tabular-nums">
+                    <span className="absolute top-1 end-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-600 text-white text-[10px] font-bold inline-flex items-center justify-center tabular-nums">
                       {unreadNotificationCount > 9 ? '9+' : unreadNotificationCount}
                     </span>
                   )}
@@ -405,7 +400,7 @@ export const Navbar: React.FC = () => {
             type="button"
             onClick={toggleLanguage}
             aria-label={`Switch language to ${t.langSwitchLabel}`}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+            className="inline-flex items-center gap-1.5 min-h-[40px] px-2.5 sm:px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 rounded-lg hover:bg-slate-200 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
           >
             <Globe className="w-3.5 h-3.5" />
             <span>{t.langSwitchLabel}</span>
@@ -415,14 +410,14 @@ export const Navbar: React.FC = () => {
             <>
               <Link
                 to={ROUTE_PATHS.LOGIN}
-                className="hidden sm:inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
+                className="hidden sm:inline-flex items-center gap-1.5 min-h-[40px] px-3.5 py-2 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors whitespace-nowrap shrink-0"
               >
                 <LogIn className="w-3.5 h-3.5 text-emerald-700" />
                 <span>{uiText(isAr).common.connexion}</span>
               </Link>
               <Link
                 to={`${ROUTE_PATHS.REGISTER}?role=provider`}
-                className="px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 transition-colors whitespace-nowrap shrink-0"
+                className="hidden sm:inline-flex items-center min-h-[40px] px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800 transition-colors whitespace-nowrap shrink-0"
               >
                 {uiText(isAr).publicUi.devenirMaalem}
               </Link>
@@ -434,9 +429,9 @@ export const Navbar: React.FC = () => {
                 onClick={() => setDropdownOpen((v) => !v)}
                 aria-expanded={dropdownOpen}
                 aria-haspopup="menu"
-                className="inline-flex items-center gap-2 ps-1.5 pe-2.5 py-1 rounded-full bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 min-h-[40px] ps-1.5 pe-2.5 py-1 rounded-lg bg-slate-50 border border-slate-200 hover:bg-slate-100 transition-colors cursor-pointer"
               >
-                <span className="w-7 h-7 rounded-full bg-emerald-700 text-white text-xs font-bold inline-flex items-center justify-center shrink-0">
+                <span className="w-7 h-7 rounded-md bg-emerald-700 text-white text-xs font-bold inline-flex items-center justify-center shrink-0">
                   {initials}
                 </span>
                 <span className="hidden sm:inline text-xs font-semibold text-slate-900 max-w-[110px] truncate">
@@ -574,7 +569,7 @@ export const Navbar: React.FC = () => {
             onClick={() => setMobileMenuOpen((v) => !v)}
             aria-label={mobileMenuOpen ? t.closeBtn : 'Menu'}
             aria-expanded={mobileMenuOpen}
-            className="md:hidden p-2 text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            className="md:hidden inline-flex items-center justify-center min-w-[44px] min-h-[44px] text-slate-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
           >
             {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
@@ -606,13 +601,13 @@ export const Navbar: React.FC = () => {
                     setMobileMenuOpen(false);
                     setAuthModalIntent('client');
                   }}
-                  className="px-3 py-2.5 text-xs font-semibold text-slate-800 bg-slate-100 rounded-lg hover:bg-slate-200 cursor-pointer"
+                  className="inline-flex items-center justify-center min-h-[44px] px-3 py-2.5 text-xs font-semibold text-slate-800 bg-slate-100 rounded-lg hover:bg-slate-200 cursor-pointer"
                 >
                   {uiText(isAr).common.connexion}
                 </button>
                 <Link
                   to={`${ROUTE_PATHS.REGISTER}?role=provider`}
-                  className="px-3 py-2.5 text-center text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800"
+                  className="inline-flex items-center justify-center min-h-[44px] px-3 py-2.5 text-center text-xs font-semibold text-white bg-emerald-700 rounded-lg hover:bg-emerald-800"
                 >
                   {uiText(isAr).publicUi.devenirMaalem}
                 </Link>

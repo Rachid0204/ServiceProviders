@@ -156,6 +156,11 @@ export const UI_COPY_FR = {
     votreEspaceClient: "votre Espace Client",
     votreEspaceMaalem: "votre Espace Maâlem",
     vousNeTrouvezPasLE: "Vous ne trouvez pas l’e-mail ? Pensez à vérifier votre dossier Courrier indésirable (Spam).",
+    afficherMotDePasse: "Afficher le mot de passe",
+    masquerMotDePasse: "Masquer le mot de passe",
+    redirectAdminNotice: "Connectez-vous avec un compte administrateur autorisé pour accéder à l’Administration.",
+    redirectProviderNotice: "Connectez-vous pour accéder à votre Espace Maâlem et gérer vos missions.",
+    redirectPersonalNotice: "Connectez-vous pour continuer vers votre espace personnel.",
   },
   booking: {
     photoJointe: "✓ Photo jointe",
@@ -790,6 +795,11 @@ export const UI_COPY_AR: UiCopyDictionary = {
     votreEspaceClient: "لوحة الزبون الخاصة بك",
     votreEspaceMaalem: "لوحة المعلم وإعداد بطاقتك المهنية",
     vousNeTrouvezPasLE: "لم تصلك الرسالة؟ تحقق من مجلد الرسائل غير المرغوب فيها (Spam / Promotions).",
+    afficherMotDePasse: "إظهار كلمة المرور",
+    masquerMotDePasse: "إخفاء كلمة المرور",
+    redirectAdminNotice: "سجّل الدخول بحساب إداري مخوّل للوصول إلى لوحة الإدارة.",
+    redirectProviderNotice: "سجّل الدخول للوصول إلى فضاء المعلم وإدارة مهامك.",
+    redirectPersonalNotice: "سجّل الدخول للمتابعة إلى فضائك الشخصي على مول الخدمة.",
   },
   booking: {
     photoJointe: "✓ تم إرفاق الصورة",

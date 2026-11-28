@@ -1,7 +1,17 @@
 import { uiText } from '../../i18n/uiCopy';
 import React, { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, CheckCircle2, LogIn, Mail, ShieldCheck } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  Info,
+  Lock,
+  LogIn,
+  Mail,
+  ShieldCheck,
+} from 'lucide-react';
 import { useMarketplace } from '../../app/providers/MarketplaceContext';
 import { ROUTE_PATHS, sanitizeRedirectPath } from '../../app/routePaths';
 import {
@@ -10,14 +20,27 @@ import {
 } from '../../utils/authHelpers';
 import { requestPasswordReset, signInWithEmail } from '../../firebase';
 
+function getRedirectBannerCopy(redirectTarget: string, isAr: boolean): string | null {
+  if (!redirectTarget) return null;
+  if (redirectTarget.startsWith(ROUTE_PATHS.ADMIN_ROOT)) {
+    return uiText(isAr).auth.redirectAdminNotice;
+  }
+  if (redirectTarget.startsWith(ROUTE_PATHS.PROVIDER_ROOT)) {
+    return uiText(isAr).auth.redirectProviderNotice;
+  }
+  return uiText(isAr).auth.redirectPersonalNotice;
+}
+
 export const LoginPage: React.FC = () => {
   const { lang, t, isAr, signInWithGoogle, handleAuthSuccess } = useMarketplace();
   const [searchParams] = useSearchParams();
   const redirectTarget = sanitizeRedirectPath(searchParams.get('redirect'), '');
+  const redirectNotice = getRedirectBannerCopy(redirectTarget, isAr);
 
   const [mode, setMode] = useState<'signin' | 'reset'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -55,9 +78,7 @@ export const LoginPage: React.FC = () => {
         handleAuthSuccess('client', false, redirectTarget || undefined);
       } else {
         await requestPasswordReset(check.normalizedEmail);
-        setNotice(
-          uiText(isAr).auth.unLienDeReinitialisationDuMot
-        );
+        setNotice(uiText(isAr).auth.unLienDeReinitialisationDuMot);
       }
     } catch (err) {
       setError(mapFirebaseAuthError(err, lang));
@@ -76,6 +97,17 @@ export const LoginPage: React.FC = () => {
           <h1 className="text-xl font-bold text-slate-900">{t.loginPageTitle}</h1>
           <p className="text-xs text-slate-600">{t.loginPageSubtitle}</p>
         </div>
+
+        {redirectNotice && (
+          <div
+            role="status"
+            data-testid="login-redirect-banner"
+            className="p-3 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700 flex items-start gap-2.5"
+          >
+            <Info className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+            <span>{redirectNotice}</span>
+          </div>
+        )}
 
         {error && (
           <div
@@ -100,7 +132,7 @@ export const LoginPage: React.FC = () => {
           onClick={() => {
             void handleGoogle();
           }}
-          className="w-full py-2.5 px-4 text-xs font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-60 cursor-pointer"
+          className="w-full min-h-[44px] py-2.5 px-4 text-xs sm:text-sm font-semibold text-slate-800 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-60 cursor-pointer"
         >
           {t.googleSignInBtn}
         </button>
@@ -117,8 +149,8 @@ export const LoginPage: React.FC = () => {
             <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700">
               {uiText(isAr).auth.adresseEMail}
             </label>
-            <div className="relative">
-              <Mail className="w-4 h-4 text-slate-400 absolute top-2.5 start-3 pointer-events-none" />
+            <div className="relative" dir="ltr">
+              <Mail className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3 pointer-events-none" />
               <input
                 id="login-email"
                 type="email"
@@ -127,7 +159,8 @@ export const LoginPage: React.FC = () => {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="nom@exemple.ma"
-                className="w-full ps-9 pe-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                autoComplete="email"
+                className="w-full min-h-[44px] ps-10 pe-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
               />
             </div>
           </div>
@@ -144,27 +177,44 @@ export const LoginPage: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setMode('reset')}
-                  className="text-[11px] text-emerald-700 hover:underline cursor-pointer"
+                  className="text-[11px] font-medium text-emerald-700 hover:underline cursor-pointer"
                 >
                   {uiText(isAr).auth.motDePasseOublie}
                 </button>
               </div>
-              <input
-                id="login-password"
-                type="password"
-                required
-                dir="ltr"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
-              />
+              <div className="relative" dir="ltr">
+                <Lock className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3 pointer-events-none" />
+                <input
+                  id="login-password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  dir="ltr"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  className="w-full min-h-[44px] ps-10 pe-11 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={
+                    showPassword
+                      ? uiText(isAr).auth.masquerMotDePasse
+                      : uiText(isAr).auth.afficherMotDePasse
+                  }
+                  aria-pressed={showPassword}
+                  className="absolute top-1/2 -translate-y-1/2 end-1 inline-flex items-center justify-center w-9 h-9 text-slate-500 hover:text-slate-800 rounded-md cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
           )}
 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-2.5 px-4 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors disabled:opacity-60 cursor-pointer"
+            className="w-full min-h-[44px] py-2.5 px-4 text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors disabled:opacity-60 cursor-pointer"
           >
             {mode === 'signin'
               ? uiText(isAr).auth.seConnecter
@@ -175,7 +225,7 @@ export const LoginPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setMode('signin')}
-              className="w-full text-xs text-slate-600 hover:text-slate-900 cursor-pointer"
+              className="w-full min-h-[40px] text-xs text-slate-600 hover:text-slate-900 cursor-pointer"
             >
               {uiText(isAr).auth.retourALaConnexion}
             </button>

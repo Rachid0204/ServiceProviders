@@ -142,6 +142,7 @@ function createMockContext(
     supportWhatsAppUrl: 'https://wa.me/212661428910',
     allProviders: VETTED_PROVIDERS,
     firestoreProviders: VETTED_PROVIDERS,
+    isLoadingProviders: false,
     hasMoreProviders: false,
     isLoadingMoreProviders: false,
     loadMoreProviders: vi.fn().mockResolvedValue(undefined),

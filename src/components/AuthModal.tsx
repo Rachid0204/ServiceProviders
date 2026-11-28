@@ -10,6 +10,9 @@ import {
   Wrench,
   UserCheck,
   Layers,
+  Lock,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import type { LanguageCode, UserRole } from '../utils/marketplace';
 import type { Translations } from '../i18n/translations';
@@ -50,6 +53,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [selectedRole, setSelectedRole] = useState<UserRole>(intent);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -178,7 +182,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             type="button"
             onClick={onClose}
             aria-label={t.closeBtn}
-            className="p-2 text-slate-500 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center min-w-[40px] min-h-[40px] text-slate-500 hover:text-slate-900 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer shrink-0"
           >
             <X className="w-5 h-5" />
           </button>
@@ -372,8 +376,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             >
               {uiText(isAr).auth.adresseEMail}
             </label>
-            <div className="relative">
-              <Mail className="w-4 h-4 text-slate-400 absolute top-2.5 start-3 pointer-events-none" />
+            <div className="relative" dir="ltr">
+              <Mail className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3 pointer-events-none" />
               <input
                 id="auth-modal-email"
                 type="email"
@@ -382,7 +386,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="nom@exemple.ma"
                 autoComplete="email"
-                className="w-full ps-9 pe-3.5 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                className="w-full min-h-[44px] ps-10 pe-3.5 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
               />
             </div>
           </div>
@@ -410,25 +414,39 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </button>
                 )}
               </div>
-              <input
-                id="auth-modal-password"
-                type="password"
-                dir="ltr"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder={
-                  uiText(isAr).auth.n8CaracteresMinLettresChiffres
-                }
-                autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
-                className="w-full px-3.5 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
-              />
+              <div className="relative" dir="ltr">
+                <Lock className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3 pointer-events-none" />
+                <input
+                  id="auth-modal-password"
+                  type={showPassword ? 'text' : 'password'}
+                  dir="ltr"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={uiText(isAr).auth.n8CaracteresMinLettresChiffres}
+                  autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
+                  className="w-full min-h-[44px] ps-10 pe-11 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  aria-label={
+                    showPassword
+                      ? uiText(isAr).auth.masquerMotDePasse
+                      : uiText(isAr).auth.afficherMotDePasse
+                  }
+                  aria-pressed={showPassword}
+                  className="absolute top-1/2 -translate-y-1/2 end-1 inline-flex items-center justify-center w-9 h-9 text-slate-500 hover:text-slate-800 rounded-md cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
           )}
 
           <button
             type="submit"
             disabled={isSubmitting}
-            className="w-full py-2.5 text-sm font-semibold text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 disabled:opacity-60 transition-colors cursor-pointer"
+            className="w-full min-h-[44px] py-2.5 text-sm font-semibold text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 disabled:opacity-60 transition-colors cursor-pointer"
           >
             {isSubmitting
               ? uiText(isAr).auth.chargement

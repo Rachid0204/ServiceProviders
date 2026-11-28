@@ -203,23 +203,23 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
             alt={studio.cardFullName || 'Maâlem'}
             className="w-14 h-14 rounded-xl object-cover border border-slate-200 shrink-0"
           />
-          <div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-xl font-bold text-slate-900">
-                {ownProvider
-                  ? isAr
-                    ? ownProvider.fullNameAr
-                    : ownProvider.fullNameFr
-                  : uiText(isAr).provider.configurationDeVotreFicheMaalem}
-              </h1>
+          <div className="space-y-1">
+            <h1 className="text-xl font-bold text-slate-900">
+              {ownProvider
+                ? isAr
+                  ? ownProvider.fullNameAr
+                  : ownProvider.fullNameFr
+                : uiText(isAr).provider.configurationDeVotreFicheMaalem}
+            </h1>
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
               {ownProvider?.verifiedBadge ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-                  <ShieldCheck className="w-3.5 h-3.5" />
+                <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
+                  <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
                   <span>{t.verifiedCinLabel}</span>
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-amber-50 text-amber-800 border border-amber-200">
-                  <Clock className="w-3.5 h-3.5" />
+                <span className="inline-flex items-center gap-1 font-semibold text-amber-800">
+                  <Clock className="w-3.5 h-3.5 shrink-0" />
                   <span>
                     {ownProvider
                       ? uiText(isAr).provider.cinEnCoursDeVerification
@@ -227,7 +227,10 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
                   </span>
                 </span>
               )}
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 text-[11px] font-semibold rounded-full bg-slate-100 text-slate-700 tabular-nums">
+              <span aria-hidden="true" className="text-slate-300">
+                ·
+              </span>
+              <span className="font-medium text-slate-600 tabular-nums">
                 {interpolateCopy(uiText(isAr).provider.ficheA, { v0: studio.completeness.percent })}
               </span>
             </div>
@@ -251,7 +254,7 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
 
         {ownProvider && (
           <div className="flex flex-wrap items-center gap-2.5">
-            <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2">
+            <div className="flex items-center gap-2.5 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-1.5">
               <span className="text-xs font-medium text-slate-700">
                 {t.providerAvailabilityLabel}:
               </span>
@@ -259,7 +262,7 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
                 type="button"
                 onClick={() => onToggleProviderAvailability(ownProvider)}
                 aria-pressed={ownProvider.isAvailableNow}
-                className={`px-3 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
+                className={`min-h-[36px] px-3 py-1 text-xs font-semibold rounded-lg border transition-colors cursor-pointer ${
                   ownProvider.isAvailableNow
                     ? 'bg-emerald-700 text-white border-emerald-700'
                     : 'bg-white text-slate-700 border-slate-300'
@@ -276,7 +279,7 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
       <div
         role="tablist"
         aria-label="Maâlem Dashboard Tabs"
-        className="flex flex-wrap items-center gap-2 border-b border-slate-200 pb-3"
+        className="flex items-center gap-2 overflow-x-auto no-scrollbar sm:flex-wrap border-b border-slate-200 pb-3"
       >
         {(
           [
@@ -348,32 +351,32 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
               disabled={tab.disabled}
               aria-selected={active}
               onClick={() => setActiveTab(tab.id)}
-              className={`inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-xl transition-colors ${
+              className={`inline-flex items-center gap-2 min-h-[40px] px-3.5 py-2 text-xs font-semibold rounded-lg whitespace-nowrap shrink-0 transition-colors ${
                 tab.disabled
                   ? 'opacity-45 cursor-not-allowed bg-slate-100 text-slate-500'
                   : active
-                  ? 'bg-emerald-700 text-white shadow-2xs cursor-pointer'
+                  ? 'bg-emerald-700 text-white cursor-pointer'
                   : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 cursor-pointer'
               }`}
             >
-              <Icon className="w-4 h-4" />
+              <Icon className="w-4 h-4 shrink-0" />
               <span>{isAr ? tab.labelAr : tab.labelFr}</span>
               {tab.id === 'jobs' && tab.badge > 0 && (
                 <span
-                  className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full tabular-nums ${
-                    active ? 'bg-white/20 text-white' : 'bg-emerald-100 text-emerald-800'
+                  className={`text-[11px] font-bold tabular-nums ${
+                    active ? 'text-emerald-100' : 'text-emerald-700'
                   }`}
                 >
-                  {tab.badge}
+                  ({tab.badge})
                 </span>
               )}
               {tab.id === 'missions' && tab.badge > 0 && (
                 <span
-                  className={`px-1.5 py-0.5 text-[10px] font-bold rounded-full tabular-nums ${
-                    active ? 'bg-white/20 text-white' : 'bg-amber-100 text-amber-900'
+                  className={`text-[11px] font-bold tabular-nums ${
+                    active ? 'text-amber-200' : 'text-amber-700'
                   }`}
                 >
-                  {tab.badge}
+                  ({tab.badge})
                 </span>
               )}
             </button>

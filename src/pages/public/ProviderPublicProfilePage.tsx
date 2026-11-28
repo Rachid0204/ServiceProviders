@@ -30,6 +30,7 @@ import {
 } from 'firebase/firestore';
 import { db, reportFirestoreError, OperationType } from '../../firebase';
 import {
+  DEFAULT_CATEGORY_IMAGE,
   WEEKDAY_KEYS,
   buildWhatsAppUrl,
   formatMadCurrency,
@@ -77,6 +78,7 @@ export const ProviderPublicProfilePage: React.FC = () => {
     firebaseUser,
     isVerified,
     allProviders,
+    isLoadingProviders,
     favoriteProviderIds,
     toggleFavoriteProvider,
     setBookingProvider,
@@ -86,6 +88,7 @@ export const ProviderPublicProfilePage: React.FC = () => {
   const [reportedReviewFeedback, setReportedReviewFeedback] = useState<string | null>(null);
   const [contactRevealed, setContactRevealed] = useState(false);
   const [fetchedProvider, setFetchedProvider] = useState<VettedProvider | null>(null);
+  const [isFetchingProvider, setIsFetchingProvider] = useState(false);
 
   const cachedProvider = useMemo(
     () => (id ? allProviders.find((p) => p.id === id || p.uid === id) ?? null : null),
@@ -97,8 +100,10 @@ export const ProviderPublicProfilePage: React.FC = () => {
     let active = true;
     if (!id || cachedProvider) {
       setFetchedProvider(null);
+      setIsFetchingProvider(false);
       return;
     }
+    setIsFetchingProvider(true);
     void getDoc(doc(db, 'providers', id))
       .then((snap) => {
         if (!active) return;
@@ -106,6 +111,9 @@ export const ProviderPublicProfilePage: React.FC = () => {
       })
       .catch(() => {
         if (active) setFetchedProvider(null);
+      })
+      .finally(() => {
+        if (active) setIsFetchingProvider(false);
       });
     return () => {
       active = false;
@@ -182,6 +190,38 @@ export const ProviderPublicProfilePage: React.FC = () => {
 
   const BackIcon = isAr ? ArrowRight : ArrowLeft;
 
+  if (!provider && (isLoadingProviders || isFetchingProvider)) {
+    return (
+      <div
+        aria-label={t.routeLoadingLabel}
+        className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 animate-pulse"
+      >
+        <div className="h-4 w-48 bg-slate-200 rounded" />
+        <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden grid grid-cols-1 lg:grid-cols-12">
+          <div className="lg:col-span-5 h-64 lg:h-80 bg-slate-200" />
+          <div className="lg:col-span-7 p-6 sm:p-8 space-y-4">
+            <div className="h-4 w-32 bg-slate-200 rounded" />
+            <div className="h-7 w-64 bg-slate-200 rounded" />
+            <div className="h-4 w-52 bg-slate-100 rounded" />
+            <div className="space-y-2">
+              <div className="h-3.5 w-full bg-slate-100 rounded" />
+              <div className="h-3.5 w-5/6 bg-slate-100 rounded" />
+            </div>
+            <div className="grid grid-cols-3 gap-3 pt-2">
+              <div className="h-16 bg-slate-100 rounded-xl" />
+              <div className="h-16 bg-slate-100 rounded-xl" />
+              <div className="h-16 bg-slate-100 rounded-xl" />
+            </div>
+            <div className="flex gap-3 pt-4">
+              <div className="h-11 flex-1 bg-slate-200 rounded-xl" />
+              <div className="h-11 w-12 bg-slate-200 rounded-xl" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!provider) {
     return (
       <section className="max-w-2xl mx-auto px-4 py-16 text-center space-y-5">
@@ -192,7 +232,7 @@ export const ProviderPublicProfilePage: React.FC = () => {
         <p className="text-sm text-slate-600 max-w-md mx-auto">{t.providerNotFoundDesc}</p>
         <Link
           to={ROUTE_PATHS.SERVICES}
-          className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors"
+          className="inline-flex items-center gap-2 min-h-[44px] px-5 py-2.5 text-sm font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg transition-colors"
         >
           <BackIcon className="w-4 h-4" />
           <span>{t.backToServicesBtn}</span>
@@ -252,26 +292,24 @@ export const ProviderPublicProfilePage: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12">
           {/* Portfolio Image */}
           <div className="lg:col-span-5 bg-slate-100 flex flex-col">
-            <div className="relative h-64 lg:h-80 overflow-hidden">
+            <div className="relative h-64 lg:h-80 overflow-hidden bg-slate-200">
               <img
-                src={provider.portfolioImages[activeImageIndex] || provider.portfolioImages[0]}
+                src={
+                  provider.portfolioImages[activeImageIndex] ||
+                  provider.portfolioImages[0] ||
+                  DEFAULT_CATEGORY_IMAGE[provider.category]
+                }
                 alt={displayName}
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  const fallback = DEFAULT_CATEGORY_IMAGE[provider.category];
+                  if (target.src !== fallback && !target.src.endsWith(fallback)) {
+                    target.src = fallback;
+                  }
+                }}
               />
-              <div className="absolute top-3 start-3">
-                {provider.verifiedBadge ? (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-700 text-white text-xs font-semibold shadow-sm">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                    <span>{t.verifiedCinLabel}</span>
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/80 text-white text-xs font-medium">
-                    <ShieldAlert className="w-3.5 h-3.5" />
-                    <span>{t.verifiedPendingText}</span>
-                  </span>
-                )}
-              </div>
             </div>
             {provider.portfolioImages.length > 1 && (
               <div className="flex items-center gap-2 p-3 overflow-x-auto bg-slate-50 border-t border-slate-200">
@@ -300,9 +338,25 @@ export const ProviderPublicProfilePage: React.FC = () => {
           <div className="lg:col-span-7 p-6 sm:p-8 flex flex-col justify-between space-y-6">
             <div className="space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="px-2.5 py-1 rounded-md bg-amber-50 text-amber-900 font-semibold border border-amber-200">
-                  {t.categories[provider.category]}
-                </span>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-semibold text-amber-800">
+                    {t.categories[provider.category]}
+                  </span>
+                  <span aria-hidden="true" className="text-slate-300">
+                    ·
+                  </span>
+                  {provider.verifiedBadge ? (
+                    <span className="inline-flex items-center gap-1 font-semibold text-emerald-700">
+                      <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                      <span>{t.verifiedCinLabel}</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 font-medium text-slate-500">
+                      <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                      <span>{uiText(isAr).publicUi.verificationEnCours}</span>
+                    </span>
+                  )}
+                </div>
                 <span
                   className={`font-semibold ${
                     provider.isAvailableNow ? 'text-emerald-700' : 'text-slate-500'
@@ -364,15 +418,12 @@ export const ProviderPublicProfilePage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Skills */}
+              {/* Clean Editorial Skills Row */}
               {displaySkills.length > 0 && (
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-slate-700">
                   {displaySkills.map((skill) => (
-                    <span
-                      key={skill}
-                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-900 text-xs font-medium border border-emerald-100"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+                    <span key={skill} className="inline-flex items-center gap-1 font-medium">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
                       <span>{skill}</span>
                     </span>
                   ))}

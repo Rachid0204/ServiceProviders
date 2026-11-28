@@ -3,19 +3,20 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ShieldCheck } from 'lucide-react';
 import { MOROCCAN_CITIES, SERVICE_CATEGORIES } from '../utils/marketplace';
+import { getTradeShortLabel } from '../utils/tradeMeta';
 import { useMarketplace } from '../app/providers/MarketplaceContext';
 import { ROUTE_PATHS, buildServiceCategoryPath } from '../app/routePaths';
 
 export const Footer: React.FC = () => {
-  const { t, isAr, firebaseUser, isPureProvider, hasAdminAccess, supportWhatsAppUrl } =
+  const { lang, t, isAr, firebaseUser, isPureProvider, hasAdminAccess, supportWhatsAppUrl } =
     useMarketplace();
 
   return (
     <footer className="bg-white border-t border-slate-200 pt-10 pb-24 md:pb-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
         {!isPureProvider ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 text-xs">
-            <div className="space-y-2.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-8 text-xs">
+            <div className="lg:col-span-3 space-y-2.5">
               <div className="text-base font-bold text-slate-900">
                 {t.brandName}{' '}
                 <span className="text-emerald-700 font-semibold">({t.brandArabic})</span>
@@ -23,25 +24,25 @@ export const Footer: React.FC = () => {
               <p className="text-slate-600 leading-relaxed">{t.footerTagline}</p>
             </div>
 
-            <div className="space-y-2.5">
+            <div className="lg:col-span-4 space-y-2.5">
               <div className="font-bold text-slate-900">
                 {uiText(isAr).publicUi.metiersServices}
               </div>
-              <ul className="space-y-1.5 text-slate-600">
+              <ul className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-slate-600">
                 {SERVICE_CATEGORIES.map((cat) => (
                   <li key={cat}>
                     <Link
                       to={buildServiceCategoryPath(cat)}
-                      className="hover:text-emerald-700 hover:underline"
+                      className="hover:text-emerald-700 hover:underline inline-block py-0.5"
                     >
-                      {t.categories[cat]}
+                      {getTradeShortLabel(cat, lang)}
                     </Link>
                   </li>
                 ))}
               </ul>
             </div>
 
-            <div className="space-y-2.5">
+            <div className="lg:col-span-2 space-y-2.5">
               <div className="font-bold text-slate-900">
                 {uiText(isAr).publicUi.villesDesservies}
               </div>
@@ -50,7 +51,7 @@ export const Footer: React.FC = () => {
                   <li key={city}>
                     <Link
                       to={`${ROUTE_PATHS.SERVICES}?city=${encodeURIComponent(city)}`}
-                      className="hover:text-emerald-700 hover:underline"
+                      className="hover:text-emerald-700 hover:underline inline-block py-0.5"
                     >
                       {t.cities[city]}
                     </Link>
@@ -59,7 +60,7 @@ export const Footer: React.FC = () => {
               </ul>
             </div>
 
-            <div className="space-y-2.5">
+            <div className="lg:col-span-3 space-y-2.5">
               <div className="font-bold text-slate-900">
                 {uiText(isAr).publicUi.espacesSupport}
               </div>

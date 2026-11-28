@@ -287,85 +287,122 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
     );
   }
 
-  const navItems: Array<{
+  type AdminNavItem = {
     id: AdminSectionId;
     labelFr: string;
     labelAr: string;
     count?: number;
     icon: React.ComponentType<{ className?: string }>;
+  };
+
+  const navGroups: Array<{
+    groupId: string;
+    titleFr: string;
+    titleAr: string;
+    items: AdminNavItem[];
   }> = [
     {
-      id: 'overview',
-      labelFr: 'Vue d’ensemble',
-      labelAr: 'نظرة عامة',
-      icon: LayoutDashboard,
+      groupId: 'pilotage',
+      titleFr: 'Pilotage',
+      titleAr: 'القيادة والمؤشرات',
+      items: [
+        {
+          id: 'overview',
+          labelFr: 'Vue d’ensemble',
+          labelAr: 'نظرة عامة',
+          icon: LayoutDashboard,
+        },
+      ],
     },
     {
-      id: 'kyc',
-      labelFr: 'Dossiers KYC / CIN (CNDP)',
-      labelAr: 'ملفات البطاقة الوطنية (CNDP)',
-      count: pendingKycDocsCount > 0 ? pendingKycDocsCount : kycDocuments.length,
-      icon: FileCheck,
+      groupId: 'trust',
+      titleFr: 'Confiance & Conformité',
+      titleAr: 'الثقة والمطابقة',
+      items: [
+        {
+          id: 'kyc',
+          labelFr: 'Dossiers KYC (CNDP)',
+          labelAr: 'ملفات KYC (CNDP)',
+          count: pendingKycDocsCount > 0 ? pendingKycDocsCount : kycDocuments.length,
+          icon: FileCheck,
+        },
+        {
+          id: 'providers',
+          labelFr: 'Annuaire Maâlems',
+          labelAr: 'دليل المعلمين',
+          count: analytics.pendingCinCount > 0 ? analytics.pendingCinCount : undefined,
+          icon: ShieldCheck,
+        },
+        {
+          id: 'reviews',
+          labelFr: 'Modération Avis',
+          labelAr: 'مراقبة التقييمات',
+          count: reviews.length,
+          icon: MessageSquareWarning,
+        },
+      ],
     },
     {
-      id: 'providers',
-      labelFr: 'Vérification CIN & Maâlems',
-      labelAr: 'التحقق من CIN والمعلمين',
-      count: analytics.pendingCinCount > 0 ? analytics.pendingCinCount : undefined,
-      icon: ShieldCheck,
+      groupId: 'operations',
+      titleFr: 'Opérations & Finances',
+      titleAr: 'العمليات والمالية',
+      items: [
+        {
+          id: 'bookings',
+          labelFr: 'Réservations & Paiements',
+          labelAr: 'الحجوزات والمدفوعات',
+          count: analytics.escrowHeldCount > 0 ? analytics.escrowHeldCount : undefined,
+          icon: Briefcase,
+        },
+        {
+          id: 'disputes',
+          labelFr: 'Litiges & Signalements',
+          labelAr: 'النزاعات والبلاغات',
+          count:
+            openDisputesAndReportsCount > 0
+              ? openDisputesAndReportsCount
+              : disputes.length + moderationReports.length,
+          icon: Scale,
+        },
+        {
+          id: 'withdrawals',
+          labelFr: 'Retraits RIB',
+          labelAr: 'طلبات السحب RIB',
+          count: pendingWithdrawalsCount > 0 ? pendingWithdrawalsCount : withdrawals.length,
+          icon: Landmark,
+        },
+      ],
     },
     {
-      id: 'bookings',
-      labelFr: 'Réservations & Paiements',
-      labelAr: 'الحجوزات والمدفوعات',
-      count: analytics.escrowHeldCount > 0 ? analytics.escrowHeldCount : undefined,
-      icon: Briefcase,
-    },
-    {
-      id: 'disputes',
-      labelFr: 'Litiges & Signalements',
-      labelAr: 'النزاعات والبلاغات',
-      count:
-        openDisputesAndReportsCount > 0
-          ? openDisputesAndReportsCount
-          : disputes.length + moderationReports.length,
-      icon: Scale,
-    },
-    {
-      id: 'withdrawals',
-      labelFr: 'Retraits & Virements RIB',
-      labelAr: 'طلبات السحب والتحويلات',
-      count: pendingWithdrawalsCount > 0 ? pendingWithdrawalsCount : withdrawals.length,
-      icon: Landmark,
-    },
-    {
-      id: 'users',
-      labelFr: 'Annuaire Utilisateurs',
-      labelAr: 'دليل المستخدمين',
-      count: analytics.totalUsersCount,
-      icon: Users,
-    },
-    {
-      id: 'reviews',
-      labelFr: 'Modération des Avis',
-      labelAr: 'مراقبة التقييمات',
-      count: reviews.length,
-      icon: MessageSquareWarning,
-    },
-    {
-      id: 'settings',
-      labelFr: 'Paramètres Système',
-      labelAr: 'إعدادات النظام',
-      icon: Settings,
-    },
-    {
-      id: 'audit',
-      labelFr: 'Journal d’Audit',
-      labelAr: 'سجل التدقيق',
-      count: auditLogs.length,
-      icon: History,
+      groupId: 'system',
+      titleFr: 'Système',
+      titleAr: 'النظام',
+      items: [
+        {
+          id: 'users',
+          labelFr: 'Utilisateurs',
+          labelAr: 'المستخدمون',
+          count: analytics.totalUsersCount,
+          icon: Users,
+        },
+        {
+          id: 'settings',
+          labelFr: 'Paramètres Système',
+          labelAr: 'إعدادات النظام',
+          icon: Settings,
+        },
+        {
+          id: 'audit',
+          labelFr: 'Journal d’Audit',
+          labelAr: 'سجل التدقيق',
+          count: auditLogs.length,
+          icon: History,
+        },
+      ],
     },
   ];
+
+  const navItems: AdminNavItem[] = navGroups.flatMap((g) => g.items);
 
   const activeNav = navItems.find((item) => item.id === activeSection) || navItems[0];
   const pendingProviders = providers.filter((p) => !p.verifiedBadge);
@@ -390,47 +427,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
           type="button"
           onClick={() => setMobileNavOpen(false)}
           aria-label={t.closeBtn}
-          className="lg:hidden p-1.5 text-slate-500 hover:text-slate-900 rounded-lg cursor-pointer"
+          className="lg:hidden inline-flex items-center justify-center min-w-[40px] min-h-[40px] text-slate-500 hover:text-slate-900 rounded-lg cursor-pointer"
         >
           <X className="w-4 h-4" />
         </button>
       </div>
 
-      <nav aria-label="Admin Navigation" className="flex-1 p-3 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const active = activeSection === item.id;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => {
-                setActiveSection(item.id);
-                setMobileNavOpen(false);
-              }}
-              aria-current={active ? 'page' : undefined}
-              className={`w-full flex items-center justify-between gap-2.5 px-3 py-2.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer text-start ${
-                active
-                  ? 'bg-emerald-700 text-white'
-                  : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
-              }`}
-            >
-              <span className="flex items-center gap-2.5 min-w-0">
-                <Icon className={`w-4 h-4 shrink-0 ${active ? 'text-white' : 'text-slate-500'}`} />
-                <span className="truncate">{isAr ? item.labelAr : item.labelFr}</span>
-              </span>
-              {typeof item.count === 'number' && (
-                <span
-                  className={`font-mono-tabular text-[11px] shrink-0 ${
-                    active ? 'text-emerald-100' : 'text-slate-500'
+      <nav aria-label="Admin Navigation" className="flex-1 p-3 space-y-4 overflow-y-auto">
+        {navGroups.map((group) => (
+          <div key={group.groupId} className="space-y-1">
+            <div className="px-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              {isAr ? group.titleAr : group.titleFr}
+            </div>
+            {group.items.map((item) => {
+              const Icon = item.icon;
+              const active = activeSection === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveSection(item.id);
+                    setMobileNavOpen(false);
+                  }}
+                  aria-current={active ? 'page' : undefined}
+                  className={`w-full min-h-[40px] flex items-center justify-between gap-2.5 px-3 py-2 text-xs font-semibold rounded-lg transition-colors cursor-pointer text-start ${
+                    active
+                      ? 'bg-emerald-700 text-white'
+                      : 'text-slate-700 hover:bg-slate-100 hover:text-slate-900'
                   }`}
                 >
-                  {item.count}
-                </span>
-              )}
-            </button>
-          );
-        })}
+                  <span className="flex items-center gap-2.5 min-w-0">
+                    <Icon
+                      className={`w-4 h-4 shrink-0 ${active ? 'text-white' : 'text-slate-500'}`}
+                    />
+                    <span className="truncate">{isAr ? item.labelAr : item.labelFr}</span>
+                  </span>
+                  {typeof item.count === 'number' && (
+                    <span
+                      className={`font-mono-tabular text-[11px] shrink-0 ${
+                        active ? 'text-emerald-100' : 'text-slate-500'
+                      }`}
+                    >
+                      {item.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ))}
       </nav>
 
       {/* Admin Session Footer inside Sidebar */}
@@ -489,7 +535,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               type="button"
               onClick={() => setMobileNavOpen(true)}
               aria-label={uiText(isAr).admin.ouvrirLeMenuAdmin}
-              className="lg:hidden p-2 text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer shrink-0"
+              className="lg:hidden inline-flex items-center justify-center min-w-[44px] min-h-[44px] text-slate-700 hover:bg-slate-100 rounded-lg cursor-pointer shrink-0"
             >
               <Menu className="w-5 h-5" />
             </button>

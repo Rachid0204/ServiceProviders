@@ -68,6 +68,7 @@ export interface MarketplaceContextValue {
   supportWhatsAppUrl: string;
   allProviders: VettedProvider[];
   firestoreProviders: VettedProvider[];
+  isLoadingProviders: boolean;
   hasMoreProviders: boolean;
   isLoadingMoreProviders: boolean;
   loadMoreProviders: () => Promise<void>;
@@ -206,6 +207,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const {
     allProviders,
     firestoreProviders,
+    isLoadingProviders,
     hasMoreProviders,
     isLoadingMoreProviders,
     loadMoreProviders,
@@ -469,6 +471,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       supportWhatsAppUrl,
       allProviders,
       firestoreProviders,
+      isLoadingProviders,
       hasMoreProviders,
       isLoadingMoreProviders,
       loadMoreProviders,
@@ -566,6 +569,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       supportWhatsAppUrl,
       allProviders,
       firestoreProviders,
+      isLoadingProviders,
       hasMoreProviders,
       isLoadingMoreProviders,
       loadMoreProviders,
