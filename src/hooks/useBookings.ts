@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import {
   collection,
   query,
@@ -7,7 +7,6 @@ import {
   onSnapshot,
   doc,
   getDoc,
-  setDoc,
   updateDoc,
   writeBatch,
   runTransaction,
@@ -19,7 +18,6 @@ import type { User } from 'firebase/auth';
 import { db, handleFirestoreError, reportFirestoreError, OperationType } from '../firebase';
 import {
   buildScheduleLockId,
-  calculateEscrowSplit,
   canTransitionBookingStatus,
   computeCancellationSettlement,
   generateBookingIds,
@@ -30,18 +28,24 @@ import {
   recalculateProviderRating,
   type BookingRecord,
   type BookingStatus,
-  type ChatMessageRecord,
   type LanguageCode,
   type MoroccanCity,
   type PaymentMethod,
   type PaymentStatus,
   type ReviewCategoryBreakdown,
+  type RevisedQuoteRecord,
   type ServiceCategory,
+  type ServicePricingModel,
   type TimeSlot,
   type UserProfileRecord,
   type UserRole,
   type VettedProvider,
 } from '../utils/marketplace';
+import {
+  buildRevisedQuoteRecord,
+  computeUpdatedResponseMinutes,
+  type RevisedQuoteInput,
+} from '../utils/bookingLogic';
 import { buildBootstrapClientProfile, isVerifiedAuthUser } from '../utils/authHelpers';
 import { dispatchUserNotification } from './useNotifications';
 
@@ -67,6 +71,30 @@ function mapFirestoreBooking(id: string, data: DocumentData): BookingRecord {
       ? 'escrow_held'
       : 'unpaid_cod';
 
+  const rawQuote = data.revisedQuote;
+  let revisedQuote: RevisedQuoteRecord | undefined;
+  if (rawQuote && typeof rawQuote === 'object') {
+    const qStatus = rawQuote.status;
+    if (qStatus === 'pending' || qStatus === 'approved' || qStatus === 'declined') {
+      revisedQuote = {
+        laborMad: Number(rawQuote.laborMad || 0),
+        materialsMad: Number(rawQuote.materialsMad || 0),
+        totalMad: Number(rawQuote.totalMad || 0),
+        note: String(rawQuote.note || ''),
+        status: qStatus,
+        submittedAtIso: String(rawQuote.submittedAtIso || createdAtIso),
+        ...(rawQuote.respondedAtIso ? { respondedAtIso: String(rawQuote.respondedAtIso) } : {}),
+      };
+    }
+  }
+
+  const selectedServicePricingModel: 'fixed' | 'hourly' | 'quote_required' | undefined =
+    data.selectedServicePricingModel === 'fixed' ||
+    data.selectedServicePricingModel === 'hourly' ||
+    data.selectedServicePricingModel === 'quote_required'
+      ? data.selectedServicePricingModel
+      : undefined;
+
   return {
     id,
     bookingRef: String(data.bookingRef || id.slice(0, 8).toUpperCase()),
@@ -78,6 +106,10 @@ function mapFirestoreBooking(id: string, data: DocumentData): BookingRecord {
     providerPhone: String(data.providerPhone || ''),
     category: data.category as ServiceCategory,
     serviceType: String(data.serviceType || data.category),
+    ...(typeof data.selectedServiceId === 'string' && data.selectedServiceId
+      ? { selectedServiceId: data.selectedServiceId }
+      : {}),
+    ...(selectedServicePricingModel ? { selectedServicePricingModel } : {}),
     city: data.city as MoroccanCity,
     neighborhood: String(data.neighborhood),
     addressPin: String(data.addressPin || data.neighborhood),
@@ -98,6 +130,7 @@ function mapFirestoreBooking(id: string, data: DocumentData): BookingRecord {
     refundedClientMad:
       typeof data.refundedClientMad === 'number' ? data.refundedClientMad : undefined,
     status: (data.status as BookingStatus) || 'pending',
+    ...(revisedQuote ? { revisedQuote } : {}),
     cancellationReason: data.cancellationReason ? String(data.cancellationReason) : undefined,
     cancelledBy:
       data.cancelledBy === 'client' ||
@@ -119,6 +152,8 @@ export interface SubmitBookingPayload {
   clientName: string;
   clientPhone: string;
   serviceType: string;
+  selectedServiceId?: string;
+  selectedServicePricingModel?: ServicePricingModel;
   neighborhood: string;
   addressPin: string;
   description: string;
@@ -175,15 +210,15 @@ export function useBookings(params: {
   const [clientLiveBookings, setClientLiveBookings] = useState<BookingRecord[]>([]);
   const [providerLiveBookings, setProviderLiveBookings] = useState<BookingRecord[]>([]);
   const [adminOverrides, setAdminOverrides] = useState<Record<string, AdminBookingPatch>>({});
-  const [chatThreads, setChatThreads] = useState<Record<string, ChatMessageRecord[]>>({});
   const [bookingActionError, setBookingActionError] = useState<string | null>(null);
+  const bookingCreatedAtMsRef = useRef<Record<string, number>>({});
 
   // Dual real-time Firestore listeners: clientId == uid AND providerId == uid (strictly scoped to signed-in user)
   useEffect(() => {
     if (!authReady || !firebaseUser || !isVerifiedAuthUser(firebaseUser)) {
       setClientLiveBookings([]);
       setProviderLiveBookings([]);
-      setChatThreads({});
+      bookingCreatedAtMsRef.current = {};
       return;
     }
 
@@ -199,9 +234,23 @@ export function useBookings(params: {
       limit(100)
     );
 
+    const recordTimestamps = (docs: Array<{ id: string; data: () => DocumentData }>) => {
+      docs.forEach((d) => {
+        const raw = d.data().createdAt;
+        if (raw && typeof raw === 'object' && 'toMillis' in raw) {
+          try {
+            bookingCreatedAtMsRef.current[d.id] = (raw as Timestamp).toMillis();
+          } catch {
+            // ignore
+          }
+        }
+      });
+    };
+
     const unsubClient = onSnapshot(
       clientQuery,
       (snapshot) => {
+        recordTimestamps(snapshot.docs);
         setClientLiveBookings(snapshot.docs.map((d) => mapFirestoreBooking(d.id, d.data())));
       },
       (err) => {
@@ -212,6 +261,7 @@ export function useBookings(params: {
     const unsubProvider = onSnapshot(
       providerQuery,
       (snapshot) => {
+        recordTimestamps(snapshot.docs);
         setProviderLiveBookings(snapshot.docs.map((d) => mapFirestoreBooking(d.id, d.data())));
       },
       (err) => {
@@ -290,6 +340,10 @@ export function useBookings(params: {
       providerPhone: payload.provider.phone,
       category: payload.provider.category,
       serviceType: payload.serviceType,
+      ...(payload.selectedServiceId ? { selectedServiceId: payload.selectedServiceId } : {}),
+      ...(payload.selectedServicePricingModel
+        ? { selectedServicePricingModel: payload.selectedServicePricingModel }
+        : {}),
       city: payload.provider.location.city,
       neighborhood: payload.neighborhood,
       addressPin: payload.addressPin,
@@ -483,6 +537,30 @@ export function useBookings(params: {
 
       await updateDoc(doc(db, 'bookings', bookingId), updatePayload);
       notifyStatusChange();
+
+      // Best-effort empirical responseMinutes update when provider accepts a pending booking
+      if (
+        target.status === 'pending' &&
+        nextStatus === 'accepted' &&
+        target.providerId === firebaseUser.uid
+      ) {
+        const createdMs = bookingCreatedAtMsRef.current[bookingId];
+        if (createdMs && createdMs > 0) {
+          const currentProvider = allProviders.find((p) => p.uid === firebaseUser.uid);
+          const nextResponseMinutes = computeUpdatedResponseMinutes({
+            previousAvgMinutes: currentProvider?.responseMinutes,
+            previousSamples: currentProvider?.completedJobs,
+            createdAtMs: createdMs,
+            respondedAtMs: Date.now(),
+          });
+          void updateDoc(doc(db, 'providers', firebaseUser.uid), {
+            responseMinutes: nextResponseMinutes,
+            updatedAt: serverTimestamp(),
+          }).catch(() => {
+            // Non-blocking metrics update
+          });
+        }
+      }
     } catch (err) {
       reportFirestoreError(err, OperationType.UPDATE, path);
       setBookingActionError(
@@ -491,6 +569,112 @@ export function useBookings(params: {
           : 'Impossible de mettre à jour le statut de la réservation. Vérifiez vos permissions.'
       );
     }
+  };
+
+  // Post-visit on-site quote proposal: provider proposes itemized labor + materials on an accepted booking
+  const submitRevisedQuote = async (bookingId: string, input: RevisedQuoteInput) => {
+    setBookingActionError(null);
+    if (!firebaseUser) return;
+    const target = bookings.find((b) => b.id === bookingId);
+    if (!target || target.providerId !== firebaseUser.uid || target.status !== 'accepted') {
+      throw new Error(
+        lang === 'ar'
+          ? 'لا يمكن اقتراح تسعيرة معدلة إلا على حجز مقبول.'
+          : 'Un devis final ne peut être proposé que sur une réservation confirmée.'
+      );
+    }
+
+    const quoteRecord = buildRevisedQuoteRecord(input);
+    const path = `bookings/${bookingId}`;
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), {
+        revisedQuote: quoteRecord,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (err) {
+      reportFirestoreError(err, OperationType.UPDATE, path);
+      throw err;
+    }
+
+    void dispatchUserNotification({
+      recipientUserId: target.clientId,
+      actorUserId: firebaseUser.uid,
+      type: 'booking_status',
+      titleFr: `Devis final proposé (${quoteRecord.totalMad} DH) — #${target.bookingRef}`,
+      titleAr: `تسعيرة نهائية مقترحة (${quoteRecord.totalMad} د.م.) — #${target.bookingRef}`,
+      bodyFr: `${target.providerName} propose un devis après diagnostic (${quoteRecord.laborMad} DH main-d’œuvre + ${quoteRecord.materialsMad} DH fournitures).`,
+      bodyAr: `اقترح ${target.providerName} تسعيرة بعد المعاينة (${quoteRecord.laborMad} د.م. يد عاملة + ${quoteRecord.materialsMad} د.م. مواد).`,
+      linkPath: '/dashboard',
+    });
+  };
+
+  // Client approves or declines a pending post-visit revised quote
+  const respondToRevisedQuote = async (
+    bookingId: string,
+    decision: 'approved' | 'declined'
+  ) => {
+    setBookingActionError(null);
+    if (!firebaseUser) return;
+    const target = bookings.find((b) => b.id === bookingId);
+    if (
+      !target ||
+      target.clientId !== firebaseUser.uid ||
+      target.status !== 'accepted' ||
+      !target.revisedQuote ||
+      target.revisedQuote.status !== 'pending'
+    ) {
+      throw new Error(
+        lang === 'ar'
+          ? 'لا توجد تسعيرة معدلة قيد الانتظار لهذا الحجز.'
+          : 'Aucun devis révisé en attente sur cette réservation.'
+      );
+    }
+
+    const updatedQuote: RevisedQuoteRecord = {
+      ...target.revisedQuote,
+      status: decision,
+      respondedAtIso: new Date().toISOString().slice(0, 10),
+    };
+
+    const updatePayload: Record<string, unknown> = {
+      revisedQuote: updatedQuote,
+      updatedAt: serverTimestamp(),
+    };
+    if (decision === 'approved') {
+      updatePayload.estimatedMad = updatedQuote.totalMad;
+      updatePayload.status = 'in_progress';
+    }
+
+    const path = `bookings/${bookingId}`;
+    try {
+      await updateDoc(doc(db, 'bookings', bookingId), updatePayload);
+    } catch (err) {
+      reportFirestoreError(err, OperationType.UPDATE, path);
+      throw err;
+    }
+
+    void dispatchUserNotification({
+      recipientUserId: target.providerId,
+      actorUserId: firebaseUser.uid,
+      type: 'booking_status',
+      titleFr:
+        decision === 'approved'
+          ? `Devis final approuvé (${updatedQuote.totalMad} DH) — #${target.bookingRef}`
+          : `Devis révisé refusé — #${target.bookingRef}`,
+      titleAr:
+        decision === 'approved'
+          ? `تمت الموافقة على التسعيرة (${updatedQuote.totalMad} د.م.) — #${target.bookingRef}`
+          : `تم رفض التسعيرة المعدّلة — #${target.bookingRef}`,
+      bodyFr:
+        decision === 'approved'
+          ? `${target.clientName} a validé votre devis sur place. L’intervention passe en cours.`
+          : `${target.clientName} n’a pas validé le devis révisé. Échangez via la messagerie.`,
+      bodyAr:
+        decision === 'approved'
+          ? `وافق ${target.clientName} على التسعيرة النهائية وأصبحت المهمة قيد الإنجاز.`
+          : `لم يوافق ${target.clientName} على التسعيرة المعدّلة. يمكنك التواصل عبر المحادثة.`,
+      linkPath: '/provider/missions',
+    });
   };
 
   // Simulated CMI escrow release is disabled while no certified CMI payment gateway is connected (AUD-002)
@@ -824,25 +1008,18 @@ export function useBookings(params: {
     }));
   };
 
-  const sendLocalChatMessage = (msg: ChatMessageRecord) => {
-    setChatThreads((prev) => ({
-      ...prev,
-      [msg.bookingId]: [...(prev[msg.bookingId] || []), msg],
-    }));
-  };
-
   return {
     bookings,
-    chatThreads,
     bookingActionError,
     clearBookingActionError: () => setBookingActionError(null),
     submitBooking,
     updateBookingStatus,
+    submitRevisedQuote,
+    respondToRevisedQuote,
     clientConfirmAndReleaseEscrow,
     cancelBookingWithReason,
     rescheduleBooking,
     submitClientReview,
     applyAdminBookingPatch,
-    sendLocalChatMessage,
   };
 }

@@ -16,30 +16,44 @@ import {
   Navigation,
   LogIn,
 } from 'lucide-react';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../firebase';
 import {
   TIME_SLOTS,
+  buildScheduleLockId,
   formatMadCurrency,
   validateServiceRequestInput,
   buildWhatsAppUrl,
   generateBookingIds,
   getTodayIsoDate,
   type LanguageCode,
+  type ProviderServiceItem,
+  type ServicePricingModel,
   type UserProfileRecord,
   type VettedProvider,
   type TimeSlot,
   type PaymentMethod,
 } from '../utils/marketplace';
+import {
+  computeCatalogBookingEstimate,
+  getAvailableSlotsForDate,
+} from '../utils/bookingLogic';
+import { useProviderServices } from '../hooks/useProviderServices';
+import { useProviderAvailability } from '../hooks/useProviderAvailability';
 import type { User } from 'firebase/auth';
 import type { Translations } from '../i18n/translations';
 import { uploadMarketplacePhoto, revokePreviewObjectUrl } from '../utils/storageUpload';
 import {
   getBookingSubmissionMode,
+  isVerifiedAuthUser,
   mapFirebaseAuthError,
   mapProfileSaveError,
 } from '../utils/authHelpers';
 
 interface BookingModalProps {
   provider: VettedProvider;
+  initialService?: ProviderServiceItem | null;
+  cmiEscrowEnabled?: boolean;
   lang: LanguageCode;
   t: Translations;
   firebaseUser?: User | null;
@@ -54,6 +68,8 @@ interface BookingModalProps {
     clientName: string;
     clientPhone: string;
     serviceType: string;
+    selectedServiceId?: string;
+    selectedServicePricingModel?: ServicePricingModel;
     neighborhood: string;
     addressPin: string;
     description: string;
@@ -67,6 +83,8 @@ interface BookingModalProps {
 
 export const BookingModal: React.FC<BookingModalProps> = ({
   provider,
+  initialService = null,
+  cmiEscrowEnabled = false,
   lang,
   t,
   firebaseUser = null,
@@ -78,6 +96,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({
 }) => {
   const availableServices =
     lang === 'ar' && provider.skillsAr.length > 0 ? provider.skillsAr : provider.skills;
+  const { services: rawCatalogServices } = useProviderServices(provider.id, lang);
+  const catalogServices = useMemo(
+    () => rawCatalogServices.filter((s) => s.isActive),
+    [rawCatalogServices]
+  );
+  const { schedule: providerSchedule } = useProviderAvailability(provider.id, lang);
+
   const todayIso = useMemo(() => getTodayIsoDate(), []);
   const preGeneratedIds = useMemo(() => generateBookingIds(), [provider.id]);
   const submissionMode = getBookingSubmissionMode(firebaseUser);
@@ -86,8 +111,13 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     currentProfile?.fullName ?? firebaseUser?.displayName ?? ''
   );
   const [clientPhone, setClientPhone] = useState(currentProfile?.phone ?? '+2126');
+  const [selectedServiceId, setSelectedServiceId] = useState<string>(initialService?.id ?? '');
   const [serviceType, setServiceType] = useState<string>(
-    availableServices[0] || t.categories[provider.category]
+    initialService
+      ? lang === 'ar'
+        ? initialService.titleAr
+        : initialService.titleFr
+      : availableServices[0] || t.categories[provider.category]
   );
   const [neighborhood, setNeighborhood] = useState(
     currentProfile?.neighborhood ?? provider.location.quartier
@@ -101,6 +131,8 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [preferredDate, setPreferredDate] = useState(todayIso);
   const [preferredTimeSlot, setPreferredTimeSlot] = useState<TimeSlot>('09:00 - 12:00');
+  const [bookedSlotsForDate, setBookedSlotsForDate] = useState<TimeSlot[]>([]);
+  const [isCheckingSlots, setIsCheckingSlots] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash_on_completion');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -109,6 +141,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submittedRef, setSubmittedRef] = useState<string | null>(null);
   const submittingLockRef = React.useRef(false);
+
+  const selectedCatalogService = useMemo(() => {
+    if (!selectedServiceId) return null;
+    if (initialService && initialService.id === selectedServiceId) return initialService;
+    return catalogServices.find((srv) => srv.id === selectedServiceId) ?? null;
+  }, [selectedServiceId, initialService, catalogServices]);
 
   useEffect(() => {
     if (currentProfile) {
@@ -126,7 +164,63 @@ export const BookingModal: React.FC<BookingModalProps> = ({
     };
   }, [problemPhotoUrl]);
 
-  const estimatedMad = provider.fixedVisitFeeMAD + provider.hourlyRateMAD;
+  // Live slot lock check across all 3 time windows for the chosen date
+  useEffect(() => {
+    let active = true;
+    if (!preferredDate || !firebaseUser || !isVerifiedAuthUser(firebaseUser)) {
+      setBookedSlotsForDate([]);
+      setIsCheckingSlots(false);
+      return;
+    }
+
+    setIsCheckingSlots(true);
+    Promise.all(
+      TIME_SLOTS.map(async (slot) => {
+        try {
+          const lockId = buildScheduleLockId(provider.id, preferredDate, slot);
+          const snap = await getDoc(doc(db, 'scheduleLocks', lockId));
+          return snap.exists() ? slot : null;
+        } catch {
+          return null;
+        }
+      })
+    ).then((results) => {
+      if (!active) return;
+      setBookedSlotsForDate(results.filter((s): s is TimeSlot => s !== null));
+      setIsCheckingSlots(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [provider.id, preferredDate, firebaseUser]);
+
+  const slotStatuses = useMemo(
+    () => getAvailableSlotsForDate(preferredDate, providerSchedule, bookedSlotsForDate),
+    [preferredDate, providerSchedule, bookedSlotsForDate]
+  );
+
+  const hasAnyAvailableSlot = useMemo(
+    () => slotStatuses.some((s) => s.available),
+    [slotStatuses]
+  );
+
+  // Auto-switch to the first available slot when the current slot becomes unavailable
+  useEffect(() => {
+    const currentStatus = slotStatuses.find((s) => s.slot === preferredTimeSlot);
+    if (currentStatus && !currentStatus.available) {
+      const firstOpen = slotStatuses.find((s) => s.available);
+      if (firstOpen) {
+        setPreferredTimeSlot(firstOpen.slot);
+      }
+    }
+  }, [slotStatuses, preferredTimeSlot]);
+
+  const catalogEstimate = useMemo(
+    () => computeCatalogBookingEstimate(provider, selectedCatalogService, lang),
+    [provider, selectedCatalogService, lang]
+  );
+  const estimatedMad = catalogEstimate.estimatedMad;
   const providerDisplayName = lang === 'ar' ? provider.fullNameAr : provider.fullNameFr;
 
   const handlePhotoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -221,6 +315,14 @@ export const BookingModal: React.FC<BookingModalProps> = ({
       return;
     }
 
+    const chosenSlotState = slotStatuses.find((s) => s.slot === preferredTimeSlot);
+    if (!hasAnyAvailableSlot || (chosenSlotState && !chosenSlotState.available)) {
+      setErrors({
+        preferredDate: uiText(lang).booking.slotNoneAvailable,
+      });
+      return;
+    }
+
     submittingLockRef.current = true;
     setErrors({});
     setIsSubmitting(true);
@@ -232,6 +334,12 @@ export const BookingModal: React.FC<BookingModalProps> = ({
         clientName: clientName.trim(),
         clientPhone: validation.normalizedPhone,
         serviceType: serviceType.trim(),
+        ...(selectedCatalogService
+          ? {
+              selectedServiceId: selectedCatalogService.id,
+              selectedServicePricingModel: selectedCatalogService.pricingModel,
+            }
+          : {}),
         neighborhood: neighborhood.trim(),
         addressPin: addressPin.trim(),
         description: description.trim(),
@@ -362,7 +470,9 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 {uiText(lang).booking.connectezVousPourConfirmerVotreReservation}
               </h3>
               <p className="text-xs text-slate-600 leading-relaxed">
-                {uiText(lang).booking.pourSuivreVotreInterventionDiscuterEn}
+                {cmiEscrowEnabled
+                  ? uiText(lang).booking.pourSuivreVotreInterventionDiscuterEn
+                  : uiText(lang).booking.pourSuivreVotreInterventionCod}
               </p>
             </div>
 
@@ -507,20 +617,54 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                 </label>
                 <select
                   id="booking-service-type"
-                  value={serviceType}
-                  onChange={(e) => setServiceType(e.target.value)}
+                  value={selectedServiceId ? `catalog:${selectedServiceId}` : `skill:${serviceType}`}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val.startsWith('catalog:')) {
+                      const srvId = val.slice('catalog:'.length);
+                      const found =
+                        catalogServices.find((s) => s.id === srvId) ||
+                        (initialService?.id === srvId ? initialService : null);
+                      if (found) {
+                        setSelectedServiceId(found.id);
+                        setServiceType(lang === 'ar' ? found.titleAr : found.titleFr);
+                        return;
+                      }
+                    }
+                    setSelectedServiceId('');
+                    setServiceType(val.startsWith('skill:') ? val.slice('skill:'.length) : val);
+                  }}
                   className="w-full px-3.5 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
                 >
-                  {availableServices.map((skill) => (
-                    <option key={skill} value={skill}>
-                      {skill}
-                    </option>
-                  ))}
-                  {!availableServices.includes(t.categories[provider.category]) && (
-                    <option value={t.categories[provider.category]}>
-                      {t.categories[provider.category]} — Diagnostic général
-                    </option>
+                  {(catalogServices.length > 0 || initialService) && (
+                    <optgroup label={uiText(lang).booking.catalogServiceSection}>
+                      {(catalogServices.length > 0
+                        ? catalogServices
+                        : initialService
+                        ? [initialService]
+                        : []
+                      ).map((srv) => (
+                        <option key={srv.id} value={`catalog:${srv.id}`}>
+                          {lang === 'ar' ? srv.titleAr : srv.titleFr} —{' '}
+                          {srv.pricingModel === 'quote_required'
+                            ? formatMadCurrency(provider.fixedVisitFeeMAD, lang)
+                            : formatMadCurrency(srv.priceMad, lang)}
+                        </option>
+                      ))}
+                    </optgroup>
                   )}
+                  <optgroup label={uiText(lang).booking.generalSkillsSection}>
+                    {availableServices.map((skill) => (
+                      <option key={skill} value={`skill:${skill}`}>
+                        {skill}
+                      </option>
+                    ))}
+                    {!availableServices.includes(t.categories[provider.category]) && (
+                      <option value={`skill:${t.categories[provider.category]}`}>
+                        {t.categories[provider.category]}
+                      </option>
+                    )}
+                  </optgroup>
                 </select>
               </div>
 
@@ -578,26 +722,61 @@ export const BookingModal: React.FC<BookingModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  {t.preferredTimeSlotLabel} <span className="text-rose-600">*</span>
-                </label>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {TIME_SLOTS.map((slot) => (
-                    <button
-                      key={slot}
-                      type="button"
-                      onClick={() => setPreferredTimeSlot(slot)}
-                      className={`px-2 py-2 text-xs font-mono-tabular font-semibold rounded-lg border transition-colors cursor-pointer flex items-center justify-center gap-1 ${
-                        preferredTimeSlot === slot
-                          ? 'bg-emerald-700 text-white border-emerald-700'
-                          : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'
-                      }`}
-                    >
-                      <Clock className="w-3 h-3 shrink-0" />
-                      <span>{slot.replace(' - ', '–')}</span>
-                    </button>
-                  ))}
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    {t.preferredTimeSlotLabel} <span className="text-rose-600">*</span>
+                  </label>
+                  {isCheckingSlots && (
+                    <span className="text-[11px] text-slate-500">
+                      {uiText(lang).booking.slotCheckingAvailability}
+                    </span>
+                  )}
                 </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {slotStatuses.map(({ slot, available, reason }) => {
+                    const reasonText =
+                      reason === 'day_closed'
+                        ? uiText(lang).booking.slotDayClosed
+                        : reason === 'date_blocked'
+                        ? uiText(lang).booking.slotDateBlocked
+                        : reason === 'already_booked'
+                        ? uiText(lang).booking.slotAlreadyBooked
+                        : null;
+                    return (
+                      <button
+                        key={slot}
+                        type="button"
+                        disabled={!available}
+                        onClick={() => {
+                          if (available) setPreferredTimeSlot(slot);
+                        }}
+                        className={`px-2 py-2 text-xs font-mono-tabular font-semibold rounded-lg border transition-colors flex flex-col items-center justify-center gap-0.5 ${
+                          !available
+                            ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed line-through'
+                            : preferredTimeSlot === slot
+                            ? 'bg-emerald-700 text-white border-emerald-700 cursor-pointer'
+                            : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50 cursor-pointer'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3 shrink-0" />
+                          <span>{slot.replace(' - ', '–')}</span>
+                        </span>
+                        {reasonText && (
+                          <span className="text-[10px] font-sans font-medium no-underline text-rose-600 leading-tight">
+                            {reasonText}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                {!hasAnyAvailableSlot && (
+                  <p className="mt-1.5 text-xs text-rose-700 flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{uiText(lang).booking.slotNoneAvailable}</span>
+                  </p>
+                )}
               </div>
             </div>
 
@@ -711,7 +890,7 @@ export const BookingModal: React.FC<BookingModalProps> = ({
                     className="w-16 h-16 rounded-lg object-cover border border-slate-300"
                   />
                   <span className="text-xs text-emerald-700 font-medium">
-                    ✓ Photo jointe au dossier d’intervention
+                    {uiText(lang).booking.photoJointe}
                   </span>
                 </div>
               )}
@@ -763,14 +942,23 @@ export const BookingModal: React.FC<BookingModalProps> = ({
             </div>
 
             {/* Transparent MAD / DH Summary */}
-            <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2 text-xs text-slate-700">
-                <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{t.estimatedTotalLabel}</span>
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-lg space-y-1">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 text-xs text-slate-700">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>{t.estimatedTotalLabel}</span>
+                </div>
+                <div className="text-base font-bold tabular-nums text-slate-900">
+                  {formatMadCurrency(estimatedMad, lang)}
+                </div>
               </div>
-              <div className="text-base font-bold tabular-nums text-slate-900">
-                {formatMadCurrency(estimatedMad, lang)}
-              </div>
+              <p className="text-[11px] text-slate-500">
+                {catalogEstimate.pricingModel === 'fixed'
+                  ? uiText(lang).booking.catalogFixedPriceHint
+                  : catalogEstimate.pricingModel === 'quote_required'
+                  ? uiText(lang).booking.catalogQuoteVisitHint
+                  : uiText(lang).booking.catalogHourlyHint}
+              </p>
             </div>
 
             {submitError && (

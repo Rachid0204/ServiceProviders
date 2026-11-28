@@ -7,6 +7,7 @@ export interface SystemSettingsRecord {
   minWithdrawalMad: number;
   autoRefundOnProviderCancel: boolean;
   requireKycForEscrowPayout: boolean;
+  cmiEscrowEnabled: boolean;
   supportWhatsAppPhone: string;
   updatedByEmail: string;
   updatedAtIso: string;
@@ -17,6 +18,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettingsRecord = {
   minWithdrawalMad: 200,
   autoRefundOnProviderCancel: true,
   requireKycForEscrowPayout: true,
+  cmiEscrowEnabled: false,
   supportWhatsAppPhone: '',
   updatedByEmail: DEFAULT_ADMIN_EMAIL_PLACEHOLDER,
   updatedAtIso: '2026-11-18 09:00',

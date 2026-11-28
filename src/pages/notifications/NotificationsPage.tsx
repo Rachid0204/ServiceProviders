@@ -107,10 +107,21 @@ export const NotificationsPage: React.FC = () => {
     key: keyof Omit<NotificationPreferencesRecord, 'uid'>;
     labelFr: string;
     labelAr: string;
+    upcoming?: boolean;
   }> = [
     { key: 'inAppEnabled', labelFr: 'Alertes dans l’application', labelAr: 'تنبيهات داخل التطبيق' },
-    { key: 'emailEnabled', labelFr: 'Notifications par e-mail', labelAr: 'إشعارات البريد الإلكتروني' },
-    { key: 'smsWhatsAppEnabled', labelFr: 'Rappels SMS / WhatsApp', labelAr: 'تذكيرات SMS / واتساب' },
+    {
+      key: 'emailEnabled',
+      labelFr: 'Notifications par e-mail',
+      labelAr: 'إشعارات البريد الإلكتروني',
+      upcoming: true,
+    },
+    {
+      key: 'smsWhatsAppEnabled',
+      labelFr: 'Rappels SMS / WhatsApp',
+      labelAr: 'تذكيرات SMS / واتساب',
+      upcoming: true,
+    },
     { key: 'bookingUpdates', labelFr: 'Mises à jour des réservations', labelAr: 'تحديثات الحجوزات' },
     { key: 'quotationUpdates', labelFr: 'Devis reçus et acceptations', labelAr: 'عروض الأثمنة والقبول' },
     { key: 'chatMessages', labelFr: 'Nouveaux messages instantanés', labelAr: 'الرسائل الفورية الجديدة' },
@@ -259,27 +270,41 @@ export const NotificationsPage: React.FC = () => {
           <div className="divide-y divide-slate-100">
             {preferenceItems.map((item) => {
               const checked = prefsDraft[item.key];
+              const isDisabled = savingPrefs || Boolean(item.upcoming);
               return (
                 <label
                   key={item.key}
-                  className="py-3 flex items-center justify-between gap-3 cursor-pointer"
+                  className={`py-3 flex items-center justify-between gap-3 ${
+                    item.upcoming ? 'opacity-65 cursor-not-allowed' : 'cursor-pointer'
+                  }`}
                 >
-                  <span className="text-xs font-medium text-slate-800">
-                    {isAr ? item.labelAr : item.labelFr}
+                  <span className="text-xs font-medium text-slate-800 flex items-center gap-2">
+                    <span>{isAr ? item.labelAr : item.labelFr}</span>
+                    {item.upcoming && (
+                      <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-slate-100 text-slate-600 border border-slate-200">
+                        {uiText(isAr).notifications.comingSoonBadge}
+                      </span>
+                    )}
                   </span>
                   <input
                     type="checkbox"
-                    checked={checked}
-                    disabled={savingPrefs}
+                    checked={item.upcoming ? false : checked}
+                    disabled={isDisabled}
                     onChange={() => {
-                      void handleTogglePref(item.key);
+                      if (!item.upcoming) {
+                        void handleTogglePref(item.key);
+                      }
                     }}
-                    className="h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600 cursor-pointer"
+                    className="h-4 w-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600 cursor-pointer disabled:cursor-not-allowed"
                   />
                 </label>
               );
             })}
           </div>
+
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            {uiText(isAr).notifications.channelUpcomingHint}
+          </p>
 
           {prefsSavedBanner && (
             <div className="px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-xs font-medium text-emerald-800">

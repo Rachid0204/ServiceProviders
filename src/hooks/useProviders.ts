@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   collection,
   query,
+  where,
   limit,
   startAfter,
   getDoc,
@@ -10,6 +11,7 @@ import {
   updateDoc,
   serverTimestamp,
   type DocumentData,
+  type QueryConstraint,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import type { User } from 'firebase/auth';
@@ -224,6 +226,48 @@ export function useProviders(
     }
   }, [hasMoreProviders, lastVisibleDoc, isLoadingMoreProviders]);
 
+  // Composite-indexed server-side provider query for category / city / verified / availability filters
+  // Safely merges results into firestoreProviders and falls back silently if an index is still building
+  const queryProvidersByFilters = useCallback(
+    async (filters: {
+      category?: ServiceCategory | 'ALL';
+      city?: MoroccanCity | 'ALL';
+      verifiedOnly?: boolean;
+      availableNowOnly?: boolean;
+    }) => {
+      const constraints: QueryConstraint[] = [];
+      if (filters.category && filters.category !== 'ALL') {
+        constraints.push(where('category', '==', filters.category));
+      }
+      if (filters.city && filters.city !== 'ALL') {
+        constraints.push(where('location.city', '==', filters.city));
+      }
+      if (filters.verifiedOnly) {
+        constraints.push(where('verifiedBadge', '==', true));
+      }
+      if (filters.availableNowOnly) {
+        constraints.push(where('isAvailableNow', '==', true));
+      }
+      if (constraints.length === 0) return;
+
+      constraints.push(limit(PROVIDERS_PAGE_SIZE));
+      try {
+        const snapshot = await getDocs(query(collection(db, 'providers'), ...constraints));
+        const fetched = snapshot.docs.map((d) => mapFirestoreProviderDoc(d.id, d.data()));
+        if (fetched.length > 0) {
+          setFirestoreProviders((prev) => {
+            const byId = new Map(prev.map((p) => [p.id, p]));
+            fetched.forEach((p) => byId.set(p.id, p));
+            return Array.from(byId.values());
+          });
+        }
+      } catch {
+        // Safe fallback to already-loaded paginated directory if composite index is still building
+      }
+    },
+    []
+  );
+
   // Merge paginated Firestore providers (+ optional dev-only fixtures) + own provider card + overrides
   const allProviders = useMemo(() => {
     const mergedMap = new Map<string, VettedProvider>();
@@ -404,6 +448,7 @@ export function useProviders(
     hasMoreProviders,
     isLoadingMoreProviders,
     loadMoreProviders,
+    queryProvidersByFilters,
     toggleProviderAvailability,
     applyLocalReviewOverride,
     applyAdminProviderOverride,

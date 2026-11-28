@@ -64,6 +64,10 @@ export function useSystemSettings(firebaseUser: User | null, authReady: boolean)
             typeof data.requireKycForEscrowPayout === 'boolean'
               ? data.requireKycForEscrowPayout
               : DEFAULT_SYSTEM_SETTINGS.requireKycForEscrowPayout,
+          cmiEscrowEnabled:
+            typeof data.cmiEscrowEnabled === 'boolean'
+              ? data.cmiEscrowEnabled
+              : DEFAULT_SYSTEM_SETTINGS.cmiEscrowEnabled,
           supportWhatsAppPhone:
             typeof data.supportWhatsAppPhone === 'string'
               ? data.supportWhatsAppPhone

@@ -24,6 +24,7 @@ import {
   type NotificationType,
 } from '../utils/marketplace';
 import { isVerifiedAuthUser } from '../utils/authHelpers';
+import { shouldShowNotificationForPreferences } from '../utils/bookingLogic';
 
 function parseTimestampMs(ts: unknown): { ms: number; iso: string } {
   if (ts && typeof ts === 'object' && 'toDate' in ts) {
@@ -189,8 +190,11 @@ export function useNotifications(
   }, [authReady, firebaseUser, isVerified]);
 
   const notifications = useMemo<NotificationRecord[]>(
-    () => rawNotifications.map(({ createdAtMs: _ms, ...record }) => record),
-    [rawNotifications]
+    () =>
+      rawNotifications
+        .filter((record) => shouldShowNotificationForPreferences(record, notificationPreferences))
+        .map(({ createdAtMs: _ms, ...record }) => record),
+    [rawNotifications, notificationPreferences]
   );
 
   const unreadNotificationCount = useMemo(

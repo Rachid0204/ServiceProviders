@@ -28,6 +28,7 @@ interface ProviderCardProps {
   lang: LanguageCode;
   t: Translations;
   isFavorite?: boolean;
+  cmiEscrowEnabled?: boolean;
   onToggleFavorite?: (providerId: string) => void;
   onViewDetails: (provider: VettedProvider) => void;
   onBookProvider: (provider: VettedProvider) => void;
@@ -38,6 +39,7 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
   lang,
   t,
   isFavorite = false,
+  cmiEscrowEnabled = false,
   onToggleFavorite,
   onViewDetails,
   onBookProvider,
@@ -196,11 +198,13 @@ export const ProviderCard: React.FC<ProviderCardProps> = ({
             </div>
           )}
 
-          {/* Subtle Unboxed Escrow Trust Line */}
+          {/* Subtle Unboxed Payment Trust Line */}
           <div className="flex items-center gap-1.5 text-[11px] text-emerald-800 pt-0.5">
             <Lock className="w-3.5 h-3.5 text-emerald-700 shrink-0" />
             <span className="truncate">
-              {uiText(isAr).publicUi.paiementApresInterventionOuSequestreCmi}
+              {cmiEscrowEnabled
+                ? uiText(isAr).publicUi.paiementApresInterventionOuSequestreCmi
+                : uiText(isAr).publicUi.paiementEspecesApresIntervention}
             </span>
           </div>
         </div>

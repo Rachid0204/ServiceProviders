@@ -12,6 +12,7 @@ export const CustomerDashboardPage: React.FC = () => {
     firebaseUser,
     userProfile,
     systemSettings,
+    allProviders,
     bookingActionError,
     clearBookingActionError,
     bookings,
@@ -29,6 +30,7 @@ export const CustomerDashboardPage: React.FC = () => {
     setCancellingBooking,
     clientConfirmAndReleaseEscrow,
     setReviewingBooking,
+    openBookingModal,
   } = useMarketplace();
 
   return (
@@ -38,6 +40,7 @@ export const CustomerDashboardPage: React.FC = () => {
       firebaseUser={firebaseUser}
       userProfile={userProfile}
       platformFeePct={systemSettings.platformFeePct}
+      cmiEscrowEnabled={systemSettings.cmiEscrowEnabled}
       bookingActionError={bookingActionError}
       onDismissError={clearBookingActionError}
       bookings={bookings}
@@ -59,6 +62,14 @@ export const CustomerDashboardPage: React.FC = () => {
         void clientConfirmAndReleaseEscrow(id);
       }}
       onOpenReview={setReviewingBooking}
+      onRebookProvider={(b) => {
+        const provider = allProviders.find((p) => p.id === b.providerId || p.uid === b.providerId);
+        if (provider) {
+          openBookingModal(provider);
+        } else {
+          navigate(ROUTE_PATHS.SERVICES);
+        }
+      }}
     />
   );
 };

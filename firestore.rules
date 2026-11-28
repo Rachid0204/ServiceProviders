@@ -230,6 +230,7 @@ service cloud.firestore {
           'diplomaFr',
           'diplomaAr',
           'completedJobs',
+          'responseMinutes',
           'withdrawableBalanceMad',
           'lastCompletedBookingId',
           'lastReviewBookingId',
@@ -256,6 +257,7 @@ service cloud.firestore {
         (!('diplomaFr' in data) || (data.diplomaFr is string && data.diplomaFr.size() <= 160)) &&
         (!('diplomaAr' in data) || (data.diplomaAr is string && data.diplomaAr.size() <= 160)) &&
         (!('completedJobs' in data) || (data.completedJobs is int && data.completedJobs >= 0 && data.completedJobs <= 100000)) &&
+        (!('responseMinutes' in data) || (data.responseMinutes is int && data.responseMinutes >= 1 && data.responseMinutes <= 1440)) &&
         (!('withdrawableBalanceMad' in data) || (data.withdrawableBalanceMad is int && data.withdrawableBalanceMad >= 0 && data.withdrawableBalanceMad <= 1000000)) &&
         (!('lastCompletedBookingId' in data) || (data.lastCompletedBookingId is string && data.lastCompletedBookingId.size() >= 1 && data.lastCompletedBookingId.size() <= 128 && data.lastCompletedBookingId.matches('^[a-zA-Z0-9_\\-]+$'))) &&
         (!('lastReviewBookingId' in data) || (data.lastReviewBookingId is string && data.lastReviewBookingId.size() >= 1 && data.lastReviewBookingId.size() <= 128 && data.lastReviewBookingId.matches('^[a-zA-Z0-9_\\-]+$'))) &&
@@ -306,6 +308,20 @@ service cloud.firestore {
     }
 
     // 6. Validation Blueprint: Booking (/bookings/{bookingId})
+    function isValidRevisedQuote(q) {
+      return q is map &&
+        q.keys().hasAll(['laborMad', 'materialsMad', 'totalMad', 'note', 'status', 'submittedAtIso']) &&
+        q.keys().hasOnly(['laborMad', 'materialsMad', 'totalMad', 'note', 'status', 'submittedAtIso', 'respondedAtIso']) &&
+        q.laborMad is int && q.laborMad >= 0 && q.laborMad <= 100000 &&
+        q.materialsMad is int && q.materialsMad >= 0 && q.materialsMad <= 100000 &&
+        q.totalMad is int && q.totalMad >= 50 && q.totalMad <= 200000 &&
+        q.totalMad == q.laborMad + q.materialsMad &&
+        q.note is string && q.note.size() >= 5 && q.note.size() <= 400 &&
+        q.status is string && (q.status == 'pending' || q.status == 'approved' || q.status == 'declined') &&
+        q.submittedAtIso is string && q.submittedAtIso.size() >= 8 && q.submittedAtIso.size() <= 32 &&
+        (!('respondedAtIso' in q) || (q.respondedAtIso is string && q.respondedAtIso.size() >= 8 && q.respondedAtIso.size() <= 32));
+    }
+
     function isValidBooking(data) {
       return data.keys().hasOnly([
           'bookingRef',
@@ -317,6 +333,8 @@ service cloud.firestore {
           'providerPhone',
           'category',
           'serviceType',
+          'selectedServiceId',
+          'selectedServicePricingModel',
           'city',
           'neighborhood',
           'addressPin',
@@ -327,6 +345,7 @@ service cloud.firestore {
           'paymentMethod',
           'paymentStatus',
           'estimatedMad',
+          'revisedQuote',
           'providerPayoutMad',
           'platformFeeMad',
           'refundedClientMad',
@@ -348,6 +367,12 @@ service cloud.firestore {
         data.providerPhone is string && data.providerPhone.matches('^\\+212[5-7][0-9]{8}$') &&
         isValidCategory(data.category) &&
         data.serviceType is string && data.serviceType.size() >= 2 && data.serviceType.size() <= 120 &&
+        (!('selectedServiceId' in data) || (data.selectedServiceId is string && data.selectedServiceId.size() >= 1 && data.selectedServiceId.size() <= 128)) &&
+        (!('selectedServicePricingModel' in data) || (data.selectedServicePricingModel is string && (
+          data.selectedServicePricingModel == 'fixed' ||
+          data.selectedServicePricingModel == 'hourly' ||
+          data.selectedServicePricingModel == 'quote_required'
+        ))) &&
         isValidCity(data.city) &&
         data.neighborhood is string && data.neighborhood.size() >= 2 && data.neighborhood.size() <= 80 &&
         data.addressPin is string && data.addressPin.size() >= 2 && data.addressPin.size() <= 160 &&
@@ -364,7 +389,7 @@ service cloud.firestore {
           data.paymentStatus == 'refunded' ||
           data.paymentStatus == 'disputed_split'
         ) &&
-        data.estimatedMad is int && data.estimatedMad >= 50 && data.estimatedMad <= 100000 &&
+        data.estimatedMad is int && data.estimatedMad >= 50 && data.estimatedMad <= 200000 &&
         isValidBookingMutableFields(data) &&
         data.createdAt is timestamp;
     }
@@ -372,6 +397,7 @@ service cloud.firestore {
     function isValidBookingMutableFields(data) {
       return data.preferredDate is string && data.preferredDate.size() >= 8 && data.preferredDate.size() <= 32 &&
         data.preferredTimeSlot in ['09:00 - 12:00', '14:00 - 17:00', '18:00 - 20:00'] &&
+        data.estimatedMad is int && data.estimatedMad >= 50 && data.estimatedMad <= 200000 &&
         (
           data.paymentStatus == 'unpaid_cod' ||
           data.paymentStatus == 'pending_cash' ||
@@ -380,9 +406,10 @@ service cloud.firestore {
           data.paymentStatus == 'refunded' ||
           data.paymentStatus == 'disputed_split'
         ) &&
-        (!('providerPayoutMad' in data) || (data.providerPayoutMad is int && data.providerPayoutMad >= 0 && data.providerPayoutMad <= 100000)) &&
-        (!('platformFeeMad' in data) || (data.platformFeeMad is int && data.platformFeeMad >= 0 && data.platformFeeMad <= 100000)) &&
-        (!('refundedClientMad' in data) || (data.refundedClientMad is int && data.refundedClientMad >= 0 && data.refundedClientMad <= 100000)) &&
+        (!('revisedQuote' in data) || isValidRevisedQuote(data.revisedQuote)) &&
+        (!('providerPayoutMad' in data) || (data.providerPayoutMad is int && data.providerPayoutMad >= 0 && data.providerPayoutMad <= 200000)) &&
+        (!('platformFeeMad' in data) || (data.platformFeeMad is int && data.platformFeeMad >= 0 && data.platformFeeMad <= 200000)) &&
+        (!('refundedClientMad' in data) || (data.refundedClientMad is int && data.refundedClientMad >= 0 && data.refundedClientMad <= 200000)) &&
         (!('cancellationReason' in data) || (data.cancellationReason is string && data.cancellationReason.size() <= 400)) &&
         (!('cancelledBy' in data) || (data.cancelledBy == 'client' || data.cancelledBy == 'provider' || data.cancelledBy == 'admin')) &&
         (!('rescheduleNote' in data) || (data.rescheduleNote is string && data.rescheduleNote.size() <= 300)) &&
@@ -554,6 +581,7 @@ service cloud.firestore {
           'minWithdrawalMad',
           'autoRefundOnProviderCancel',
           'requireKycForEscrowPayout',
+          'cmiEscrowEnabled',
           'supportWhatsAppPhone',
           'updatedByEmail',
           'updatedAt'
@@ -562,6 +590,7 @@ service cloud.firestore {
         data.minWithdrawalMad is int && data.minWithdrawalMad >= 50 && data.minWithdrawalMad <= 20000 &&
         data.autoRefundOnProviderCancel is bool &&
         data.requireKycForEscrowPayout is bool &&
+        (!('cmiEscrowEnabled' in data) || data.cmiEscrowEnabled is bool) &&
         data.supportWhatsAppPhone is string && (
           data.supportWhatsAppPhone == '' || (
             data.supportWhatsAppPhone.size() >= 12 &&
@@ -681,6 +710,7 @@ service cloud.firestore {
               'diplomaFr',
               'diplomaAr',
               'completedJobs',
+              'responseMinutes',
               'location',
               'updatedAt'
             ])
@@ -772,6 +802,7 @@ service cloud.firestore {
         incoming().clientId == request.auth.uid &&
         incoming().providerId != request.auth.uid &&
         incoming().status == 'pending' &&
+        !('revisedQuote' in incoming()) &&
         !('providerPayoutMad' in incoming()) &&
         !('platformFeeMad' in incoming()) &&
         !('refundedClientMad' in incoming()) &&
@@ -793,7 +824,6 @@ service cloud.firestore {
         isValidBookingMutableFields(incoming()) &&
         incoming().clientId == existing().clientId &&
         incoming().providerId == existing().providerId &&
-        incoming().estimatedMad == existing().estimatedMad &&
         incoming().paymentMethod == existing().paymentMethod &&
         incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time && (
@@ -802,6 +832,7 @@ service cloud.firestore {
             existing().status != 'reviewed' && (
               // Action 1 & 5b: Client or Provider cancels a pending or accepted cash_on_completion booking
               (
+                incoming().estimatedMad == existing().estimatedMad &&
                 incoming().status == 'cancelled' &&
                 (existing().status == 'pending' || existing().status == 'accepted') &&
                 (
@@ -826,6 +857,7 @@ service cloud.firestore {
               ) ||
               // Action 3: Client or Provider reschedules a pending or accepted booking
               (
+                incoming().estimatedMad == existing().estimatedMad &&
                 (request.auth.uid == existing().clientId || request.auth.uid == existing().providerId) &&
                 (existing().status == 'pending' || existing().status == 'accepted') &&
                 incoming().status == existing().status &&
@@ -838,6 +870,7 @@ service cloud.firestore {
               ) ||
               // Action 4: Client submits 1-5 star review on completed booking (atomically creating /reviews/{bookingId}; no payment tampering)
               (
+                incoming().estimatedMad == existing().estimatedMad &&
                 request.auth.uid == existing().clientId &&
                 existing().status == 'completed' &&
                 incoming().status == 'reviewed' &&
@@ -851,6 +884,7 @@ service cloud.firestore {
               ) ||
               // Action 5a & 6: Provider accepts a pending booking or starts an accepted booking (status only)
               (
+                incoming().estimatedMad == existing().estimatedMad &&
                 request.auth.uid == existing().providerId &&
                 (
                   (existing().status == 'pending' && incoming().status == 'accepted') ||
@@ -863,6 +897,7 @@ service cloud.firestore {
               ) ||
               // Action 7: Provider marks an in_progress cash_on_completion booking completed (settles to paid)
               (
+                incoming().estimatedMad == existing().estimatedMad &&
                 request.auth.uid == existing().providerId &&
                 existing().status == 'in_progress' &&
                 incoming().status == 'completed' &&
@@ -872,6 +907,53 @@ service cloud.firestore {
                   'paymentStatus',
                   'updatedAt'
                 ])
+              ) ||
+              // Action 8: Provider submits a post-visit on-site revised quote on an accepted booking
+              (
+                incoming().estimatedMad == existing().estimatedMad &&
+                request.auth.uid == existing().providerId &&
+                existing().status == 'accepted' &&
+                incoming().status == 'accepted' &&
+                'revisedQuote' in incoming() &&
+                incoming().revisedQuote.status == 'pending' &&
+                !('respondedAtIso' in incoming().revisedQuote) &&
+                incoming().diff(existing()).affectedKeys().hasOnly([
+                  'revisedQuote',
+                  'updatedAt'
+                ])
+              ) ||
+              // Action 9: Client approves (updating estimatedMad & starting work) or declines a pending revised quote
+              (
+                request.auth.uid == existing().clientId &&
+                existing().status == 'accepted' &&
+                'revisedQuote' in existing() &&
+                existing().revisedQuote.status == 'pending' &&
+                'revisedQuote' in incoming() &&
+                incoming().revisedQuote.laborMad == existing().revisedQuote.laborMad &&
+                incoming().revisedQuote.materialsMad == existing().revisedQuote.materialsMad &&
+                incoming().revisedQuote.totalMad == existing().revisedQuote.totalMad &&
+                incoming().revisedQuote.note == existing().revisedQuote.note &&
+                incoming().revisedQuote.submittedAtIso == existing().revisedQuote.submittedAtIso && (
+                  (
+                    incoming().revisedQuote.status == 'declined' &&
+                    incoming().status == 'accepted' &&
+                    incoming().estimatedMad == existing().estimatedMad &&
+                    incoming().diff(existing()).affectedKeys().hasOnly([
+                      'revisedQuote',
+                      'updatedAt'
+                    ])
+                  ) || (
+                    incoming().revisedQuote.status == 'approved' &&
+                    incoming().status == 'in_progress' &&
+                    incoming().estimatedMad == existing().revisedQuote.totalMad &&
+                    incoming().diff(existing()).affectedKeys().hasOnly([
+                      'revisedQuote',
+                      'estimatedMad',
+                      'status',
+                      'updatedAt'
+                    ])
+                  )
+                )
               )
             )
           )

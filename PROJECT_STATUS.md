@@ -1,32 +1,26 @@
 # Project Status — Moul L'Khedma (مول الخدمة)
 
-## Completed Work
-### Phase 1: Foundation, Bilingual FR/AR Architecture & Firebase Onboarding
-- **Bilingual Support (French LTR & Arabic RTL)**: Instant language switcher in the header dynamically updates `document.documentElement.dir` (`ltr` / `rtl`) and `lang` (`fr` / `ar`), typography (`Plus Jakarta Sans` + `Cairo`), and all interface copy.
-- **Firebase Provisioning & Security**: Connected to Firebase project `serviceproviders-530c4` (Firestore database `ai-studio-721fde67-a110-4e25-bcc2-2f011a526460`).
-- **Dual-Role Onboarding (`users/{uid}`)**: Supports Client and Service Provider (Maâlem / Prestataire) registration with strict validation for Moroccan phone numbers (`+212[5-7]XXXXXXXX`).
+## Platform Architecture & Completed Capabilities
+### 1. Bilingual Marketplace Discovery (FR LTR / AR RTL)
+- **12 Moroccan Trade Categories & 6 Cities**: Plomberie, Électricité, Peinture, Soutien Scolaire, Ménage, Climatisation, Menuiserie, Serrurerie, Électroménager, Jardinage, Déménagement, Maçonnerie across Casablanca, Rabat, Marrakech, Tangier, Fes, and Agadir.
+- **Server-Side Filtered Discovery**: Composite-indexed Firestore `providers` queries with interactive list/map Leaflet split view, trade icons, distance sorting, hourly rate bounds, CIN verification, and real-time availability filters.
+- **Modular Contexts**: Decomposed `LocaleContext`, `AuthSessionContext`, and `ModalsStateContext` composed cleanly under `MarketplaceProvider`.
 
-### Phase 2: Service Provider Discovery, Geolocation, and Trust Layer
-- **Firestore `providers/{uid}` Collection & Security Rules**:
-  - Updated `firebase-blueprint.json` and `firestore.rules` with `ProviderProfile` schema validation.
-- **Seeded 8 Vetted Moroccan Providers**:
-  - Seeded 8 realistic bilingual (FR/AR) providers across **Casablanca**, **Rabat**, and **Tangier** covering all 6 categories.
-- **Interactive Search, Filters, Geolocation & Map/List Split View**:
-  - Filter by trade category, city, neighborhood, hourly rate slider in MAD, `"CIN Vérifiée"`, `"Disponible maintenant"`, and `"Près de moi / قريب مني"` using `navigator.geolocation` + Leaflet OpenStreetMap split view.
+### 2. Catalog-Prefilled Booking, Live Slot Availability & Post-Visit Quote Approval
+- **Catalog-to-Booking Prefill**: Selecting any structured service from a Maâlem's public profile pre-fills the service item, pricing model (`fixed`, `hourly`, `quote_required`), and dynamic MAD estimate.
+- **Live Slot Availability**: `BookingModal` evaluates weekly schedules, blocked dates, and active `scheduleLocks` to disable unavailable slots before submission.
+- **Post-Visit On-Site Quote Approval (`revisedQuote`)**: Maâlems can submit an itemized diagnostic quote (labor + materials + note) on accepted bookings; clients approve inline (updating `estimatedMad` and transitioning to `in_progress`) or decline, with itemized printable HTML receipts and one-click rebooking.
+- **Empirical Response Times**: Rolling `responseMinutes` updates automatically when providers accept pending bookings.
 
-### Phase 3: Booking Workflow, Real-Time In-App Chat, WhatsApp Bridge, and Payment Tracking
-- **Booking Lifecycle (`bookings/{bookingId}`)**:
-  - Clients can book a Maâlem by selecting Service Type, Preferred Date & Time Slot (`09:00 - 12:00`, `14:00 - 17:00`, `18:00 - 20:00`), Problem Description with optional photo upload, Address/Pin with GPS coordinate helper, and Payment Method (`Cash on Completion / الدفع عند الخدمة` or `Card / CMI Online Escrow`).
-  - Full lifecycle statuses: `pending` -> `accepted` -> `in_progress` -> `completed` -> `reviewed` (plus `cancelled`).
-  - **Provider Dashboard ("Espace Maâlem / لوحة المعلم")**: Providers can toggle `isAvailableNow`, accept or decline incoming `pending` requests, start `accepted` jobs (`in_progress`), and mark jobs `completed`.
-  - **Client Dashboard ("Mes Demandes / طلباتي")**: Clients track active bookings and submit a 1–5 star review + comment once status is `completed`, automatically recalculating `ratingAvg` and `reviewCount` on the provider document.
-- **Real-Time In-App Chat (`chats/{bookingId}/messages/{messageId}`)**:
-  - Real-time Firestore `onSnapshot` chat drawer inside each booking thread so client and Maâlem can coordinate arrival details and share photos.
-- **One-Click WhatsApp Integration**:
-  - Every provider card and every active booking includes a green `"Contacter sur WhatsApp / تواصل عبر واتساب"` button that formats the Moroccan phone number (`212...`) and opens `https://wa.me/{phone}?text={encodedMessage}` pre-filled in FR or AR with the booking reference and service category.
+### 3. COD-First Operations, Dashboards, Messaging & Notifications
+- **Cash on Completion (0% Launch Fee)**: Live payment flow with CMI escrow and RIB bank withdrawals cleanly feature-gated behind `systemSettings.cmiEscrowEnabled` (default `false`).
+- **Modular Client & Provider Dashboards**: Client quick profile bar, job posts/proposals comparison, direct bookings with inline revised-quote actions; Provider 4-step Activation Checklist, mission management, availability calendar, catalog services, COD revenue & CSV statement export, and CIN KYC submission.
+- **Preference-Aware Notifications**: Live notification feed respects user category preferences, with Email and SMS/WhatsApp channels transparently marked as coming soon.
 
-## Active Phase
-- Phase 3 Complete.
+### 4. Trust, Compliance & Admin Operations Console
+- **Audited CNDP KYC Preview**: In-app `role="dialog"` document viewer for CIN/certificate inspection with automatic `adminLogs` audit logging before display (no popups or external tab opens).
+- **Enhanced Operations Ledger & Settings**: Admin bookings filterable by status, city, payment method, and date range; toggleable `cmiEscrowEnabled` system setting; one-click CSV export for both bookings and immutable `adminLogs`.
+- **Hardened Firestore Rules & Blueprint**: Synchronized `firebase-blueprint.json`, `firestore.indexes.json`, and `firestore.rules` enforcing strict state-machine transitions, post-visit quote integrity, and RBAC isolation.
 
-## Blockers
-- None.
+## Active Status
+- Production-ready launch posture (COD 0% commission live; CMI escrow feature-gated).

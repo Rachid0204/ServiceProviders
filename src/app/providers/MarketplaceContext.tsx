@@ -1,7 +1,6 @@
 import React, {
   createContext,
   useContext,
-  useState,
   useEffect,
   useMemo,
   useCallback,
@@ -9,20 +8,18 @@ import React, {
 } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { User } from 'firebase/auth';
-import { TRANSLATIONS, type Translations } from '../../i18n/translations';
+import type { Translations } from '../../i18n/translations';
 import {
   buildWhatsAppUrl,
   type BookingRecord,
-  type ChatMessageRecord,
   type LanguageCode,
+  type ProviderServiceItem,
   type UserProfileRecord,
   type UserRole,
   type VettedProvider,
 } from '../../utils/marketplace';
-import { canExploreMarketplace, getDefaultDashboardForRole } from '../../utils/authHelpers';
-import { useMarketplaceAuth } from '../../hooks/useMarketplaceAuth';
+import { getDefaultDashboardForRole } from '../../utils/authHelpers';
 import { useSystemSettings } from '../../hooks/useSystemSettings';
-import { useAdminAccess } from '../../hooks/useAdminAccess';
 import { useProviders } from '../../hooks/useProviders';
 import { useBookings } from '../../hooks/useBookings';
 import { useJobPosts } from '../../hooks/useJobPosts';
@@ -32,6 +29,13 @@ import { useConversations } from '../../hooks/useConversations';
 import { useDisputes } from '../../hooks/useDisputes';
 import { ROUTE_PATHS } from '../routePaths';
 import type { SystemSettingsRecord } from '../../utils/systemSettings';
+import { LocaleProvider, useLocale } from './LocaleContext';
+import { AuthSessionProvider, useAuthSession } from './AuthSessionContext';
+import { ModalsStateProvider, useModalsState } from './ModalsStateContext';
+
+export { useLocale } from './LocaleContext';
+export { useAuthSession } from './AuthSessionContext';
+export { useModalsState } from './ModalsStateContext';
 
 export interface MarketplaceContextValue {
   // Localization
@@ -59,8 +63,8 @@ export interface MarketplaceContextValue {
   signInWithGoogle: () => Promise<unknown>;
   signOutUser: () => Promise<void>;
   deleteAccount: () => Promise<void>;
-  handleSaveProfile: ReturnType<typeof useMarketplaceAuth>['handleSaveProfile'];
-  saveFullProviderCard: ReturnType<typeof useMarketplaceAuth>['saveFullProviderCard'];
+  handleSaveProfile: ReturnType<typeof useAuthSession>['handleSaveProfile'];
+  saveFullProviderCard: ReturnType<typeof useAuthSession>['saveFullProviderCard'];
 
   // System & Marketplace Data
   systemSettings: SystemSettingsRecord;
@@ -72,6 +76,7 @@ export interface MarketplaceContextValue {
   hasMoreProviders: boolean;
   isLoadingMoreProviders: boolean;
   loadMoreProviders: () => Promise<void>;
+  queryProvidersByFilters: ReturnType<typeof useProviders>['queryProvidersByFilters'];
   ownProvider: VettedProvider | null;
   favoriteProviderIds: string[];
   toggleFavoriteProvider: (providerId: string) => Promise<void>;
@@ -79,19 +84,19 @@ export interface MarketplaceContextValue {
   applyAdminProviderOverride: ReturnType<typeof useProviders>['applyAdminProviderOverride'];
   removeProviderReview: ReturnType<typeof useProviders>['removeProviderReview'];
 
-  // Bookings & Chat
+  // Bookings
   bookings: BookingRecord[];
-  chatThreads: Record<string, ChatMessageRecord[]>;
   bookingActionError: string | null;
   clearBookingActionError: () => void;
   submitBooking: ReturnType<typeof useBookings>['submitBooking'];
   updateBookingStatus: ReturnType<typeof useBookings>['updateBookingStatus'];
+  submitRevisedQuote: ReturnType<typeof useBookings>['submitRevisedQuote'];
+  respondToRevisedQuote: ReturnType<typeof useBookings>['respondToRevisedQuote'];
   clientConfirmAndReleaseEscrow: ReturnType<typeof useBookings>['clientConfirmAndReleaseEscrow'];
   cancelBookingWithReason: ReturnType<typeof useBookings>['cancelBookingWithReason'];
   rescheduleBooking: ReturnType<typeof useBookings>['rescheduleBooking'];
   submitClientReview: ReturnType<typeof useBookings>['submitClientReview'];
   applyAdminBookingPatch: ReturnType<typeof useBookings>['applyAdminBookingPatch'];
-  sendLocalChatMessage: ReturnType<typeof useBookings>['sendLocalChatMessage'];
 
   // Open Client Job Board & Proposals
   openJobPosts: ReturnType<typeof useJobPosts>['openJobPosts'];
@@ -111,7 +116,7 @@ export interface MarketplaceContextValue {
   providerPendingCount: number;
   openJobsCount: number;
 
-  // Phase 4: Notifications & Messaging Inbox
+  // Notifications & Messaging Inbox
   notifications: ReturnType<typeof useNotifications>['notifications'];
   unreadNotificationCount: number;
   notificationPreferences: ReturnType<typeof useNotifications>['notificationPreferences'];
@@ -126,7 +131,7 @@ export interface MarketplaceContextValue {
   toggleBlockConversation: ReturnType<typeof useConversations>['toggleBlockConversation'];
   submitChatReport: ReturnType<typeof useConversations>['submitChatReport'];
 
-  // Phase 5: Structured Disputes
+  // Structured Disputes
   disputes: ReturnType<typeof useDisputes>['disputes'];
   openDisputesCount: number;
   openDispute: ReturnType<typeof useDisputes>['openDispute'];
@@ -137,7 +142,9 @@ export interface MarketplaceContextValue {
   isPostJobModalOpen: boolean;
   setIsPostJobModalOpen: (open: boolean) => void;
   bookingProvider: VettedProvider | null;
+  bookingServiceItem: ProviderServiceItem | null;
   setBookingProvider: (p: VettedProvider | null) => void;
+  openBookingModal: (provider: VettedProvider, service?: ProviderServiceItem | null) => void;
   detailBooking: BookingRecord | null;
   setDetailBooking: (b: BookingRecord | null) => void;
   cancellingBooking: BookingRecord | null;
@@ -162,47 +169,35 @@ export function useMarketplace(): MarketplaceContextValue {
   return ctx;
 }
 
-export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+const MarketplaceFacadeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const [lang, setLang] = useState<LanguageCode>('fr');
-  const t = TRANSLATIONS[lang];
-  const isAr = lang === 'ar';
-
-  // Synchronize document direction and lang attribute for FR (LTR) / AR (RTL)
-  useEffect(() => {
-    const dir = lang === 'ar' ? 'rtl' : 'ltr';
-    document.documentElement.setAttribute('dir', dir);
-    document.documentElement.setAttribute('lang', lang);
-  }, [lang]);
-
-  const handleLanguageSync = useCallback((nextLang: LanguageCode) => {
-    setLang(nextLang);
-  }, []);
-
-  const toggleLanguage = useCallback(() => {
-    setLang((prev) => (prev === 'fr' ? 'ar' : 'fr'));
-  }, []);
-
+  const { lang, t, isAr, setLang, toggleLanguage } = useLocale();
   const {
     firebaseUser,
     authReady,
     profileLoaded,
     isVerified,
+    mustVerifyEmail,
+    userProfile,
     signupRoleIntent,
     setSignupRoleIntent,
-    refreshVerificationStatus,
-    userProfile,
+    effectiveRole,
+    isPureProvider,
+    canExplore,
+    hasAdminAccess,
+    isCheckingAdmin,
     hydrateUserProfile,
+    refreshVerificationStatus,
     signInWithGoogle,
     signOutUser,
     deleteAccount,
     handleSaveProfile,
     saveFullProviderCard,
-  } = useMarketplaceAuth(handleLanguageSync);
+  } = useAuthSession();
 
+  const modals = useModalsState();
   const { systemSettings, updateLocalSettings } = useSystemSettings(firebaseUser, authReady);
-  const { hasAdminAccess, isCheckingAdmin } = useAdminAccess(firebaseUser, authReady);
 
   const {
     allProviders,
@@ -211,6 +206,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     hasMoreProviders,
     isLoadingMoreProviders,
     loadMoreProviders,
+    queryProvidersByFilters,
     toggleProviderAvailability,
     applyLocalReviewOverride,
     applyAdminProviderOverride,
@@ -219,17 +215,17 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const {
     bookings,
-    chatThreads,
     bookingActionError,
     clearBookingActionError,
     submitBooking,
     updateBookingStatus,
+    submitRevisedQuote,
+    respondToRevisedQuote,
     clientConfirmAndReleaseEscrow,
     cancelBookingWithReason,
     rescheduleBooking,
     submitClientReview,
     applyAdminBookingPatch,
-    sendLocalChatMessage,
   } = useBookings({
     firebaseUser,
     authReady,
@@ -300,30 +296,6 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
     isVerified,
     lang
   );
-
-  const effectiveRole: UserRole | null = userProfile?.role ?? signupRoleIntent ?? null;
-  const isPureProvider = Boolean(firebaseUser && effectiveRole === 'provider');
-  const canExplore = !firebaseUser || canExploreMarketplace(effectiveRole);
-  const mustVerifyEmail = Boolean(authReady && firebaseUser && !isVerified);
-
-  // Global modal state
-  const [authModalIntent, setAuthModalIntent] = useState<UserRole | null>(null);
-  const [isPostJobModalOpen, setIsPostJobModalOpen] = useState(false);
-  const [bookingProvider, setBookingProvider] = useState<VettedProvider | null>(null);
-  const [detailBooking, setDetailBooking] = useState<BookingRecord | null>(null);
-  const [cancellingBooking, setCancellingBooking] = useState<BookingRecord | null>(null);
-  const [reschedulingBooking, setReschedulingBooking] = useState<BookingRecord | null>(null);
-  const [reviewingBooking, setReviewingBooking] = useState<BookingRecord | null>(null);
-
-  // Wipe user-scoped modals on sign-out or account switch to prevent stale PII display
-  useEffect(() => {
-    setIsPostJobModalOpen(false);
-    setBookingProvider(null);
-    setDetailBooking(null);
-    setCancellingBooking(null);
-    setReschedulingBooking(null);
-    setReviewingBooking(null);
-  }, [firebaseUser?.uid]);
 
   // Auto-redirect verified users arriving via email verification (?verified=1) or pure Maâlem landing on '/'
   const redirectedUidRef = useRef<string | null>(null);
@@ -475,6 +447,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       hasMoreProviders,
       isLoadingMoreProviders,
       loadMoreProviders,
+      queryProvidersByFilters,
       ownProvider,
       favoriteProviderIds,
       toggleFavoriteProvider,
@@ -482,17 +455,17 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       applyAdminProviderOverride,
       removeProviderReview,
       bookings,
-      chatThreads,
       bookingActionError,
       clearBookingActionError,
       submitBooking,
       updateBookingStatus,
+      submitRevisedQuote,
+      respondToRevisedQuote,
       clientConfirmAndReleaseEscrow,
       cancelBookingWithReason,
       rescheduleBooking,
       submitClientReview,
       applyAdminBookingPatch,
-      sendLocalChatMessage,
       openJobPosts,
       myClientJobPosts,
       myProposalsByJobId,
@@ -523,20 +496,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       disputes,
       openDisputesCount,
       openDispute,
-      authModalIntent,
-      setAuthModalIntent,
-      isPostJobModalOpen,
-      setIsPostJobModalOpen,
-      bookingProvider,
-      setBookingProvider,
-      detailBooking,
-      setDetailBooking,
-      cancellingBooking,
-      setCancellingBooking,
-      reschedulingBooking,
-      setReschedulingBooking,
-      reviewingBooking,
-      setReviewingBooking,
+      ...modals,
       handleAuthSuccess,
       handleEmailVerifiedRedirect,
     }),
@@ -544,6 +504,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       lang,
       t,
       isAr,
+      setLang,
       toggleLanguage,
       firebaseUser,
       authReady,
@@ -573,6 +534,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       hasMoreProviders,
       isLoadingMoreProviders,
       loadMoreProviders,
+      queryProvidersByFilters,
       ownProvider,
       favoriteProviderIds,
       toggleFavoriteProvider,
@@ -580,17 +542,17 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       applyAdminProviderOverride,
       removeProviderReview,
       bookings,
-      chatThreads,
       bookingActionError,
       clearBookingActionError,
       submitBooking,
       updateBookingStatus,
+      submitRevisedQuote,
+      respondToRevisedQuote,
       clientConfirmAndReleaseEscrow,
       cancelBookingWithReason,
       rescheduleBooking,
       submitClientReview,
       applyAdminBookingPatch,
-      sendLocalChatMessage,
       openJobPosts,
       myClientJobPosts,
       myProposalsByJobId,
@@ -621,13 +583,7 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
       disputes,
       openDisputesCount,
       openDispute,
-      authModalIntent,
-      isPostJobModalOpen,
-      bookingProvider,
-      detailBooking,
-      cancellingBooking,
-      reschedulingBooking,
-      reviewingBooking,
+      modals,
       handleAuthSuccess,
       handleEmailVerifiedRedirect,
     ]
@@ -635,3 +591,27 @@ export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   return <MarketplaceContext.Provider value={value}>{children}</MarketplaceContext.Provider>;
 };
+
+const AuthModalsBridge: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { setLang } = useLocale();
+  return (
+    <AuthSessionProvider onLanguageSync={setLang}>
+      <AuthScopedModals>{children}</AuthScopedModals>
+    </AuthSessionProvider>
+  );
+};
+
+const AuthScopedModals: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { firebaseUser } = useAuthSession();
+  return (
+    <ModalsStateProvider activeUserUid={firebaseUser?.uid}>
+      <MarketplaceFacadeProvider>{children}</MarketplaceFacadeProvider>
+    </ModalsStateProvider>
+  );
+};
+
+export const MarketplaceProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <LocaleProvider>
+    <AuthModalsBridge>{children}</AuthModalsBridge>
+  </LocaleProvider>
+);

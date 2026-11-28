@@ -205,6 +205,18 @@ export interface ReviewCategoryBreakdown {
   value?: number;
 }
 
+export type RevisedQuoteStatus = 'pending' | 'approved' | 'declined';
+
+export interface RevisedQuoteRecord {
+  laborMad: number;
+  materialsMad: number;
+  totalMad: number;
+  note: string;
+  status: RevisedQuoteStatus;
+  submittedAtIso: string;
+  respondedAtIso?: string;
+}
+
 export interface BookingRecord {
   id: string;
   bookingRef: string;
@@ -216,6 +228,8 @@ export interface BookingRecord {
   providerPhone: string;
   category: ServiceCategory;
   serviceType: string;
+  selectedServiceId?: string;
+  selectedServicePricingModel?: 'fixed' | 'hourly' | 'quote_required';
   city: MoroccanCity;
   neighborhood: string;
   addressPin: string;
@@ -226,6 +240,7 @@ export interface BookingRecord {
   paymentMethod: PaymentMethod;
   paymentStatus?: PaymentStatus;
   estimatedMad: number;
+  revisedQuote?: RevisedQuoteRecord;
   providerPayoutMad?: number;
   platformFeeMad?: number;
   refundedClientMad?: number;
@@ -983,6 +998,8 @@ export interface ProviderWeeklySchedule {
   updatedAtIso?: string;
 }
 
+export type ProviderAvailabilitySchedule = ProviderWeeklySchedule;
+
 export function createDefaultWeeklySchedule(uid = ''): ProviderWeeklySchedule {
   return {
     uid,
@@ -998,6 +1015,16 @@ export function createDefaultWeeklySchedule(uid = ''): ProviderWeeklySchedule {
     blockedDates: [],
     acceptsUrgentSameDay: true,
   };
+}
+
+export const createDefaultAvailabilitySchedule = createDefaultWeeklySchedule;
+
+export function getWeekdayKeyForIsoDate(dateIso: string): WeekdayKey | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateIso);
+  if (!match) return null;
+  const dt = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  const keys: WeekdayKey[] = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+  return keys[dt.getUTCDay()] ?? null;
 }
 
 /**
@@ -1519,6 +1546,8 @@ export interface ProviderServiceRecord {
   isActive: boolean;
   createdAtIso: string;
 }
+
+export type ProviderServiceItem = ProviderServiceRecord;
 
 export type KycVerificationStatus =
   | 'not_submitted'

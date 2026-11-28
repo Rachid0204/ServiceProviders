@@ -268,6 +268,21 @@ export const ProviderMissionsTab: React.FC<ProviderMissionsTabProps> = ({
                   </div>
 
                   <p className="text-xs text-slate-700 leading-relaxed">{booking.description}</p>
+
+                  {booking.revisedQuote && (
+                    <div className="p-2.5 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-950 flex items-center justify-between gap-2">
+                      <span className="font-semibold">
+                        {booking.revisedQuote.status === 'pending'
+                          ? uiText(isAr).booking.revisedQuotePendingClient
+                          : booking.revisedQuote.status === 'approved'
+                          ? uiText(isAr).booking.revisedQuoteApprovedBadge
+                          : uiText(isAr).booking.revisedQuoteDeclinedBadge}
+                      </span>
+                      <span className="font-mono-tabular font-bold shrink-0">
+                        {formatMadCurrency(booking.revisedQuote.totalMad, lang)}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="pt-3 border-t border-slate-100 space-y-3">
@@ -325,6 +340,17 @@ export const ProviderMissionsTab: React.FC<ProviderMissionsTabProps> = ({
                         {t.providerAcceptBtn}
                       </button>
                     )}
+                    {booking.status === 'accepted' &&
+                      (!booking.revisedQuote || booking.revisedQuote.status === 'declined') && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenBookingDetail(booking)}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-amber-900 bg-amber-50 border border-amber-200 rounded-lg hover:bg-amber-100 cursor-pointer"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>{uiText(isAr).booking.revisedQuoteProposeBtn}</span>
+                        </button>
+                      )}
                     {canTransitionBookingStatus(booking.status, 'in_progress', 'provider') && (
                       <button
                         type="button"

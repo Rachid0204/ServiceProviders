@@ -4,6 +4,7 @@ import {
   AlertCircle,
   Briefcase,
   Calendar,
+  CheckCircle2,
   Clock,
   IdCard,
   ShieldCheck,
@@ -29,6 +30,7 @@ import type { SystemSettingsRecord } from '../../utils/adminMetrics';
 import type { SaveFullProviderCardInput } from '../../hooks/useMarketplaceAuth';
 import type { SubmitProposalPayload } from '../../hooks/useJobPosts';
 import { useProviderCardStudio } from '../../hooks/useProviderCardStudio';
+import { ProviderActivationChecklist } from './ProviderActivationChecklist';
 import { ProviderLeadsTab } from './ProviderLeadsTab';
 import { ProviderMissionsTab } from './ProviderMissionsTab';
 import { ProviderCardStudioTab } from './ProviderCardStudioTab';
@@ -151,7 +153,7 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
       withdrawals: [],
       platformFeePct: systemSettings.platformFeePct,
       minWithdrawalMad: systemSettings.minWithdrawalMad,
-      cmiEscrowEnabled: false,
+      cmiEscrowEnabled: systemSettings.cmiEscrowEnabled,
     });
 
     return {
@@ -160,7 +162,12 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
       completedCount,
       cashCollectedDirectlyMad: earnings.cashCollectedDirectlyMad,
     };
-  }, [providerBookings, systemSettings.platformFeePct, systemSettings.minWithdrawalMad]);
+  }, [
+    providerBookings,
+    systemSettings.platformFeePct,
+    systemSettings.minWithdrawalMad,
+    systemSettings.cmiEscrowEnabled,
+  ]);
 
   if (!firebaseUser) {
     return <ProviderUnauthenticatedGate isAr={isAr} onOpenAuth={onOpenAuth} />;
@@ -274,6 +281,14 @@ export const ProviderDashboard: React.FC<ProviderDashboardProps> = ({
           </div>
         )}
       </div>
+
+      {/* 4-Step Maâlem Activation Checklist */}
+      <ProviderActivationChecklist
+        uid={firebaseUser.uid}
+        lang={lang}
+        ownProvider={ownProvider}
+        onSelectTab={(tab) => setActiveTab(tab)}
+      />
 
       {/* Maâlem Navigation Tabs */}
       <div

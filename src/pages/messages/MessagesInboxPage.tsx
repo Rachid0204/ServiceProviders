@@ -102,13 +102,11 @@ export const MessagesInboxPage: React.FC = () => {
     hasAdminAccess,
     userProfile,
     bookings,
-    chatThreads,
     conversationsByBookingId,
     markConversationRead,
     updateConversationOnMessage,
     toggleBlockConversation,
     submitChatReport,
-    sendLocalChatMessage,
   } = useMarketplace();
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -308,11 +306,7 @@ export const MessagesInboxPage: React.FC = () => {
     }
   }, [selectedBooking, selectedMeta, currentUid, markConversationRead]);
 
-  const activeMessages = isLiveThread
-    ? firestoreMessages
-    : selectedBooking
-    ? chatThreads[selectedBooking.id] || []
-    : [];
+  const activeMessages = isLiveThread ? firestoreMessages : [];
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -409,19 +403,6 @@ export const MessagesInboxPage: React.FC = () => {
           bodyFr: finalText.slice(0, 140),
           bodyAr: finalText.slice(0, 140),
           linkPath: buildMessageThreadPath(selectedBooking.id),
-        });
-      } else {
-        sendLocalChatMessage({
-          id: msgId,
-          bookingId: selectedBooking.id,
-          clientId: selectedBooking.clientId,
-          providerId: selectedBooking.providerId,
-          senderId: firebaseUser.uid,
-          senderName,
-          senderRole,
-          text: finalText,
-          photoUrl: safePhotoUrl,
-          createdAtIso: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         });
       }
 

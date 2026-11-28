@@ -2,18 +2,17 @@ import { uiText } from '../../i18n/uiCopy';
 import React, { useState, useMemo } from 'react';
 import {
   Search,
-  CreditCard,
   MessageSquare,
   Download,
-  RotateCcw,
-  Scale,
 } from 'lucide-react';
 import {
+  MOROCCAN_CITIES,
   calculateEscrowSplit,
   formatMadCurrency,
   type BookingRecord,
   type BookingStatus,
   type LanguageCode,
+  type MoroccanCity,
   type PaymentMethod,
 } from '../../utils/marketplace';
 import { generateBookingsCsv } from '../../utils/adminMetrics';
@@ -24,6 +23,7 @@ interface AdminBookingsSectionProps {
   t: Translations;
   bookings: BookingRecord[];
   platformFeePct?: number;
+  cmiEscrowEnabled?: boolean;
   onReleaseEscrow: (booking: BookingRecord) => void;
   onRefundEscrow: (booking: BookingRecord) => void;
   onDisputeSplitEscrow: (booking: BookingRecord) => void;
@@ -45,22 +45,29 @@ export const AdminBookingsSection: React.FC<AdminBookingsSectionProps> = ({
   t,
   bookings,
   platformFeePct = 10,
-  onReleaseEscrow,
-  onRefundEscrow,
-  onDisputeSplitEscrow,
+  cmiEscrowEnabled = false,
   onOverrideStatus,
   onOpenChat,
 }) => {
   const isAr = lang === 'ar';
   const [search, setSearch] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<BookingStatus | 'ALL'>('ALL');
+  const [cityFilter, setCityFilter] = useState<MoroccanCity | 'ALL'>('ALL');
   const [paymentFilter, setPaymentFilter] = useState<PaymentMethod | 'ALL'>('ALL');
+  const [dateFrom, setDateFrom] = useState<string>('');
+  const [dateTo, setDateTo] = useState<string>('');
+
+  const showCmiFilterOption =
+    cmiEscrowEnabled || bookings.some((b) => b.paymentMethod === 'cmi_escrow');
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return bookings.filter((b) => {
       if (statusFilter !== 'ALL' && b.status !== statusFilter) return false;
+      if (cityFilter !== 'ALL' && b.city !== cityFilter) return false;
       if (paymentFilter !== 'ALL' && b.paymentMethod !== paymentFilter) return false;
+      if (dateFrom && b.preferredDate < dateFrom) return false;
+      if (dateTo && b.preferredDate > dateTo) return false;
       if (q) {
         const hay = [
           b.bookingRef,
@@ -76,7 +83,7 @@ export const AdminBookingsSection: React.FC<AdminBookingsSectionProps> = ({
       }
       return true;
     });
-  }, [bookings, search, statusFilter, paymentFilter]);
+  }, [bookings, search, statusFilter, cityFilter, paymentFilter, dateFrom, dateTo]);
 
   const handleExportCsv = () => {
     const csv = generateBookingsCsv(filtered);
@@ -150,17 +157,49 @@ export const AdminBookingsSection: React.FC<AdminBookingsSectionProps> = ({
           </select>
 
           <select
-            aria-label={uiText(isAr).admin.modeDePaiement}
-            value={paymentFilter}
-            onChange={(e) => setPaymentFilter(e.target.value as PaymentMethod | 'ALL')}
+            aria-label={uiText(isAr).admin.allCitiesFilter}
+            value={cityFilter}
+            onChange={(e) => setCityFilter(e.target.value as MoroccanCity | 'ALL')}
             className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
           >
-            <option value="ALL">{uiText(isAr).admin.tousPaiements}</option>
-            <option value="cmi_escrow">{uiText(isAr).admin.sequestreCmi}</option>
-            <option value="cash_on_completion">
-              {uiText(isAr).admin.especesFinDeTravauxCod}
-            </option>
+            <option value="ALL">{uiText(isAr).admin.allCitiesFilter}</option>
+            {MOROCCAN_CITIES.map((city) => (
+              <option key={city} value={city}>
+                {t.cities[city]}
+              </option>
+            ))}
           </select>
+
+          {showCmiFilterOption && (
+            <select
+              aria-label={uiText(isAr).admin.modeDePaiement}
+              value={paymentFilter}
+              onChange={(e) => setPaymentFilter(e.target.value as PaymentMethod | 'ALL')}
+              className="px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+            >
+              <option value="ALL">{uiText(isAr).admin.tousPaiements}</option>
+              <option value="cmi_escrow">{uiText(isAr).admin.sequestreCmi}</option>
+              <option value="cash_on_completion">
+                {uiText(isAr).admin.especesFinDeTravauxCod}
+              </option>
+            </select>
+          )}
+
+          <input
+            type="date"
+            aria-label={uiText(isAr).admin.dateFromFilter}
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="px-2.5 py-2 text-xs font-mono-tabular bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+          />
+
+          <input
+            type="date"
+            aria-label={uiText(isAr).admin.dateToFilter}
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="px-2.5 py-2 text-xs font-mono-tabular bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+          />
         </div>
 
         <button

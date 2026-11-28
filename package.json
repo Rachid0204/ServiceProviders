@@ -12,7 +12,7 @@
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
     "lint:rules": "eslint firestore.rules",
-    "test:unit": "tsx --test src/utils/marketplace.test.ts src/utils/adminMetrics.test.ts src/utils/authHelpers.test.ts buildConfig.test.ts firestore.rules.test.ts",
+    "test:unit": "tsx --test src/utils/marketplace.test.ts src/utils/adminMetrics.test.ts src/utils/authHelpers.test.ts src/utils/tradeMeta.test.ts src/utils/bookingLogic.test.ts buildConfig.test.ts firestore.rules.test.ts",
     "test:routes": "vitest run",
     "test:e2e": "node scripts/e2e-smoke.mjs",
     "test": "npm run test:unit && npm run test:routes"

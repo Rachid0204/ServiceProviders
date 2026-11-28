@@ -119,7 +119,9 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
     hasMoreProviders,
     isLoadingMoreProviders,
     loadMoreProviders,
+    queryProvidersByFilters,
     userProfile,
+    systemSettings,
     favoriteProviderIds,
     toggleFavoriteProvider,
     setBookingProvider,
@@ -204,6 +206,24 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
       prev < sliderMaxHourlyRate && prev === 300 ? sliderMaxHourlyRate : prev
     );
   }, [sliderMaxHourlyRate]);
+
+  // Query composite-indexed Firestore slices when server-side filters are selected
+  useEffect(() => {
+    if (
+      selectedCategory === 'ALL' &&
+      selectedCity === 'ALL' &&
+      !verifiedOnly &&
+      !availableNowOnly
+    ) {
+      return;
+    }
+    void queryProvidersByFilters?.({
+      category: selectedCategory,
+      city: selectedCity,
+      verifiedOnly,
+      availableNowOnly,
+    });
+  }, [selectedCategory, selectedCity, verifiedOnly, availableNowOnly, queryProvidersByFilters]);
 
   const updateQueryParam = (key: string, value: string | null) => {
     if (!syncUrl) return;
@@ -774,6 +794,7 @@ export const ProviderDiscoverySection: React.FC<ProviderDiscoverySectionProps> =
                       provider={provider}
                       lang={lang}
                       t={t}
+                      cmiEscrowEnabled={systemSettings.cmiEscrowEnabled}
                       isFavorite={favoriteProviderIds.includes(provider.id)}
                       onToggleFavorite={(pid) => {
                         void toggleFavoriteProvider(pid);

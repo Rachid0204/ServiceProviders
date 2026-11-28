@@ -4,14 +4,11 @@ import { Link, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
   CheckCircle2,
-  Eye,
-  EyeOff,
   Info,
-  Lock,
   LogIn,
-  Mail,
   ShieldCheck,
 } from 'lucide-react';
+import { SharedAuthFields } from '../../components/SharedAuthFields';
 import { useMarketplace } from '../../app/providers/MarketplaceContext';
 import { ROUTE_PATHS, sanitizeRedirectPath } from '../../app/routePaths';
 import {
@@ -40,7 +37,6 @@ export const LoginPage: React.FC = () => {
   const [mode, setMode] = useState<'signin' | 'reset'>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -145,71 +141,20 @@ export const LoginPage: React.FC = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1">
-            <label htmlFor="login-email" className="block text-xs font-semibold text-slate-700">
-              {uiText(isAr).auth.adresseEMail}
-            </label>
-            <div className="relative" dir="ltr">
-              <Mail className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3 pointer-events-none" />
-              <input
-                id="login-email"
-                type="email"
-                required
-                dir="ltr"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="nom@exemple.ma"
-                autoComplete="email"
-                className="w-full min-h-[44px] ps-10 pe-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
-              />
-            </div>
-          </div>
-
-          {mode === 'signin' && (
-            <div className="space-y-1">
-              <div className="flex items-center justify-between">
-                <label
-                  htmlFor="login-password"
-                  className="block text-xs font-semibold text-slate-700"
-                >
-                  {uiText(isAr).auth.motDePasse}
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setMode('reset')}
-                  className="text-[11px] font-medium text-emerald-700 hover:underline cursor-pointer"
-                >
-                  {uiText(isAr).auth.motDePasseOublie}
-                </button>
-              </div>
-              <div className="relative" dir="ltr">
-                <Lock className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3 pointer-events-none" />
-                <input
-                  id="login-password"
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  dir="ltr"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  className="w-full min-h-[44px] ps-10 pe-11 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  aria-label={
-                    showPassword
-                      ? uiText(isAr).auth.masquerMotDePasse
-                      : uiText(isAr).auth.afficherMotDePasse
-                  }
-                  aria-pressed={showPassword}
-                  className="absolute top-1/2 -translate-y-1/2 end-1 inline-flex items-center justify-center w-9 h-9 text-slate-500 hover:text-slate-800 rounded-md cursor-pointer"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-          )}
+          <SharedAuthFields
+            lang={lang}
+            emailId="login-email"
+            passwordId="login-password"
+            email={email}
+            onEmailChange={setEmail}
+            password={password}
+            onPasswordChange={setPassword}
+            showPasswordField={mode === 'signin'}
+            passwordAutoComplete="current-password"
+            required
+            inputVariant="subtle"
+            onForgotPassword={() => setMode('reset')}
+          />
 
           <button
             type="submit"

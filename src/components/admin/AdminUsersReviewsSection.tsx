@@ -13,8 +13,10 @@ import {
   XCircle,
   Settings,
   Save,
+  Download,
 } from 'lucide-react';
 import { appCheckStatus } from '../../firebase';
+import { generateAuditLogsCsv } from '../../utils/bookingLogic';
 import {
   formatMadCurrency,
   type LanguageCode,
@@ -523,6 +525,9 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
   const [requireKycForEscrowPayout, setRequireKycForEscrowPayout] = useState<boolean>(
     settings.requireKycForEscrowPayout
   );
+  const [cmiEscrowEnabled, setCmiEscrowEnabled] = useState<boolean>(
+    Boolean(settings.cmiEscrowEnabled)
+  );
   const [supportWhatsAppPhone, setSupportWhatsAppPhone] = useState<string>(
     settings.supportWhatsAppPhone
   );
@@ -533,6 +538,7 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
     setMinWithdrawalMad(settings.minWithdrawalMad);
     setAutoRefundOnProviderCancel(settings.autoRefundOnProviderCancel);
     setRequireKycForEscrowPayout(settings.requireKycForEscrowPayout);
+    setCmiEscrowEnabled(Boolean(settings.cmiEscrowEnabled));
     setSupportWhatsAppPhone(settings.supportWhatsAppPhone);
   }, [settings]);
 
@@ -545,6 +551,7 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
         minWithdrawalMad: Math.max(50, Math.min(10000, Math.round(Number(minWithdrawalMad)))),
         autoRefundOnProviderCancel,
         requireKycForEscrowPayout,
+        cmiEscrowEnabled,
         supportWhatsAppPhone: supportWhatsAppPhone.trim(),
       });
     } finally {
@@ -679,6 +686,23 @@ export const AdminSettingsSection: React.FC<AdminSettingsSectionProps> = ({
               {uiText(isAr).admin.exigerLeBadgeCinVerifiePour}
             </span>
           </label>
+
+          <div className="pt-2 border-t border-slate-100 space-y-1">
+            <label className="flex items-center gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={cmiEscrowEnabled}
+                onChange={(e) => setCmiEscrowEnabled(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-300 text-emerald-700 focus:ring-emerald-600"
+              />
+              <span className="font-semibold text-slate-900">
+                {uiText(isAr).admin.cmiEscrowToggleLabel}
+              </span>
+            </label>
+            <p className="text-[11px] text-slate-500 ps-6">
+              {uiText(isAr).admin.cmiEscrowToggleHint}
+            </p>
+          </div>
         </div>
 
         <div className="pt-3 border-t border-slate-200 flex justify-end">
@@ -727,18 +751,40 @@ export const AdminAuditSection: React.FC<AdminAuditSectionProps> = ({ lang, logs
     return isAr ? map[action]?.ar || action : map[action]?.fr || action;
   };
 
+  const handleExportAuditCsv = () => {
+    const csv = generateAuditLogsCsv(logs);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `moul-lkhedma-audit-logs-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
-      <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+      <div className="px-5 py-4 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <History className="w-4 h-4 text-emerald-700" />
           <h2 className="text-sm font-bold text-slate-900">
             {uiText(isAr).admin.journalDAuditAdministratifImmuableAdminlogs}
           </h2>
         </div>
-        <span className="text-xs font-mono-tabular text-slate-500">
-          {logs.length} {uiText(isAr).admin.entrees}
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-mono-tabular text-slate-500">
+            {logs.length} {uiText(isAr).admin.entrees}
+          </span>
+          <button
+            type="button"
+            disabled={logs.length === 0}
+            onClick={handleExportAuditCsv}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 rounded-lg transition-colors cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>{uiText(isAr).admin.exportAuditCsvBtn}</span>
+          </button>
+        </div>
       </div>
 
       <div className="overflow-x-auto">

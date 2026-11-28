@@ -82,6 +82,7 @@ export const ProviderPublicProfilePage: React.FC = () => {
     favoriteProviderIds,
     toggleFavoriteProvider,
     setBookingProvider,
+    openBookingModal,
   } = useMarketplace();
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [liveReviews, setLiveReviews] = useState<ProviderReview[]>([]);
@@ -536,7 +537,7 @@ export const ProviderPublicProfilePage: React.FC = () => {
                   </span>
                   <button
                     type="button"
-                    onClick={() => setBookingProvider(provider)}
+                    onClick={() => openBookingModal(provider, srv)}
                     className="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg cursor-pointer"
                   >
                     {t.bookProviderBtn}

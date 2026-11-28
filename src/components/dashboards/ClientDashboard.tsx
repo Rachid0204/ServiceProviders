@@ -18,34 +18,25 @@ import {
   LogIn,
   Plus,
   Briefcase,
-  ChevronDown,
-  ChevronUp,
-  Sparkles,
-  Zap,
+  RefreshCw,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import {
-  MOROCCAN_CITIES,
-  calculateEscrowSplit,
   formatMadCurrency,
   buildWhatsAppUrl,
   canTransitionBookingStatus,
-  validateUserProfileInput,
   type BookingRecord,
   type BookingStatus,
   type JobPostRecord,
   type JobProposalRecord,
   type LanguageCode,
-  type MoroccanCity,
   type PaymentStatus,
   type UserProfileRecord,
 } from '../../utils/marketplace';
 import type { Translations } from '../../i18n/translations';
 import type { SaveProfileInput } from '../../hooks/useMarketplaceAuth';
-import { useJobProposalsForClient } from '../../hooks/useJobPosts';
-import { mapProfileSaveError } from '../../utils/authHelpers';
-import { isQuotationExpired } from '../../utils/marketplace';
-import { JobLifecycleStepper } from '../BookingTimeline';
+import { ClientQuickProfileBar } from './ClientQuickProfileBar';
+import { ClientJobsTab } from './ClientJobsTab';
 
 interface ClientDashboardProps {
   lang: LanguageCode;
@@ -53,6 +44,7 @@ interface ClientDashboardProps {
   firebaseUser: User | null;
   userProfile: UserProfileRecord | null;
   platformFeePct: number;
+  cmiEscrowEnabled?: boolean;
   bookingActionError: string | null;
   onDismissError: () => void;
   bookings: BookingRecord[];
@@ -72,270 +64,19 @@ interface ClientDashboardProps {
   onOpenCancel: (booking: BookingRecord) => void;
   onConfirmAndReleaseEscrow: (bookingId: string) => void;
   onOpenReview: (booking: BookingRecord) => void;
+  onRebookProvider?: (booking: BookingRecord) => void;
 }
 
 type ClientTab = 'jobs' | 'bookings';
 type StatusFilter = 'all' | 'active' | 'completed' | 'cancelled';
-
-interface JobProposalsPanelProps {
-  job: JobPostRecord;
-  lang: LanguageCode;
-  t: Translations;
-  expanded: boolean;
-  onRejectProposal?: (jobId: string, providerId: string) => Promise<void>;
-  onAcceptProposal: (job: JobPostRecord, proposal: JobProposalRecord) => Promise<string>;
-  onAcceptedBooking: (bookingRef: string) => void;
-}
-
-const JobProposalsPanel: React.FC<JobProposalsPanelProps> = ({
-  job,
-  lang,
-  t,
-  expanded,
-  onRejectProposal,
-  onAcceptProposal,
-  onAcceptedBooking,
-}) => {
-  const isAr = lang === 'ar';
-  const { proposals, loading } = useJobProposalsForClient(job.id, expanded);
-  const [acceptingId, setAcceptingId] = useState<string | null>(null);
-  const [rejectingId, setRejectingId] = useState<string | null>(null);
-  const [acceptError, setAcceptError] = useState<string | null>(null);
-
-  if (!expanded) return null;
-
-  const handleAccept = async (proposal: JobProposalRecord) => {
-    setAcceptError(null);
-    setAcceptingId(proposal.providerId);
-    try {
-      const bookingRef = await onAcceptProposal(job, proposal);
-      onAcceptedBooking(bookingRef);
-    } catch (err) {
-      setAcceptError(mapProfileSaveError(err, lang));
-    } finally {
-      setAcceptingId(null);
-    }
-  };
-
-  const handleReject = async (proposal: JobProposalRecord) => {
-    if (!onRejectProposal) return;
-    setAcceptError(null);
-    setRejectingId(proposal.providerId);
-    try {
-      await onRejectProposal(job.id, proposal.providerId);
-    } finally {
-      setRejectingId(null);
-    }
-  };
-
-  const activePendingQuotes = proposals.filter((p) => p.status === 'pending');
-  const lowestPrice =
-    activePendingQuotes.length > 1
-      ? Math.min(...activePendingQuotes.map((p) => p.proposedPriceMad))
-      : null;
-
-  return (
-    <div className="pt-3 border-t border-slate-100 space-y-3">
-      {acceptError && (
-        <div role="alert" className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800">
-          {acceptError}
-        </div>
-      )}
-
-      {loading ? (
-        <p className="text-xs text-slate-500">
-          {uiText(isAr).client.chargementDesDevisRecus}
-        </p>
-      ) : proposals.length === 0 ? (
-        <p className="text-xs text-slate-500 py-2">
-          {uiText(isAr).client.aucunDevisRecuPourLeMoment}
-        </p>
-      ) : (
-        <div className="space-y-3">
-          {/* Side-by-Side Comparison Summary when 2+ quotations exist */}
-          {proposals.length >= 2 && (
-            <div className="p-3 rounded-xl bg-emerald-50/50 border border-emerald-200 space-y-2 text-[11px]">
-              <div className="font-bold text-emerald-900">{t.quoteCompareTitle}</div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-start border-collapse">
-                  <thead>
-                    <tr className="border-b border-emerald-200 text-slate-600">
-                      <th className="py-1 pe-2 text-start font-semibold">Maâlem</th>
-                      <th className="py-1 px-2 text-start font-semibold">{t.laborCostLabel}</th>
-                      <th className="py-1 px-2 text-start font-semibold">{t.materialsCostLabel}</th>
-                      <th className="py-1 px-2 text-start font-semibold">Total</th>
-                      <th className="py-1 ps-2 text-start font-semibold">Note</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-emerald-100">
-                    {proposals.map((p) => (
-                      <tr key={`cmp-${p.id}`}>
-                        <td className="py-1.5 pe-2 font-semibold text-slate-900">
-                          {p.providerName}
-                        </td>
-                        <td className="py-1.5 px-2 tabular-nums text-slate-700">
-                          {p.laborCostMad !== undefined
-                            ? formatMadCurrency(p.laborCostMad, lang)
-                            : '—'}
-                        </td>
-                        <td className="py-1.5 px-2 tabular-nums text-slate-700">
-                          {p.materialsCostMad !== undefined
-                            ? formatMadCurrency(p.materialsCostMad, lang)
-                            : '—'}
-                        </td>
-                        <td className="py-1.5 px-2 font-bold tabular-nums text-emerald-800">
-                          {formatMadCurrency(p.proposedPriceMad, lang)}
-                        </td>
-                        <td className="py-1.5 ps-2 tabular-nums text-amber-700 font-semibold">
-                          ★ {p.providerRating.toFixed(1)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {proposals.map((prop) => {
-            const expired = isQuotationExpired(prop.validUntilIso);
-            const isBestPrice = lowestPrice !== null && prop.proposedPriceMad === lowestPrice;
-            const waUrl = buildWhatsAppUrl({
-              phone: prop.providerPhone,
-              lang,
-              providerName: prop.providerName,
-              category: t.categories[job.category],
-              bookingRef: job.jobRef,
-              serviceType: job.title,
-            });
-            return (
-              <div
-                key={prop.id}
-                className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2 text-xs"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold text-slate-900">{prop.providerName}</span>
-                    {prop.providerVerified && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-                        <ShieldCheck className="w-3 h-3" />
-                        <span>{t.verifiedCinLabel}</span>
-                      </span>
-                    )}
-                    {isBestPrice && (
-                      <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-amber-100 text-amber-900">
-                        {uiText(isAr).client.meilleurTarif}
-                      </span>
-                    )}
-                    <span className="inline-flex items-center gap-0.5 font-semibold text-amber-700 tabular-nums">
-                      <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                      <span>{prop.providerRating.toFixed(1)}</span>
-                    </span>
-                  </div>
-                  <span className="text-sm font-bold tabular-nums text-emerald-700">
-                    {formatMadCurrency(prop.proposedPriceMad, lang)}
-                  </span>
-                </div>
-
-                {(prop.laborCostMad !== undefined || prop.materialsCostMad !== undefined) && (
-                  <div className="flex flex-wrap items-center gap-3 text-[11px] bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700">
-                    <span>
-                      {t.laborCostLabel}:{' '}
-                      <strong className="tabular-nums">
-                        {formatMadCurrency(prop.laborCostMad ?? 0, lang)}
-                      </strong>
-                    </span>
-                    <span>·</span>
-                    <span>
-                      {t.materialsCostLabel}:{' '}
-                      <strong className="tabular-nums">
-                        {formatMadCurrency(prop.materialsCostMad ?? 0, lang)}
-                      </strong>
-                    </span>
-                    {prop.validUntilIso && (
-                      <>
-                        <span>·</span>
-                        <span className={expired ? 'text-rose-700 font-semibold' : ''}>
-                          {expired
-                            ? t.quoteExpiredBadge
-                            : `${t.quoteValidUntilLabel} ${prop.validUntilIso}`}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                )}
-
-                <div className="text-[11px] text-slate-500">
-                  {prop.estimatedDuration} · {t.cities[prop.providerCity]}
-                  {prop.warrantyNote ? ` · ${prop.warrantyNote}` : ''}
-                </div>
-                <p className="text-slate-700 leading-relaxed">{prop.message}</p>
-
-                <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
-                  <a
-                    href={waUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100"
-                  >
-                    <MessageCircle className="w-3.5 h-3.5" />
-                    <span>WhatsApp</span>
-                  </a>
-                  {job.status === 'open' && prop.status === 'pending' && onRejectProposal && (
-                    <button
-                      type="button"
-                      disabled={rejectingId === prop.providerId}
-                      onClick={() => {
-                        void handleReject(prop);
-                      }}
-                      className="px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 rounded-lg disabled:opacity-50 cursor-pointer"
-                    >
-                      {t.rejectQuoteBtn}
-                    </button>
-                  )}
-                  {job.status === 'open' && prop.status === 'pending' && !expired && (
-                    <button
-                      type="button"
-                      disabled={acceptingId === prop.providerId}
-                      onClick={() => {
-                        void handleAccept(prop);
-                      }}
-                      className="inline-flex items-center gap-1 px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg disabled:opacity-60 cursor-pointer"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>
-                        {acceptingId === prop.providerId
-                          ? uiText(isAr).client.confirmation
-                          : uiText(isAr).client.accepterCeDevis}
-                      </span>
-                    </button>
-                  )}
-                  {prop.status === 'accepted' && (
-                    <span className="px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-800 font-semibold">
-                      {uiText(isAr).client.devisAccepte}
-                    </span>
-                  )}
-                  {prop.status === 'rejected' && (
-                    <span className="px-2.5 py-1 rounded-lg bg-slate-200 text-slate-700 font-semibold">
-                      {uiText(isAr).client.refuse}
-                    </span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
 
 export const ClientDashboard: React.FC<ClientDashboardProps> = ({
   lang,
   t,
   firebaseUser,
   userProfile,
-  platformFeePct,
+  platformFeePct: _platformFeePct,
+  cmiEscrowEnabled = false,
   bookingActionError,
   onDismissError,
   bookings,
@@ -353,26 +94,16 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
   onOpenBookingDetail,
   onOpenReschedule,
   onOpenCancel,
-  onConfirmAndReleaseEscrow,
+  onConfirmAndReleaseEscrow: _onConfirmAndReleaseEscrow,
   onOpenReview,
+  onRebookProvider,
 }) => {
   const isAr = lang === 'ar';
   const [activeTab, setActiveTab] = useState<ClientTab>(
     myClientJobPosts.length > 0 ? 'jobs' : 'bookings'
   );
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [expandedJobId, setExpandedJobId] = useState<string | null>(null);
   const [acceptedBanner, setAcceptedBanner] = useState<string | null>(null);
-  const providerSharePct = Math.max(0, 100 - platformFeePct);
-
-  // Quick 15s Client Welcome Setup state (for newly verified clients without a profile yet)
-  const [quickName, setQuickName] = useState(firebaseUser?.displayName || '');
-  const [quickPhone, setQuickPhone] = useState('+2126');
-  const [quickCity, setQuickCity] = useState<MoroccanCity>('Casablanca');
-  const [quickQuartier, setQuickQuartier] = useState('');
-  const [quickErrors, setQuickErrors] = useState<Record<string, string>>({});
-  const [quickSaveError, setQuickSaveError] = useState<string | null>(null);
-  const [isQuickSaving, setIsQuickSaving] = useState(false);
 
   // Strict client isolation: only bookings where clientId === firebaseUser.uid
   const clientBookings = useMemo(() => {
@@ -384,7 +115,7 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     let activeCount = 0;
     let completedCount = 0;
     let escrowHeldMad = 0;
-    let pendingReviews = 0;
+    let pendingQuotesCount = 0;
 
     for (const b of clientBookings) {
       if (b.status === 'pending' || b.status === 'accepted' || b.status === 'in_progress') {
@@ -393,14 +124,14 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
       if (b.status === 'completed' || b.status === 'reviewed') {
         completedCount++;
       }
-      if (b.status === 'completed') {
-        pendingReviews++;
+      if (b.revisedQuote?.status === 'pending') {
+        pendingQuotesCount++;
       }
       if (b.paymentMethod === 'cmi_escrow' && b.paymentStatus === 'escrow_held') {
         escrowHeldMad += b.estimatedMad;
       }
     }
-    return { activeCount, completedCount, escrowHeldMad, pendingReviews };
+    return { activeCount, completedCount, escrowHeldMad, pendingQuotesCount };
   }, [clientBookings]);
 
   const filteredBookings = useMemo(() => {
@@ -417,42 +148,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     }
     return clientBookings.filter((b) => b.status === 'cancelled');
   }, [clientBookings, statusFilter]);
-
-  const handleQuickProfileSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setQuickSaveError(null);
-    const check = validateUserProfileInput({
-      role: 'client',
-      fullName: quickName,
-      phone: quickPhone,
-      city: quickCity,
-      neighborhood: quickQuartier,
-      languagePref: lang,
-    });
-    if (!check.valid) {
-      setQuickErrors(check.errors as Record<string, string>);
-      return;
-    }
-    setQuickErrors({});
-    setIsQuickSaving(true);
-    try {
-      await onQuickSaveClientProfile({
-        role: 'client',
-        fullName: quickName.trim(),
-        phone: check.normalizedPhone,
-        city: quickCity,
-        neighborhood: quickQuartier.trim(),
-        languagePref: lang,
-        specialty: 'none',
-        hourlyRateMad: 0,
-        bio: '',
-      });
-    } catch (err) {
-      setQuickSaveError(mapProfileSaveError(err, lang));
-    } finally {
-      setIsQuickSaving(false);
-    }
-  };
 
   const getStatusLabel = (status: BookingStatus): string => {
     switch (status) {
@@ -516,13 +211,18 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
     );
   }
 
+  const showEscrowKpi = cmiEscrowEnabled || metrics.escrowHeldMad > 0;
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-7 lg:py-9 space-y-7">
       {/* Client Header + Prominent Post Job & Explore CTAs */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">
-            {interpolateCopy(uiText(isAr).client.bonjour, { v0: userProfile?.fullName ? `, ${userProfile.fullName.split(' ')[0]}` : '', v1: userProfile?.fullName?.split(' ')[0] || '' })}
+            {interpolateCopy(uiText(isAr).client.bonjour, {
+              v0: userProfile?.fullName ? `, ${userProfile.fullName.split(' ')[0]}` : '',
+              v1: userProfile?.fullName?.split(' ')[0] || '',
+            })}
           </h1>
           <p className="text-sm text-slate-600 mt-1">
             {uiText(isAr).client.publiezUnBesoinPourRecevoirDes}
@@ -550,94 +250,16 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
 
       {/* Guided 15-Second Welcome Setup for New Verified Clients */}
       {!userProfile && (
-        <form
-          onSubmit={handleQuickProfileSubmit}
-          noValidate
-          className="bg-emerald-50/70 border border-emerald-200 rounded-2xl p-5 sm:p-6 space-y-4"
-        >
-          <div className="flex items-start gap-2.5">
-            <Sparkles className="w-5 h-5 text-emerald-700 shrink-0 mt-0.5" />
-            <div>
-              <h2 className="text-sm font-bold text-emerald-950">
-                {uiText(isAr).client.completezVosCoordonneesEn15Secondes}
-              </h2>
-              <p className="text-xs text-emerald-800 mt-0.5">
-                {uiText(isAr).client.vosInformationsSerontPreRempliesAutomatiquement}
-              </p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            <div>
-              <input
-                type="text"
-                value={quickName}
-                onChange={(e) => setQuickName(e.target.value)}
-                placeholder={t.fullNamePlaceholder}
-                className="w-full px-3 py-2 text-xs bg-white border border-emerald-200 rounded-lg"
-              />
-              {quickErrors.fullName && (
-                <p className="text-[11px] text-rose-600 mt-0.5">{quickErrors.fullName}</p>
-              )}
-            </div>
-            <div>
-              <input
-                type="tel"
-                dir="ltr"
-                value={quickPhone}
-                onChange={(e) => setQuickPhone(e.target.value)}
-                placeholder="+212661234567"
-                className="w-full px-3 py-2 text-xs font-mono-tabular bg-white border border-emerald-200 rounded-lg"
-              />
-              {quickErrors.phone && (
-                <p className="text-[11px] text-rose-600 mt-0.5">{quickErrors.phone}</p>
-              )}
-            </div>
-            <div>
-              <select
-                value={quickCity}
-                onChange={(e) => setQuickCity(e.target.value as MoroccanCity)}
-                className="w-full px-3 py-2 text-xs bg-white border border-emerald-200 rounded-lg"
-              >
-                {MOROCCAN_CITIES.map((c) => (
-                  <option key={c} value={c}>
-                    {t.cities[c]}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <input
-                type="text"
-                value={quickQuartier}
-                onChange={(e) => setQuickQuartier(e.target.value)}
-                placeholder={t.neighborhoodPlaceholder}
-                className="w-full px-3 py-2 text-xs bg-white border border-emerald-200 rounded-lg"
-              />
-              {quickErrors.neighborhood && (
-                <p className="text-[11px] text-rose-600 mt-0.5">{quickErrors.neighborhood}</p>
-              )}
-            </div>
-          </div>
-
-          {quickSaveError && <p className="text-xs text-rose-700">{quickSaveError}</p>}
-
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={isQuickSaving}
-              className="px-4 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg disabled:opacity-60 cursor-pointer"
-            >
-              {isQuickSaving
-                ? t.savingProfileBtn
-                : uiText(isAr).client.enregistrerMesCoordonnees}
-            </button>
-          </div>
-        </form>
+        <ClientQuickProfileBar
+          lang={lang}
+          t={t}
+          initialDisplayName={firebaseUser.displayName || ''}
+          onQuickSaveClientProfile={onQuickSaveClientProfile}
+        />
       )}
 
       {/* KPI Summary Strip */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-2 ${showEscrowKpi ? 'lg:grid-cols-4' : 'lg:grid-cols-3'} gap-4`}>
         <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-1">
           <div className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
             <Briefcase className="w-3.5 h-3.5 text-emerald-700" />
@@ -658,15 +280,17 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-1">
-          <div className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
-            <span>{uiText(isAr).client.sequestreCmiProtege}</span>
+        {showEscrowKpi && (
+          <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-1">
+            <div className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
+              <span>{uiText(isAr).client.sequestreCmiProtege}</span>
+            </div>
+            <div className="text-2xl font-bold tabular-nums text-emerald-700">
+              {formatMadCurrency(metrics.escrowHeldMad, lang)}
+            </div>
           </div>
-          <div className="text-2xl font-bold tabular-nums text-emerald-700">
-            {formatMadCurrency(metrics.escrowHeldMad, lang)}
-          </div>
-        </div>
+        )}
 
         <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-1">
           <div className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
@@ -738,7 +362,9 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
         >
           <Briefcase className="w-4 h-4 shrink-0" />
           <span>
-            {interpolateCopy(uiText(isAr).client.mesBesoinsPubliesDevis, { v0: myClientJobPosts.length })}
+            {interpolateCopy(uiText(isAr).client.mesBesoinsPubliesDevis, {
+              v0: myClientJobPosts.length,
+            })}
           </span>
         </button>
 
@@ -755,142 +381,30 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
         >
           <Calendar className="w-4 h-4 shrink-0" />
           <span>
-            {interpolateCopy(uiText(isAr).client.mesReservations, { v0: clientBookings.length })}
+            {interpolateCopy(uiText(isAr).client.mesReservations, {
+              v0: clientBookings.length,
+            })}
           </span>
         </button>
       </div>
 
       {/* TAB 1: CLIENT'S POSTED JOBS & INCOMING MAÂLEM QUOTES */}
       {activeTab === 'jobs' && (
-        <div className="space-y-4">
-          {myClientJobPosts.length === 0 ? (
-            <div className="bg-white border border-slate-200 rounded-2xl p-10 text-center space-y-4">
-              <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-700 flex items-center justify-center mx-auto">
-                <Briefcase className="w-6 h-6" />
-              </div>
-              <div className="space-y-1">
-                <h2 className="text-base font-bold text-slate-900">
-                  {uiText(isAr).client.vousNAvezPasEncorePublie}
-                </h2>
-                <p className="text-xs text-slate-600 max-w-md mx-auto">
-                  {uiText(isAr).client.publiezVotreBesoinGratuitementAvecVotre}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={onOpenPostJob}
-                className="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-semibold text-white bg-emerald-700 rounded-xl hover:bg-emerald-800 cursor-pointer"
-              >
-                <Plus className="w-4 h-4" />
-                <span>{uiText(isAr).client.publierMonPremierBesoin}</span>
-              </button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-              {myClientJobPosts.map((job) => {
-                const isExpanded = expandedJobId === job.id;
-                return (
-                  <div
-                    key={job.id}
-                    className="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col justify-between gap-4 shadow-2xs"
-                  >
-                    <div className="space-y-3">
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="px-2.5 py-0.5 rounded-full font-semibold bg-amber-50 text-amber-800 border border-amber-200">
-                            {t.categories[job.category]}
-                          </span>
-                          {job.urgency === 'urgent' && (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-                              <Zap className="w-3 h-3" />
-                              <span>{uiText(isAr).client.urgent}</span>
-                            </span>
-                          )}
-                          <span className="font-mono-tabular text-slate-400">#{job.jobRef}</span>
-                        </div>
-                        <span
-                          className={`px-2.5 py-0.5 rounded-full text-[11px] font-semibold ${
-                            job.status === 'open'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : job.status === 'assigned'
-                              ? 'bg-blue-50 text-blue-700 border border-blue-200'
-                              : 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          {job.status === 'open'
-                            ? uiText(isAr).client.ouvertAuxDevis
-                            : job.status === 'assigned'
-                            ? interpolateCopy(uiText(isAr).client.attribueA, { v0: job.assignedProviderName || 'un Maâlem', v1: job.assignedProviderName || 'المعلم' })
-                            : uiText(isAr).client.annule}
-                        </span>
-                      </div>
-
-                      <div>
-                        <h3 className="text-base font-bold text-slate-900">{job.title}</h3>
-                        <div className="text-xs text-slate-500 mt-0.5">
-                          {t.cities[job.city]} ({job.neighborhood}) · {job.preferredDate} (
-                          {job.preferredTimeSlot}) ·{' '}
-                          <strong className="text-emerald-700 tabular-nums">
-                            {formatMadCurrency(job.budgetMad, lang)}
-                          </strong>
-                        </div>
-                      </div>
-
-                      <p className="text-xs text-slate-700 leading-relaxed">{job.description}</p>
-                      <JobLifecycleStepper job={job} lang={lang} />
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedJobId(isExpanded ? null : job.id)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 cursor-pointer"
-                        >
-                          <span>
-                            {interpolateCopy(uiText(isAr).client.voirLesDevisRecus, { v0: job.proposalCount })}
-                          </span>
-                          {isExpanded ? (
-                            <ChevronUp className="w-3.5 h-3.5" />
-                          ) : (
-                            <ChevronDown className="w-3.5 h-3.5" />
-                          )}
-                        </button>
-
-                        {job.status === 'open' && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void onCancelJobPost(job.id);
-                            }}
-                            className="text-xs font-medium text-rose-700 hover:underline cursor-pointer"
-                          >
-                            {uiText(isAr).client.annulerLAnnonce}
-                          </button>
-                        )}
-                      </div>
-
-                      <JobProposalsPanel
-                        job={job}
-                        lang={lang}
-                        t={t}
-                        expanded={isExpanded}
-                        onRejectProposal={onRejectProposal}
-                        onAcceptProposal={onAcceptProposal}
-                        onAcceptedBooking={(ref) => {
-                          setAcceptedBanner(
-                            interpolateCopy(uiText(isAr).client.devisAccepteLaReservationEstCreee, { v0: ref })
-                          );
-                          setActiveTab('bookings');
-                        }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+        <ClientJobsTab
+          lang={lang}
+          t={t}
+          myClientJobPosts={myClientJobPosts}
+          onOpenPostJob={onOpenPostJob}
+          onCancelJobPost={onCancelJobPost}
+          onRejectProposal={onRejectProposal}
+          onAcceptProposal={onAcceptProposal}
+          onAcceptedBooking={(ref) => {
+            setAcceptedBanner(
+              interpolateCopy(uiText(isAr).client.devisAccepteLaReservationEstCreee, { v0: ref })
+            );
+            setActiveTab('bookings');
+          }}
+        />
       )}
 
       {/* TAB 2: DIRECT & ASSIGNED BOOKINGS */}
@@ -899,9 +413,21 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             {(
               [
-                { id: 'all', labelFr: `Toutes (${clientBookings.length})`, labelAr: `الكل (${clientBookings.length})` },
-                { id: 'active', labelFr: `Actives (${metrics.activeCount})`, labelAr: `جارية (${metrics.activeCount})` },
-                { id: 'completed', labelFr: `Terminées (${metrics.completedCount})`, labelAr: `مكتملة (${metrics.completedCount})` },
+                {
+                  id: 'all',
+                  labelFr: `Toutes (${clientBookings.length})`,
+                  labelAr: `الكل (${clientBookings.length})`,
+                },
+                {
+                  id: 'active',
+                  labelFr: `Actives (${metrics.activeCount})`,
+                  labelAr: `جارية (${metrics.activeCount})`,
+                },
+                {
+                  id: 'completed',
+                  labelFr: `Terminées (${metrics.completedCount})`,
+                  labelAr: `مكتملة (${metrics.completedCount})`,
+                },
                 {
                   id: 'cancelled',
                   labelFr: `Annulées (${clientBookings.filter((b) => b.status === 'cancelled').length})`,
@@ -967,9 +493,6 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                   bookingRef: booking.bookingRef,
                   serviceType: booking.serviceType,
                 });
-                const split = calculateEscrowSplit(booking.estimatedMad, platformFeePct, 100);
-                const providerPayout = booking.providerPayoutMad ?? split.providerPayoutMad;
-                const platformFee = booking.platformFeeMad ?? split.platformFeeMad;
 
                 return (
                   <div
@@ -1041,6 +564,21 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                         {booking.description}
                       </p>
 
+                      {booking.revisedQuote?.status === 'pending' && (
+                        <button
+                          type="button"
+                          onClick={() => onOpenBookingDetail(booking)}
+                          className="w-full p-3 bg-amber-50 border border-amber-200 rounded-lg text-start text-xs text-amber-950 flex items-center justify-between gap-2 hover:bg-amber-100/70 transition-colors cursor-pointer"
+                        >
+                          <span className="font-semibold">
+                            {uiText(isAr).booking.revisedQuotePendingClient}
+                          </span>
+                          <span className="font-mono-tabular font-bold shrink-0">
+                            {formatMadCurrency(booking.revisedQuote.totalMad, lang)}
+                          </span>
+                        </button>
+                      )}
+
                       {booking.status === 'reviewed' && booking.reviewRating && (
                         <div className="p-3 bg-emerald-50/70 border border-emerald-200 rounded-lg text-xs space-y-1">
                           <div className="flex items-center justify-between">
@@ -1099,6 +637,18 @@ export const ClientDashboard: React.FC<ClientDashboardProps> = ({
                       </div>
 
                       <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+                        {(booking.status === 'completed' || booking.status === 'reviewed') &&
+                          onRebookProvider && (
+                            <button
+                              type="button"
+                              onClick={() => onRebookProvider(booking)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-lg cursor-pointer"
+                            >
+                              <RefreshCw className="w-3.5 h-3.5" />
+                              <span>{uiText(isAr).booking.rebookProviderBtn}</span>
+                            </button>
+                          )}
+
                         {canTransitionBookingStatus(booking.status, 'reviewed', 'client') && (
                           <button
                             type="button"

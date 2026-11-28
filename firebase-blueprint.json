@@ -53,7 +53,7 @@
         "specialty": {
           "type": "string",
           "description": "Primary trade category for service providers, or none for clients",
-          "enum": ["Plomberie", "Électricité", "Peinture", "Soutien Scolaire", "Ménage", "Climatisation", "none"]
+          "enum": ["Plomberie", "Électricité", "Peinture", "Soutien Scolaire", "Ménage", "Climatisation", "Menuiserie", "Serrurerie", "Électroménager", "Jardinage", "Déménagement", "Maçonnerie", "none"]
         },
         "hourlyRateMad": {
           "type": "number",
@@ -115,7 +115,7 @@
         "category": {
           "type": "string",
           "description": "Service category",
-          "enum": ["Plomberie", "Électricité", "Peinture", "Soutien Scolaire", "Ménage", "Climatisation"]
+          "enum": ["Plomberie", "Électricité", "Peinture", "Soutien Scolaire", "Ménage", "Climatisation", "Menuiserie", "Serrurerie", "Électroménager", "Jardinage", "Déménagement", "Maçonnerie"]
         },
         "bioFr": {
           "type": "string",
@@ -175,6 +175,10 @@
         "completedJobs": {
           "type": "number",
           "description": "Count of completed missions on the platform"
+        },
+        "responseMinutes": {
+          "type": "number",
+          "description": "Rolling average response time in minutes (1..1440) computed on booking acceptance"
         },
         "lastCompletedBookingId": {
           "type": "string",
@@ -329,12 +333,21 @@
         },
         "category": {
           "type": "string",
-          "enum": ["Plomberie", "Électricité", "Peinture", "Soutien Scolaire", "Ménage", "Climatisation"]
+          "enum": ["Plomberie", "Électricité", "Peinture", "Soutien Scolaire", "Ménage", "Climatisation", "Menuiserie", "Serrurerie", "Électroménager", "Jardinage", "Déménagement", "Maçonnerie"]
         },
         "serviceType": {
           "type": "string",
           "minLength": 2,
           "maxLength": 120
+        },
+        "selectedServiceId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "selectedServicePricingModel": {
+          "type": "string",
+          "enum": ["fixed", "hourly", "quote_required"]
         },
         "city": {
           "type": "string",
@@ -378,6 +391,10 @@
         },
         "estimatedMad": {
           "type": "number"
+        },
+        "revisedQuote": {
+          "type": "object",
+          "description": "Optional post-visit on-site revised quote (laborMad, materialsMad, totalMad, note, status, submittedAtIso, respondedAtIso)"
         },
         "providerPayoutMad": {
           "type": "number",
@@ -656,6 +673,10 @@
         },
         "requireKycForEscrowPayout": {
           "type": "boolean"
+        },
+        "cmiEscrowEnabled": {
+          "type": "boolean",
+          "description": "Feature flag gating CMI escrow checkout and provider RIB bank withdrawal UI (default false during COD launch)"
         },
         "supportWhatsAppPhone": {
           "type": "string",

@@ -24,6 +24,7 @@ import {
 } from '../../utils/marketplace';
 import type { SystemSettingsRecord } from '../../utils/adminMetrics';
 import { isVerifiedAuthUser, mapProfileSaveError } from '../../utils/authHelpers';
+import { ProviderCodEarningsView } from './ProviderCodEarningsView';
 
 interface ProviderWithdrawalItem {
   id: string;
@@ -128,9 +129,15 @@ export const ProviderEarningsTab: React.FC<ProviderEarningsTabProps> = ({
         withdrawals,
         platformFeePct: systemSettings.platformFeePct,
         minWithdrawalMad: systemSettings.minWithdrawalMad,
-        cmiEscrowEnabled: false,
+        cmiEscrowEnabled: systemSettings.cmiEscrowEnabled,
       }),
-    [providerBookings, withdrawals, systemSettings.platformFeePct, systemSettings.minWithdrawalMad]
+    [
+      providerBookings,
+      withdrawals,
+      systemSettings.platformFeePct,
+      systemSettings.minWithdrawalMad,
+      systemSettings.cmiEscrowEnabled,
+    ]
   );
 
   const withdrawnTotalMad = useMemo(
@@ -270,6 +277,16 @@ export const ProviderEarningsTab: React.FC<ProviderEarningsTabProps> = ({
       setIsSubmittingWithdrawal(false);
     }
   };
+
+  if (!systemSettings.cmiEscrowEnabled) {
+    return (
+      <ProviderCodEarningsView
+        lang={lang}
+        providerBookings={providerBookings}
+        cashCollectedDirectlyMad={earnings.cashCollectedDirectlyMad}
+      />
+    );
+  }
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

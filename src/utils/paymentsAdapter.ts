@@ -152,6 +152,39 @@ export function buildBookingReceiptHtml(
       ? 'ضمان CMI'
       : 'Séquestre CMI (historique)';
 
+  const approvedQuote =
+    booking.revisedQuote && booking.revisedQuote.status === 'approved'
+      ? booking.revisedQuote
+      : null;
+
+  const itemizedRowsHtml = approvedQuote
+    ? `
+        <tr>
+          <td>${escapeHtml(booking.serviceType)} (#${escapeHtml(booking.bookingRef)}) — ${isAr ? 'اليد العاملة (بعد المعاينة)' : 'Main-d’œuvre (devis validé sur place)'}</td>
+          <td>${escapeHtml(paymentLabel)}</td>
+          <td>${escapeHtml(formatMadCurrency(approvedQuote.laborMad, lang))}</td>
+        </tr>
+        <tr>
+          <td>${isAr ? 'المواد واللوازم / قطع الغيار' : 'Fournitures & pièces de rechange'}</td>
+          <td>${escapeHtml(approvedQuote.respondedAtIso || booking.preferredDate)}</td>
+          <td>${escapeHtml(formatMadCurrency(approvedQuote.materialsMad, lang))}</td>
+        </tr>
+        ${
+          approvedQuote.note
+            ? `<tr>
+          <td colspan="3" style="font-size:12px;color:#475569;background:#f8fafc;">
+            <strong>${isAr ? 'تفاصيل التشخيص:' : 'Détail du diagnostic :'}</strong> ${escapeHtml(approvedQuote.note)}
+          </td>
+        </tr>`
+            : ''
+        }`
+    : `
+        <tr>
+          <td>${escapeHtml(booking.serviceType)} (#${escapeHtml(booking.bookingRef)})</td>
+          <td>${escapeHtml(paymentLabel)}</td>
+          <td>${escapeHtml(formatMadCurrency(breakdown.subtotalMad, lang))}</td>
+        </tr>`;
+
   return `<!DOCTYPE html>
 <html lang="${lang}" dir="${dir}">
 <head>
@@ -170,6 +203,10 @@ export function buildBookingReceiptHtml(
     th { background: #f1f5f9; font-size: 12px; text-transform: uppercase; color: #475569; }
     .total-row td { font-weight: 700; font-size: 15px; border-top: 2px solid #0f172a; }
     .footer { margin-top: 24px; font-size: 11px; color: #64748b; text-align: center; }
+    @media print {
+      body { margin: 0; }
+      .card { border: none; padding: 16px; max-width: 100%; }
+    }
   </style>
 </head>
 <body>
@@ -207,11 +244,7 @@ export function buildBookingReceiptHtml(
         </tr>
       </thead>
       <tbody>
-        <tr>
-          <td>${escapeHtml(booking.serviceType)} (#${escapeHtml(booking.bookingRef)})</td>
-          <td>${escapeHtml(paymentLabel)}</td>
-          <td>${escapeHtml(formatMadCurrency(breakdown.subtotalMad, lang))}</td>
-        </tr>
+        ${itemizedRowsHtml}
         <tr>
           <td colspan="2">${isAr ? `رسوم المنصة (${breakdown.platformFeePct}%)` : `Frais de plateforme (${breakdown.platformFeePct}%)`}</td>
           <td>${escapeHtml(formatMadCurrency(breakdown.platformFeeMad, lang))}</td>

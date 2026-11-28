@@ -1,7 +1,8 @@
 import { uiText } from '../../i18n/uiCopy';
 import React, { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { AlertCircle, Eye, EyeOff, Layers, Lock, Mail, UserCheck, Wrench } from 'lucide-react';
+import { AlertCircle, Layers, UserCheck, Wrench } from 'lucide-react';
+import { SharedAuthFields } from '../../components/SharedAuthFields';
 import type { UserRole } from '../../utils/marketplace';
 import { useMarketplace } from '../../app/providers/MarketplaceContext';
 import { ROUTE_PATHS } from '../../app/routePaths';
@@ -23,7 +24,6 @@ export const RegisterPage: React.FC = () => {
   const [selectedRole, setSelectedRole] = useState<UserRole>(initialRole);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -179,57 +179,19 @@ export const RegisterPage: React.FC = () => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1">
-            <label htmlFor="reg-email" className="block text-xs font-semibold text-slate-700">
-              {uiText(isAr).auth.adresseEMail}
-            </label>
-            <div className="relative" dir="ltr">
-              <Mail className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3 pointer-events-none" />
-              <input
-                id="reg-email"
-                type="email"
-                required
-                dir="ltr"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="nom@exemple.ma"
-                autoComplete="email"
-                className="w-full min-h-[44px] ps-10 pe-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <label htmlFor="reg-password" className="block text-xs font-semibold text-slate-700">
-              {uiText(isAr).auth.motDePasse8CaracteresMinimum}
-            </label>
-            <div className="relative" dir="ltr">
-              <Lock className="w-4 h-4 text-slate-400 absolute top-1/2 -translate-y-1/2 start-3 pointer-events-none" />
-              <input
-                id="reg-password"
-                type={showPassword ? 'text' : 'password'}
-                required
-                dir="ltr"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
-                className="w-full min-h-[44px] ps-10 pe-11 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                aria-label={
-                  showPassword
-                    ? uiText(isAr).auth.masquerMotDePasse
-                    : uiText(isAr).auth.afficherMotDePasse
-                }
-                aria-pressed={showPassword}
-                className="absolute top-1/2 -translate-y-1/2 end-1 inline-flex items-center justify-center w-9 h-9 text-slate-500 hover:text-slate-800 rounded-md cursor-pointer"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
+          <SharedAuthFields
+            lang={lang}
+            emailId="reg-email"
+            passwordId="reg-password"
+            email={email}
+            onEmailChange={setEmail}
+            password={password}
+            onPasswordChange={setPassword}
+            passwordLabel={uiText(isAr).auth.motDePasse8CaracteresMinimum}
+            passwordAutoComplete="new-password"
+            required
+            inputVariant="subtle"
+          />
 
           <button
             type="submit"

@@ -364,13 +364,17 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               : disputes.length + moderationReports.length,
           icon: Scale,
         },
-        {
-          id: 'withdrawals',
-          labelFr: 'Retraits RIB',
-          labelAr: 'طلبات السحب RIB',
-          count: pendingWithdrawalsCount > 0 ? pendingWithdrawalsCount : withdrawals.length,
-          icon: Landmark,
-        },
+        ...(systemSettings.cmiEscrowEnabled || withdrawals.length > 0
+          ? [
+              {
+                id: 'withdrawals' as AdminSectionId,
+                labelFr: 'Retraits RIB',
+                labelAr: 'طلبات السحب RIB',
+                count: pendingWithdrawalsCount > 0 ? pendingWithdrawalsCount : withdrawals.length,
+                icon: Landmark,
+              },
+            ]
+          : []),
       ],
     },
     {
@@ -651,6 +655,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({
               t={t}
               bookings={bookings}
               platformFeePct={systemSettings.platformFeePct}
+              cmiEscrowEnabled={systemSettings.cmiEscrowEnabled}
               onReleaseEscrow={onReleaseEscrow}
               onRefundEscrow={onRefundEscrow}
               onDisputeSplitEscrow={onDisputeSplitEscrow}

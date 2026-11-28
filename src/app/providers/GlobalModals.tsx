@@ -29,6 +29,8 @@ const RescheduleModal = lazy(() =>
   import('../../components/BookingLifecycleModals').then((m) => ({ default: m.RescheduleModal }))
 );
 
+import { resolveBookingActorRole } from '../../utils/bookingLogic';
+
 export const GlobalModals: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -39,12 +41,15 @@ export const GlobalModals: React.FC = () => {
     isVerified,
     userProfile,
     systemSettings,
+    allProviders,
     bookings,
     setSignupRoleIntent,
     signInWithGoogle,
     handleAuthSuccess,
     createJobPost,
     submitBooking,
+    submitRevisedQuote,
+    respondToRevisedQuote,
     clientConfirmAndReleaseEscrow,
     cancelBookingWithReason,
     rescheduleBooking,
@@ -54,7 +59,9 @@ export const GlobalModals: React.FC = () => {
     isPostJobModalOpen,
     setIsPostJobModalOpen,
     bookingProvider,
+    bookingServiceItem,
     setBookingProvider,
+    openBookingModal,
     detailBooking,
     setDetailBooking,
     cancellingBooking,
@@ -70,11 +77,20 @@ export const GlobalModals: React.FC = () => {
     [bookings, detailBooking]
   );
 
-  const activeModalRole: 'client' | 'provider' = location.pathname.startsWith(
-    ROUTE_PATHS.PROVIDER_ROOT
-  )
-    ? 'provider'
+  const isProviderRoute = location.pathname.startsWith(ROUTE_PATHS.PROVIDER_ROOT);
+
+  const detailActorRole = syncedDetailBooking
+    ? resolveBookingActorRole(syncedDetailBooking, firebaseUser?.uid, isProviderRoute)
     : 'client';
+
+  const cancelActorRole = cancellingBooking
+    ? resolveBookingActorRole(cancellingBooking, firebaseUser?.uid, isProviderRoute)
+    : 'client';
+
+  const rebookProvider = useMemo(() => {
+    if (!syncedDetailBooking) return null;
+    return allProviders.find((p) => p.id === syncedDetailBooking.providerId) ?? null;
+  }, [syncedDetailBooking, allProviders]);
 
   return (
     <Suspense fallback={null}>
@@ -108,6 +124,8 @@ export const GlobalModals: React.FC = () => {
       {bookingProvider && (
         <BookingModal
           provider={bookingProvider}
+          initialService={bookingServiceItem}
+          cmiEscrowEnabled={systemSettings.cmiEscrowEnabled}
           lang={lang}
           t={t}
           firebaseUser={firebaseUser}
@@ -126,7 +144,7 @@ export const GlobalModals: React.FC = () => {
           booking={syncedDetailBooking}
           lang={lang}
           t={t}
-          activeRole={activeModalRole}
+          activeRole={detailActorRole}
           platformFeePct={systemSettings.platformFeePct}
           onClose={() => setDetailBooking(null)}
           onOpenChat={(b) => {
@@ -141,6 +159,16 @@ export const GlobalModals: React.FC = () => {
             navigate(`${ROUTE_PATHS.DISPUTES}?bookingId=${encodeURIComponent(b.id)}`);
           }}
           onConfirmAndReleaseEscrow={clientConfirmAndReleaseEscrow}
+          onSubmitRevisedQuote={submitRevisedQuote}
+          onRespondToRevisedQuote={respondToRevisedQuote}
+          onRebookProvider={
+            rebookProvider && detailActorRole === 'client'
+              ? () => {
+                  setDetailBooking(null);
+                  openBookingModal(rebookProvider, null);
+                }
+              : undefined
+          }
         />
       )}
 
@@ -149,7 +177,7 @@ export const GlobalModals: React.FC = () => {
           booking={cancellingBooking}
           lang={lang}
           t={t}
-          actorRole={activeModalRole}
+          actorRole={cancelActorRole}
           onClose={() => setCancellingBooking(null)}
           onConfirmCancel={cancelBookingWithReason}
         />

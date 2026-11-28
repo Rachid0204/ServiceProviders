@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import {
   TIME_SLOTS,
-  calculateEscrowSplit,
   canTransitionBookingStatus,
   formatMadCurrency,
   getTodayIsoDate,
@@ -28,6 +27,10 @@ import {
   type TimeSlot,
   type UserRole,
 } from '../utils/marketplace';
+import {
+  validateRevisedQuoteInput,
+  type RevisedQuoteInput,
+} from '../utils/bookingLogic';
 import { downloadBookingReceipt } from '../utils/paymentsAdapter';
 import type { Translations } from '../i18n/translations';
 import { BookingTimeline } from './BookingTimeline';
@@ -45,6 +48,12 @@ interface BookingDetailModalProps {
   onOpenReview: (booking: BookingRecord) => void;
   onOpenDispute?: (booking: BookingRecord) => void;
   onConfirmAndReleaseEscrow: (bookingId: string) => Promise<void>;
+  onSubmitRevisedQuote?: (bookingId: string, input: RevisedQuoteInput) => Promise<void>;
+  onRespondToRevisedQuote?: (
+    bookingId: string,
+    decision: 'approved' | 'declined'
+  ) => Promise<void>;
+  onRebookProvider?: (booking: BookingRecord) => void;
 }
 
 export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
@@ -60,8 +69,86 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
   onOpenReview,
   onOpenDispute,
   onConfirmAndReleaseEscrow: _onConfirmAndReleaseEscrow,
+  onSubmitRevisedQuote,
+  onRespondToRevisedQuote,
+  onRebookProvider,
 }) => {
   const isAr = lang === 'ar';
+  const [showQuoteForm, setShowQuoteForm] = useState(false);
+  const [laborMadInput, setLaborMadInput] = useState<string>(
+    String(booking.revisedQuote?.laborMad ?? booking.estimatedMad)
+  );
+  const [materialsMadInput, setMaterialsMadInput] = useState<string>(
+    String(booking.revisedQuote?.materialsMad ?? 0)
+  );
+  const [quoteNoteInput, setQuoteNoteInput] = useState<string>(booking.revisedQuote?.note ?? '');
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [quoteSuccess, setQuoteSuccess] = useState<string | null>(null);
+  const [isQuoteSubmitting, setIsQuoteSubmitting] = useState(false);
+
+  const canProviderProposeQuote =
+    activeRole === 'provider' &&
+    booking.status === 'accepted' &&
+    Boolean(onSubmitRevisedQuote) &&
+    (!booking.revisedQuote || booking.revisedQuote.status === 'declined');
+
+  const canClientRespondQuote =
+    activeRole !== 'provider' &&
+    booking.status === 'accepted' &&
+    booking.revisedQuote?.status === 'pending' &&
+    Boolean(onRespondToRevisedQuote);
+
+  const proposedTotalPreview =
+    Math.max(0, Math.round(Number(laborMadInput) || 0)) +
+    Math.max(0, Math.round(Number(materialsMadInput) || 0));
+
+  const handleSubmitQuote = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!onSubmitRevisedQuote) return;
+    setQuoteError(null);
+    setQuoteSuccess(null);
+    const parsedInput: RevisedQuoteInput = {
+      laborMad: Number(laborMadInput) || 0,
+      materialsMad: Number(materialsMadInput) || 0,
+      note: quoteNoteInput,
+    };
+    const validation = validateRevisedQuoteInput(parsedInput, lang);
+    if (!validation.valid) {
+      setQuoteError(validation.error ?? uiText(isAr).booking.impossibleDeReprogrammerCeCreneau);
+      return;
+    }
+    setIsQuoteSubmitting(true);
+    try {
+      await onSubmitRevisedQuote(booking.id, parsedInput);
+      setQuoteSuccess(uiText(isAr).booking.revisedQuoteSentSuccess);
+      setShowQuoteForm(false);
+    } catch (err) {
+      setQuoteError(
+        err instanceof Error && err.message
+          ? err.message
+          : uiText(isAr).booking.impossibleDeReprogrammerCeCreneau
+      );
+    } finally {
+      setIsQuoteSubmitting(false);
+    }
+  };
+
+  const handleRespondQuote = async (decision: 'approved' | 'declined') => {
+    if (!onRespondToRevisedQuote) return;
+    setQuoteError(null);
+    setIsQuoteSubmitting(true);
+    try {
+      await onRespondToRevisedQuote(booking.id, decision);
+    } catch (err) {
+      setQuoteError(
+        err instanceof Error && err.message
+          ? err.message
+          : uiText(isAr).booking.impossibleDeReprogrammerCeCreneau
+      );
+    } finally {
+      setIsQuoteSubmitting(false);
+    }
+  };
 
   const canReschedule =
     booking.status === 'pending' || booking.status === 'accepted';
@@ -179,6 +266,195 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
           </div>
         </div>
 
+        {/* Post-Visit On-Site Revised Quote Section */}
+        {booking.revisedQuote && (
+          <div
+            className={`p-4 rounded-xl border text-xs space-y-2.5 ${
+              booking.revisedQuote.status === 'pending'
+                ? 'bg-amber-50 border-amber-200 text-amber-950'
+                : booking.revisedQuote.status === 'approved'
+                ? 'bg-emerald-50 border-emerald-200 text-emerald-950'
+                : 'bg-slate-50 border-slate-200 text-slate-800'
+            }`}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-bold">
+                {booking.revisedQuote.status === 'pending'
+                  ? uiText(isAr).booking.revisedQuotePendingClient
+                  : booking.revisedQuote.status === 'approved'
+                  ? uiText(isAr).booking.revisedQuoteApprovedBadge
+                  : uiText(isAr).booking.revisedQuoteDeclinedBadge}
+              </span>
+              <span className="font-mono-tabular font-bold text-sm">
+                {formatMadCurrency(booking.revisedQuote.totalMad, lang)}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 text-[11px] bg-white/70 rounded-lg p-2.5 border border-black/5">
+              <div>
+                <span className="text-slate-500 block">
+                  {uiText(isAr).booking.revisedQuoteLaborLabel}
+                </span>
+                <span className="font-mono-tabular font-semibold text-slate-900">
+                  {formatMadCurrency(booking.revisedQuote.laborMad, lang)}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500 block">
+                  {uiText(isAr).booking.revisedQuoteMaterialsLabel}
+                </span>
+                <span className="font-mono-tabular font-semibold text-slate-900">
+                  {formatMadCurrency(booking.revisedQuote.materialsMad, lang)}
+                </span>
+              </div>
+            </div>
+
+            {booking.revisedQuote.note && (
+              <p className="text-xs leading-relaxed opacity-90">{booking.revisedQuote.note}</p>
+            )}
+
+            {canClientRespondQuote && (
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={isQuoteSubmitting}
+                  onClick={() => {
+                    void handleRespondQuote('approved');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg disabled:opacity-60 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>{uiText(isAr).booking.revisedQuoteApproveBtn}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isQuoteSubmitting}
+                  onClick={() => {
+                    void handleRespondQuote('declined');
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-rose-700 bg-white border border-rose-200 hover:bg-rose-50 rounded-lg disabled:opacity-60 cursor-pointer"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  <span>{uiText(isAr).booking.revisedQuoteDeclineBtn}</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+
+        {quoteSuccess && (
+          <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-900 font-medium">
+            {quoteSuccess}
+          </div>
+        )}
+
+        {quoteError && (
+          <div role="alert" className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800">
+            {quoteError}
+          </div>
+        )}
+
+        {canProviderProposeQuote && (
+          <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/70 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-slate-900">
+                {uiText(isAr).booking.revisedQuoteTitle}
+              </span>
+              {!showQuoteForm && (
+                <button
+                  type="button"
+                  onClick={() => setShowQuoteForm(true)}
+                  className="px-3 py-1.5 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 cursor-pointer"
+                >
+                  {uiText(isAr).booking.revisedQuoteProposeBtn}
+                </button>
+              )}
+            </div>
+
+            {showQuoteForm && (
+              <form onSubmit={handleSubmitQuote} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label
+                      htmlFor="revised-quote-labor"
+                      className="block text-xs font-semibold text-slate-700 mb-1"
+                    >
+                      {uiText(isAr).booking.revisedQuoteLaborLabel}
+                    </label>
+                    <input
+                      id="revised-quote-labor"
+                      type="number"
+                      min={0}
+                      max={100000}
+                      value={laborMadInput}
+                      onChange={(e) => setLaborMadInput(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-mono-tabular bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="revised-quote-materials"
+                      className="block text-xs font-semibold text-slate-700 mb-1"
+                    >
+                      {uiText(isAr).booking.revisedQuoteMaterialsLabel}
+                    </label>
+                    <input
+                      id="revised-quote-materials"
+                      type="number"
+                      min={0}
+                      max={100000}
+                      value={materialsMadInput}
+                      onChange={(e) => setMaterialsMadInput(e.target.value)}
+                      className="w-full px-3 py-2 text-xs font-mono-tabular bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label
+                    htmlFor="revised-quote-note"
+                    className="block text-xs font-semibold text-slate-700 mb-1"
+                  >
+                    {uiText(isAr).booking.revisedQuoteNoteLabel}
+                  </label>
+                  <textarea
+                    id="revised-quote-note"
+                    rows={2}
+                    maxLength={400}
+                    value={quoteNoteInput}
+                    onChange={(e) => setQuoteNoteInput(e.target.value)}
+                    placeholder={uiText(isAr).booking.revisedQuoteNotePlaceholder}
+                    className="w-full px-3 py-2 text-xs bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                  />
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                  <div className="text-xs text-slate-700">
+                    <span>{uiText(isAr).booking.revisedQuoteTotalLabel}: </span>
+                    <strong className="font-mono-tabular text-emerald-800">
+                      {formatMadCurrency(proposedTotalPreview, lang)}
+                    </strong>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowQuoteForm(false)}
+                      className="px-3 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-lg hover:bg-slate-100 cursor-pointer"
+                    >
+                      {t.closeBtn}
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isQuoteSubmitting}
+                      className="px-3.5 py-1.5 text-xs font-semibold text-white bg-emerald-700 hover:bg-emerald-800 rounded-lg disabled:opacity-60 cursor-pointer"
+                    >
+                      {uiText(isAr).booking.revisedQuoteSubmitBtn}
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+          </div>
+        )}
+
         {/* Footer Actions */}
         <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200">
           <div className="flex flex-wrap items-center gap-2">
@@ -248,7 +524,22 @@ export const BookingDetailModal: React.FC<BookingDetailModalProps> = ({
             )}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {(booking.status === 'completed' || booking.status === 'reviewed') &&
+              activeRole !== 'provider' &&
+              onRebookProvider && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onRebookProvider(booking);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 rounded-lg cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>{uiText(isAr).booking.rebookProviderBtn}</span>
+                </button>
+              )}
             {booking.status === 'completed' && activeRole !== 'provider' && (
               <button
                 type="button"
